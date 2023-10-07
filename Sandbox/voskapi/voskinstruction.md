@@ -6,7 +6,7 @@
     pyaudio
     SpeechRecognition
     vosk
-
+    
 # Модель
 Необходимо скачать и распаковать модель распознования vosk-model-small-ru-0.22 и указать в коде в переменную modelpath путь к папке модели
 
