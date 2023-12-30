@@ -4,7 +4,7 @@
   "author": "Eliseev Stepan",
   "homepage": "https://muiv.ru",
   "scripts": {
-    "android start": "ionic cap android --livereload --external",
+    "android start": "ionic cap run android --livereload --external",
     "ng": "ng",
     "start": "ionic serve",
     "build": "ionic build",
