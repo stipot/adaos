@@ -1,23 +1,21 @@
 ## Демонстративный вариант приложения для записи голоса
+
 ### Зауск проекта:
 
 ### установка необходимых зависимостей:
+
 ```
 npm install
 ```
+
 ### запуск приложения в браузере для отладки:
-`
-npm start
-`
-или 
-`
-ionic serve
-`
+
+`npm start`
+или
+`ionic serve`
+
 ### запуск приложения на android устройстве:
-`
-npm android start
-`
-или 
-`
-ionic cap android --livereload --external
-`
+
+`npm android start`
+или
+`ionic cap android --livereload --external`
