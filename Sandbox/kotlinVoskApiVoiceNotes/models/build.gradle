@@ -1,0 +1,39 @@
+apply plugin: 'com.android.library'
+import org.gradle.api.tasks.Copy
+
+android {
+    namespace "com.example.models"
+    compileSdkVersion 33
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 33
+    }
+    buildFeatures {
+        buildConfig = false
+    }
+    sourceSets {
+        main {
+            assets.srcDirs += "$buildDir/generated/assets"
+        }
+    }
+}
+
+tasks.register('genUUID') {
+    def uuid = UUID.randomUUID().toString()
+    def odir = file("$buildDir/generated/assets/model-ru-RU")
+    def ofile = file("$odir/uuid")
+    doLast {
+        mkdir odir
+        ofile.text = uuid
+        println "GOVNO"
+    }
+}
+tasks.register('copyVoskModel', Copy) {
+    // Update this path to match the location of the vosk-model-small-ru-0.22 folder
+    from 'vosk-model-small-ru-0.22'
+    // Copying into the generated assets directory under model-ru-RU
+    into "$buildDir/generated/assets/model-ru-RU"
+}
+
+preBuild.dependsOn(genUUID)
+preBuild.dependsOn(copyVoskModel)

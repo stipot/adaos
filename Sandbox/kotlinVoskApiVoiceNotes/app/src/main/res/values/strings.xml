@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">VoiceNotes</string>
+    <string name="note_activity">Note</string>
+</resources>
