@@ -66,6 +66,16 @@ def get_skill_versions(skill_name: str):
     return [{"version": r[0], "status": r[1]} for r in rows]
 
 
+def list_versions(skill_name: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT active_version FROM skills WHERE name = ?", (skill_name,))
+    row = cursor.fetchone()
+    conn.close()
+
+    return row[0] if row else None
+
+
 def add_skill_version(skill_name: str, version: str, path: str, status: str = "active"):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()

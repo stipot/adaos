@@ -3,8 +3,6 @@ from pathlib import Path
 from git import Repo
 from dotenv import load_dotenv, find_dotenv
 
-print(os.getenv("OPENAI_API_KEY"))
-
 GIT_USER = os.getenv("GIT_USER", "adaos")
 GIT_EMAIL = os.getenv("GIT_EMAIL", "adaos@local")
 

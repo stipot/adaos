@@ -5,7 +5,7 @@ from llm_client import generate_test_yaml, generate_skill
 from test_runner import TestRunner
 from process_llm_output import process_llm_output
 from git_utils import commit_skill_changes, rollback_last_commit
-from db import list_skills, get_skill_versions, add_skill_version
+from db import list_skills, get_skill_versions, add_skill_version, list_versions
 
 app = typer.Typer()
 
@@ -43,22 +43,24 @@ def request_skill(user_request: str):
 
 
 @app.command("list")
-def list_installed_skills():
-    """Список установленных навыков"""
-    skills = list_skills()
-    if not skills:
-        print("[yellow]Нет установленных навыков.[/yellow]")
-        return
-    for s in skills:
-        print(f"- [bold]{s['name']}[/bold] (активная версия: {s['active_version']})")
+def list_installed_skills(skill_name: str):
+    """Вывод версий заданного навыка"""
+    version = list_versions(skill_name)
+
+    if version:
+        print(f"[green]{skill_name}[/green] — активная версия: [yellow]{version}[/yellow]")
+    else:
+        print(f"[red]Навык '{skill_name}' не найден[/red]")
 
 
 @app.command("versions")
-def skill_versions(skill_name: str):
-    """Список версий навыка"""
-    versions = get_skill_versions(skill_name)
-    for v in versions:
-        print(f"- версия: [bold]{v['version']}[/bold], статус: {v['status']}")
+def versions(skill_name: str):
+    """Вывод версий заданного навыка"""
+    version = list_versions(skill_name)
+    if version:
+        print(f"[green]{skill_name}[/green] — активная версия: [yellow]{version}[/yellow]")
+    else:
+        print(f"[red]Навык '{skill_name}' не найден[/red]")
 
 
 @app.command("rollback")
