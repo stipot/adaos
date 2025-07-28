@@ -1,3 +1,4 @@
+import os
 import typer
 from rich import print
 from pathlib import Path
@@ -6,8 +7,35 @@ from test_runner import TestRunner
 from process_llm_output import process_llm_output
 from git_utils import commit_skill_changes, rollback_last_commit
 from db import list_skills, get_skill_versions, add_skill_version, list_versions
+from git import Repo
+import yaml
+from .skill_service import create_skill, push_skill, pull_skill, update_skill
 
-app = typer.Typer()
+app = typer.Typer(help="Управление навыками в monorepo")
+
+
+@app.command("create")
+def create_command(skill_name: str, template: str = typer.Option("basic", "--template", "-t", help="Шаблон навыка")):
+    """Создать новый навык из шаблона"""
+    typer.echo(create_skill(skill_name, template))
+
+
+@app.command("push")
+def push_command(skill_name: str, message: str = typer.Option("Обновление навыка", "--message", "-m", help="Комментарий к коммиту")):
+    """Отправить изменения навыка в monorepo"""
+    typer.echo(push_skill(skill_name, message))
+
+
+@app.command("pull")
+def pull_command(skill_name: str):
+    """Загрузить навык из monorepo"""
+    typer.echo(pull_skill(skill_name))
+
+
+@app.command("update")
+def update_command(skill_name: str):
+    """Обновить навык из monorepo"""
+    typer.echo(update_skill(skill_name))
 
 
 @app.command("request")
@@ -43,14 +71,14 @@ def request_skill(user_request: str):
 
 
 @app.command("list")
-def list_installed_skills(skill_name: str):
-    """Вывод версий заданного навыка"""
-    version = list_versions(skill_name)
-
-    if version:
-        print(f"[green]{skill_name}[/green] — активная версия: [yellow]{version}[/yellow]")
-    else:
-        print(f"[red]Навык '{skill_name}' не найден[/red]")
+def list_installed_skills():
+    """Список установленных навыков"""
+    skills = list_skills()
+    if not skills:
+        print("[yellow]Нет установленных навыков[/yellow]")
+        return
+    for s in skills:
+        print(f"- {s['name']} (активная версия: {s['active_version']})")
 
 
 @app.command("versions")

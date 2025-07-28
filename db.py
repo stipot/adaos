@@ -102,3 +102,45 @@ def add_skill_version(skill_name: str, version: str, path: str, status: str = "a
 
     conn.commit()
     conn.close()
+
+
+def add_or_update_skill(name: str, version: str, repo_url: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO skills (name, active_version, repo_url)
+        VALUES (?, ?, ?)
+        ON CONFLICT(name)
+        DO UPDATE SET active_version = excluded.active_version, repo_url = excluded.repo_url
+    """,
+        (name, version, repo_url),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_skill_version(name: str, version: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE skills SET active_version = ? WHERE name = ?", (version, name))
+    conn.commit()
+    conn.close()
+
+
+def get_skill(name: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, active_version, repo_url FROM skills WHERE name = ?", (name,))
+    row = cursor.fetchone()
+    conn.close()
+    return {"name": row[0], "active_version": row[1], "repo_url": row[2]} if row else None
+
+
+def list_skills():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, active_version, repo_url FROM skills")
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"name": r[0], "active_version": r[1], "repo_url": r[2]} for r in rows]
