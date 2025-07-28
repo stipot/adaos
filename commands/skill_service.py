@@ -10,21 +10,36 @@ MONOREPO_URL = os.getenv("SKILLS_REPO_URL")
 
 
 def _skill_subdir(skill_name: str) -> str:
-    return f"skills/{skill_name}"
+    return skill_name
 
 
 def _ensure_repo() -> Repo:
-    """Клонируем monorepo если он не локален, включаем sparse-checkout."""
     os.makedirs(SKILLS_DIR, exist_ok=True)
     git_dir = os.path.join(SKILLS_DIR, ".git")
 
     if not os.path.exists(git_dir):
         print(f"[cyan]Клонируем monorepo {MONOREPO_URL}[/cyan]")
         repo = Repo.clone_from(MONOREPO_URL, SKILLS_DIR)
+        repo.git.config("index.version", "2")  # только ставим версию
         repo.git.sparse_checkout("init", "--cone")
         return repo
 
-    return Repo(SKILLS_DIR)
+    repo = Repo(SKILLS_DIR)
+
+    try:
+        current_index_ver = repo.git.config("index.version")
+    except:
+        current_index_ver = "3"
+
+    if current_index_ver != "2":
+        print("[yellow]Пересобираем index в формате v2[/yellow]")
+        repo.git.config("index.version", "2")
+
+        # Пересобираем только если есть коммиты
+        if repo.head.is_valid():
+            repo.git.reset("--mixed")
+
+    return repo
 
 
 def create_skill(skill_name: str, template_name: str = "basic") -> str:
@@ -33,7 +48,7 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
     skill_path = os.path.join(SKILLS_DIR, skill_subdir)
 
     if os.path.exists(skill_path):
-        return f"[red]Навык {skill_name} уже существует в monorepo[/red]"
+        return f"[red]Навык {skill_name} уже существует[/red]"
 
     template_path = os.path.join(TEMPLATES_DIR, template_name)
     if not os.path.exists(template_path):
@@ -44,18 +59,16 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
 
     repo.git.sparse_checkout("set", skill_subdir)
     repo.git.add(skill_subdir)
-    repo.index.commit(f"Создан новый навык {skill_name} из шаблона {template_name}")
-    repo.remotes.origin.push()
 
-    # Обновляем БД
-    yaml_path = os.path.join(skill_path, "skill.yaml")
-    version = "1.0"
-    if os.path.exists(yaml_path):
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            version = yaml.safe_load(f).get("version", "1.0")
-    add_or_update_skill(skill_name, version, MONOREPO_URL)
+    # используем CLI-коммит
+    if repo.is_dirty():
+        # Важно: коммит через git CLI, а не через repo.index.commit
+        repo.git.commit("-m", f"Создан новый навык {skill_name} из шаблона {template_name}")
+        repo.remotes.origin.push()
+    else:
+        print("[yellow]Нет изменений для коммита[/yellow]")
 
-    return f"[green]Навык {skill_name} создан и добавлен в monorepo[/green]"
+        return f"[green]Навык {skill_name} создан и добавлен в monorepo[/green]"
 
 
 def push_skill(skill_name: str, message: str = "Обновление навыка") -> str:

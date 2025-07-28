@@ -8,6 +8,7 @@ SKILLS_DIR = "./runtime/skills"
 
 
 def init_db():
+    os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
