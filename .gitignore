@@ -1,1 +1,7 @@
 Sandbox/voskapi/vosk-model-small-ru-0.22/
+.env
+__pycache__/db.cpython-312.pyc
+__pycache__/git_utils.cpython-312.pyc
+__pycache__/llm_client.cpython-312.pyc
+__pycache__/process_llm_output.cpython-312.pyc
+__pycache__/test_runner.cpython-312.pyc
