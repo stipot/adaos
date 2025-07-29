@@ -2,4 +2,5 @@ Sandbox/voskapi/vosk-model-small-ru-0.22/
 .env
 __pycache__/
 commands/__pycache__/
-data/skill_db.sqlite
+.adaos/
+adaos.egg-info/

@@ -1,0 +1,35 @@
+{
+	"cli.help": "AdaOS CLI – managing skills, tests and Runtime",
+	"cli.no_env_creating": "[AdaOS] Environment not found. Starting installation...",
+	"cli.no_skills": "[AdaOS] The skills list is currently empty (MVP).",
+	"cli.env_deleted": "[AdaOS] Environment deleted. Will be recreated on next run.",
+	"cli.no_env": "[AdaOS] Environment not found.",
+	"cli.help_db": "Preparing the DB",
+	"cli.help_skill": "Working with skills",
+	"cli.help_test": "Working with tests",
+	"cli.help_runtime": "Runtime management",
+	"cli.template.help": "Skill template",
+	"cli.commit_message.help": "Commit message",
+	"setup.start": "Starting environment setup...",
+	"setup.complete": "Environment ready at {path}",
+	"skill.list.empty": "No installed skills.",
+	"repo.clone": "Cloning monorepo",
+	"repo.rebuild_index": "Rebuilding index in v2 format",
+
+	"skill.exists": "Skill {skill_name} already exists",
+	"skill.not_found": "Skill {skill_name} not found in monorepo",
+	"template.not_found": "Template {template_name} not found",
+
+	"skill.create": "Creating skill {skill_name} from template {template_name}",
+	"skill.commit_message": "Created new skill {skill_name} from template {template_name}",
+	"skill.created": "Skill {skill_name} created and added to monorepo",
+
+	"skill.push_message": "Skill update",
+	"skill.pushed": "{skill_name} pushed to monorepo",
+	"skill.no_changes": "No changes to commit",
+	"skill.no_changes_push": "No changes to push",
+
+	"skill.pulled": "{skill_name} pulled (v{version})",
+	"skill.updated": "{skill_name} updated (v{version})",
+	"skill.uninstalled": "Skill {skill_name} uninstalled for user"
+}

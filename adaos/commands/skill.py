@@ -1,0 +1,111 @@
+import os
+import typer
+from rich import print
+from pathlib import Path
+from adaos.llm_client import generate_test_yaml, generate_skill
+from adaos.test_runner import TestRunner
+from adaos.process_llm_output import process_llm_output
+from adaos.git_utils import commit_skill_changes, rollback_last_commit
+from adaos.db import list_skills, get_skill_versions, add_skill_version, list_versions
+from adaos.i18n.translator import _
+from git import Repo
+import yaml
+from .skill_service import create_skill, push_skill, pull_skill, update_skill, install_skill, uninstall_skill
+
+app = typer.Typer(help=_("cli.help"))
+
+
+@app.command("create")
+def create_command(skill_name: str, template: str = typer.Option("basic", "--template", "-t", help=_("cli.template.help"))):
+    """Создать новый навык из шаблона"""
+    typer.echo(create_skill(skill_name, template))
+
+
+@app.command("push")
+def push_command(skill_name: str, message: str = typer.Option(_("skill.push_message"), "--message", "-m", help=_("cli.commit_message.help"))):
+    """Отправить изменения навыка в monorepo"""
+    typer.echo(push_skill(skill_name, message))
+
+
+@app.command("pull")
+def pull_command(skill_name: str):
+    """Загрузить навык из monorepo"""
+    typer.echo(pull_skill(skill_name))
+
+
+@app.command("update")
+def update_command(skill_name: str):
+    """Обновить навык из monorepo"""
+    typer.echo(update_skill(skill_name))
+
+
+@app.command("request")
+def request_skill(user_request: str):
+    """Создать навык по пользовательскому запросу"""
+    print(f"[cyan]Запрос пользователя:[/cyan] {user_request}")
+    test_yaml = generate_test_yaml(user_request)
+    test_path = Path(f"runtime/tests/test_{hash(user_request)}.yaml")
+    test_path.write_text(test_yaml, encoding="utf-8")
+
+    runner = TestRunner()
+    if runner.run_test(str(test_path)):
+        print("[green]Навык уже существует и прошёл тест.[/green]")
+        return
+
+    print("[yellow]Навык не найден. Генерация нового...[/yellow]")
+    skill_code = generate_skill(user_request)
+
+    try:
+        skill_dir = process_llm_output(skill_code)
+        commit_skill_changes(skill_dir.name, f"Создан навык {skill_dir.name}")
+        add_skill_version(skill_dir.name, "v1.0", str(skill_dir))
+    except Exception as e:
+        print(f"[red]Ошибка генерации навыка:[/red] {e}")
+        rollback_last_commit()
+        raise
+
+    if runner.run_test(str(test_path)):
+        print(f"[green]Навык {skill_dir.name} успешно создан и прошёл тест.[/green]")
+    else:
+        print(f"[red]Навык {skill_dir.name} не прошёл тест. Откат.[/red]")
+        rollback_last_commit()
+
+
+@app.command("list")
+def list_installed_skills_cmd():
+    """Список установленных навыков"""
+    skills = list_skills()
+    if not skills:
+        print(f"[yellow]{_('skill.list.empty')}[/yellow]")
+        return
+    for s in skills:
+        print(f"- {s['name']} ({_('skill.active_version')}: {s['active_version']})")
+
+
+@app.command("versions")
+def versions_command(skill_name: str):
+    """Вывод версий заданного навыка"""
+    version = list_versions(skill_name)
+    if version:
+        print(f"[green]{skill_name}[/green] — {_('skill.active_version')}: [yellow]{version}[/yellow]")
+    else:
+        print(f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]")
+
+
+@app.command("rollback")
+def rollback_skill():
+    """Откат последнего изменения"""
+    rollback_last_commit()
+    print("[yellow]Откат произведён.[/yellow]")
+
+
+@app.command("install")
+def install_command(skill_name: str):
+    """Установить навык из monorepo"""
+    typer.echo(install_skill(skill_name))
+
+
+@app.command("uninstall")
+def uninstall_command(skill_name: str):
+    """Удалить навык у пользователя"""
+    typer.echo(uninstall_skill(skill_name))
