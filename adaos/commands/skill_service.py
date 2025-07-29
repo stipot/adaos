@@ -6,9 +6,10 @@ from git import Repo
 from adaos.i18n.translator import _
 from adaos.db import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
 
+PACKAGE_DIR = Path(__file__).resolve().parent.parent  # adaos/
 BASE_DIR = os.getenv("BASE_DIR", str(Path.home())) + "/.adaos"
 SKILLS_DIR = BASE_DIR + "/skills"
-TEMPLATES_DIR = BASE_DIR + "/runtime/skills_templates"
+TEMPLATES_DIR = str(PACKAGE_DIR / "runtime" / "skills_templates")
 MONOREPO_URL = os.getenv("SKILLS_REPO_URL")
 
 
@@ -57,26 +58,33 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
     skill_subdir = _skill_subdir(skill_name)
     skill_path = os.path.join(SKILLS_DIR, skill_subdir)
 
+    # Проверяем, не существует ли уже папка с таким навыком
     if os.path.exists(skill_path):
         return f"[red]{_('skill.exists', skill_name=skill_name)}[/red]"
 
+    # Проверяем, существует ли шаблон
     template_path = os.path.join(TEMPLATES_DIR, template_name)
     if not os.path.exists(template_path):
         return f"[red]{_('template.not_found', template_name=template_name)}[/red]"
 
+    # Копируем шаблон в папку навыка
     print(f"[cyan]{_('skill.create', skill_name=skill_name, template_name=template_name)}[/cyan]")
     shutil.copytree(template_path, skill_path)
 
-    _sync_sparse_checkout(repo)
+    # ВАЖНО: добавляем новый навык в sparse-checkout
+    repo.git.sparse_checkout("add", skill_subdir)
+
+    # Добавляем файлы в индекс
     repo.git.add(skill_subdir)
 
+    # Если есть изменения – коммитим
     if repo.is_dirty():
         repo.git.commit("-m", _("skill.commit_message", skill_name=skill_name, template_name=template_name))
         repo.remotes.origin.push()
     else:
         print(f"[yellow]{_('skill.no_changes')}[/yellow]")
 
-    # Обновляем БД
+    # Обновляем БД версией из skill.yaml
     yaml_path = os.path.join(skill_path, "skill.yaml")
     version = "1.0"
     if os.path.exists(yaml_path):
