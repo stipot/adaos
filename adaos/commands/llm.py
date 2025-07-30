@@ -1,5 +1,6 @@
 import typer
 from pathlib import Path
+from adaos.commands.skill_service import SKILLS_DIR
 
 app = typer.Typer(help="LLM prompt generation utilities")
 
@@ -14,7 +15,7 @@ def build_prep(skill_name: str, user_request: str):
 
     prompt = base_prompt_path.read_text(encoding="utf-8").replace("<<<USER_REQUEST>>>", user_request)
 
-    out_dir = Path("LLM") / skill_name
+    out_dir = Path(SKILLS_DIR) / skill_name / "prep"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "prep_prompt.md"
     out_path.write_text(prompt, encoding="utf-8")
