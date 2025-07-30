@@ -35,8 +35,6 @@ def build_skill(skill_name: str, user_request: str):
     """
     Build skill prompt based on user request and existing prep_result.json
     """
-    from adaos.commands.skill_service import SKILLS_DIR
-
     base_prompt_path = Path(f"{PACKAGE_DIR}/runtime/LLM/prompts/skill_request.md")
     if not base_prompt_path.exists():
         typer.echo(f"[red]{_('cli.llm.skill.template_missing')}[/red]")
@@ -53,7 +51,7 @@ def build_skill(skill_name: str, user_request: str):
 
     # Подставляем user_request и prep_result.json в шаблон
     prompt_template = base_prompt_path.read_text(encoding="utf-8")
-    prompt = prompt_template.replace("<<<USER_REQUEST>>>", user_request).replace("<<<PREP_RESULT_JSON>>>", prep_result)
+    prompt = prompt_template.replace("<<<USER_REQUEST>>>", user_request).replace("<<<PREP_RESULT_JSON>>>", prep_result).replace("<<<SKILL_NAME>>>", skill_name)
 
     # Сохраняем prompt
     out_dir = Path(SKILLS_DIR) / skill_name
