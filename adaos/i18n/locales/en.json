@@ -8,6 +8,7 @@
 	"cli.help_skill": "Working with skills",
 	"cli.help_test": "Working with tests",
 	"cli.help_runtime": "Runtime management",
+	"cli.help_llm": "LLM interaction CLI",
 	"cli.template.help": "Skill template",
 	"cli.commit_message.help": "Commit message",
 	"setup.start": "Starting environment setup...",
@@ -31,5 +32,10 @@
 
 	"skill.pulled": "{skill_name} pulled (v{version})",
 	"skill.updated": "{skill_name} updated (v{version})",
-	"skill.uninstalled": "Skill {skill_name} uninstalled for user"
+	"skill.uninstalled": "Skill {skill_name} uninstalled for user",
+
+	"skill.prep.not_found": "Skill {skill_name} does not have a prep script",
+	"skill.prep.success": "Skill {skill_name} is ready for development",
+	"skill.prep.failed": "Skill is not ready: {reason}",
+	"skill.prep.missing_func": "Prep script {skill_name} does not have a run_prep function"
 }

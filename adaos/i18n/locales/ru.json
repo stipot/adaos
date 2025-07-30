@@ -8,6 +8,7 @@
 	"cli.help_skill": "Работа с навыками",
 	"cli.help_test": "Работа с тестами",
 	"cli.help_runtime": "Управление Runtime",
+	"cli.help_llm": "CLI взаимодействие с LLM",
 	"cli.template.help": "Шаблон навыка",
 	"cli.commit_message.help": "Комментарий к коммиту",
 	"skill.active_version": "активная версия",
@@ -32,5 +33,10 @@
 
 	"skill.pulled": "{skill_name} загружен (v{version})",
 	"skill.updated": "{skill_name} обновлён (v{version})",
-	"skill.uninstalled": "Навык {skill_name} удалён у пользователя"
+	"skill.uninstalled": "Навык {skill_name} удалён у пользователя",
+
+	"skill.prep.not_found": "У навыка {skill_name} нет сценария подготовки",
+	"skill.prep.success": "Навык {skill_name} готов к разработке",
+	"skill.prep.failed": "Навык не готов: {reason}",
+	"skill.prep.missing_func": "В сценарии подготовки {skill_name} нет функции run_prep"
 }

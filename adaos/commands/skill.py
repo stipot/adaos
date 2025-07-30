@@ -1,6 +1,7 @@
 import os
 import typer
 from rich import print
+import importlib.util
 from pathlib import Path
 from adaos.llm_client import generate_test_yaml, generate_skill
 from adaos.test_runner import TestRunner
@@ -109,3 +110,32 @@ def install_command(skill_name: str):
 def uninstall_command(skill_name: str):
     """Удалить навык у пользователя"""
     typer.echo(uninstall_skill(skill_name))
+
+
+@app.command("prep")
+def prep_command(skill_name: str):
+    """Запуск стадии подготовки (discover) для навыка"""
+    from adaos.i18n.translator import _
+
+    from adaos.commands.skill_service import SKILLS_DIR
+
+    skill_path = Path(SKILLS_DIR) / skill_name
+
+    prep_script = skill_path / "prep" / "prepare.py"
+    if not prep_script.exists():
+        print(f"[red]{_('skill.prep.not_found', skill_name=skill_name)}[/red]")
+        raise typer.Exit(code=1)
+
+    # Динамически импортируем prepare.py
+    spec = importlib.util.spec_from_file_location("prepare", prep_script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    if hasattr(module, "run_prep"):
+        result = module.run_prep(skill_path)
+        if result["status"] == "ok":
+            print(f"[green]{_('skill.prep.success', skill_name=skill_name)}[/green]")
+        else:
+            print(f"[red]{_('skill.prep.failed', reason=result['reason'])}[/red]")
+    else:
+        print(f"[red]{_('skill.prep.missing_func', skill_name=skill_name)}[/red]")
