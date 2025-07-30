@@ -471,14 +471,18 @@ Rel(runtime, store, "Устанавливает навыки через SDK")
 ```bash
 # Создать навык weather_skill на основе шаблона AlarmSkill
 adaos skill create weather_skill -t AlarmSkill
-# Сформировать запрос для LLM на генерацию подготовительной работы
+# Сформировать запрос для LLM на генерацию кода prepare.py подготовительной работы
 adaos llm build-prep weather_skill "Научись узнавать погоду на сегодня"
 # Запрос используем для генерации prepare.py
-# Исполнение подготовительной работы и сохранение логов
+# Исполнение подготовительной работы prepare.py и сохранение логов
 adaos skill prep weather_skill
+# Сформировать запрос для LLM на генерации кода навыка
+adaos llm build-skill weather_skill "Научись узнавать погоду на сегодня"
+# Запрос используем для генерации handlers/main.py, skill.yaml
+# Запустить навык
+adaos skill run weather_skill get_weather
 # Обновить навык из репозитория
 adaos skill update weather_skill
-# 
 ```
 
 ### Список навыков
