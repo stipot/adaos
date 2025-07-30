@@ -3,6 +3,8 @@ import shutil
 import yaml
 from pathlib import Path
 from git import Repo
+import subprocess
+import importlib.util
 from adaos.i18n.translator import _
 from adaos.db import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
 
@@ -156,3 +158,19 @@ def uninstall_skill(skill_name: str) -> str:
     set_installed_flag(skill_name, installed=0)
     _sync_sparse_checkout(repo)
     return f"[green]{_('skill.uninstalled', skill_name=skill_name)}[/green]"
+
+
+def install_skill_dependencies(skill_path: Path):
+    """Устанавливает зависимости из get_dependencies() в handler.py"""
+    handler_file = skill_path / "handler.py"
+    if not handler_file.exists():
+        return
+
+    spec = importlib.util.spec_from_file_location("handler", handler_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    if hasattr(module, "get_dependencies"):
+        deps = module.get_dependencies()
+        for dep in deps:
+            subprocess.run(["pip", "install", dep], check=True)

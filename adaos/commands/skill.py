@@ -3,15 +3,23 @@ import typer
 from rich import print
 import importlib.util
 from pathlib import Path
+from git import Repo
+import yaml, json
 from adaos.llm_client import generate_test_yaml, generate_skill
 from adaos.test_runner import TestRunner
 from adaos.process_llm_output import process_llm_output
 from adaos.git_utils import commit_skill_changes, rollback_last_commit
 from adaos.db import list_skills, get_skill_versions, add_skill_version, list_versions
 from adaos.i18n.translator import _
-from git import Repo
-import yaml
-from .skill_service import create_skill, push_skill, pull_skill, update_skill, install_skill, uninstall_skill
+from adaos.commands.skill_service import (
+    create_skill,
+    push_skill,
+    pull_skill,
+    update_skill,
+    install_skill,
+    uninstall_skill,
+    install_skill_dependencies,
+)
 
 app = typer.Typer(help=_("cli.help"))
 
@@ -139,3 +147,20 @@ def prep_command(skill_name: str):
             print(f"[red]{_('skill.prep.failed', reason=result['reason'])}[/red]")
     else:
         print(f"[red]{_('skill.prep.missing_func', skill_name=skill_name)}[/red]")
+
+
+@app.command("run")
+def run_skill(skill_name: str, intent: str, entities: str = "{}"):
+    from adaos.commands.skill_service import SKILLS_DIR
+
+    skill_path = Path(SKILLS_DIR) / skill_name
+
+    # Устанавливаем зависимости перед запуском
+    install_skill_dependencies(skill_path)
+
+    # Загружаем handler
+    spec = importlib.util.spec_from_file_location("handler", skill_path / "handlers" / "main.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    module.handle(intent, json.loads(entities))
