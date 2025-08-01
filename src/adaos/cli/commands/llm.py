@@ -1,6 +1,6 @@
 import typer
 from pathlib import Path
-from adaos.i18n.translator import _
+from adaos.core.i18n import _
 from adaos.sdk.context import SKILLS_DIR, PACKAGE_DIR
 
 app = typer.Typer(help=_("cli.llm.help"))

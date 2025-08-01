@@ -3,7 +3,7 @@ import shutil
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
-from adaos.i18n.translator import _
+from adaos.core.i18n import _
 import typer
 from pathlib import Path
 from adaos.utils import setup_env

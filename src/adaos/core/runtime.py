@@ -1,7 +1,7 @@
 from skill_loader import SkillLoader
-from sdk.a_permissions import set_current_permissions
-from sdk.voice.asr import VoiceRecognizer
-from sdk.voice.wake_word import WakeWordVosk
+from adaos.sdk.a_permissions import set_current_permissions
+from adaos.utils.voice.asr import VoiceRecognizer
+from adaos.utils.voice.wake_word import WakeWordVosk
 
 
 def parse_intent(raw):
