@@ -11,7 +11,8 @@ from adaos.process_llm_output import process_llm_output
 from adaos.git_utils import commit_skill_changes, rollback_last_commit
 from adaos.db import list_skills, get_skill_versions, add_skill_version, list_versions
 from adaos.i18n.translator import _
-from adaos.commands.skill_service import (
+from adaos.sdk.context import PACKAGE_DIR, BASE_DIR, SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
+from adaos.sdk.skill_service import (
     create_skill,
     push_skill,
     pull_skill,
@@ -33,7 +34,8 @@ def create_command(skill_name: str, template: str = typer.Option("basic", "--tem
 @app.command("push")
 def push_command(skill_name: str, message: str = typer.Option(_("skill.push_message"), "--message", "-m", help=_("cli.commit_message.help"))):
     """Отправить изменения навыка в monorepo"""
-    typer.echo(push_skill(skill_name, message))
+    set_current_skill(skill_name)
+    typer.echo(push_skill(message))
 
 
 @app.command("pull")
@@ -45,7 +47,8 @@ def pull_command(skill_name: str):
 @app.command("update")
 def update_command(skill_name: str):
     """Обновить навык из monorepo"""
-    typer.echo(update_skill(skill_name))
+    set_current_skill(skill_name)
+    typer.echo(update_skill())
 
 
 @app.command("request")
@@ -123,10 +126,7 @@ def uninstall_command(skill_name: str):
 @app.command("prep")
 def prep_command(skill_name: str):
     """Запуск стадии подготовки (discover) для навыка"""
-    from adaos.i18n.translator import _
-
-    from adaos.commands.skill_service import SKILLS_DIR
-
+    set_current_skill(skill_name)
     skill_path = Path(SKILLS_DIR) / skill_name
 
     prep_script = skill_path / "prep" / "prepare.py"
@@ -151,16 +151,14 @@ def prep_command(skill_name: str):
 
 @app.command("run")
 def run_skill(skill_name: str, intent: str, entities: str = "{}"):
-    from adaos.commands.skill_service import SKILLS_DIR
-
-    skill_path = Path(SKILLS_DIR) / skill_name
+    set_current_skill(skill_name)
 
     # Устанавливаем зависимости перед запуском
-    install_skill_dependencies(skill_path)
+    install_skill_dependencies(current_skill_path)
 
     # Загружаем handler
-    spec = importlib.util.spec_from_file_location("handler", skill_path / "handlers" / "main.py")
+    spec = importlib.util.spec_from_file_location("handler", current_skill_path / "handlers" / "main.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    module.handle(intent, json.loads(entities))
+    module.handle(intent, json.loads(entities), current_skill_path)

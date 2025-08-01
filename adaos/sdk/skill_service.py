@@ -6,13 +6,8 @@ from git import Repo
 import subprocess
 import importlib.util
 from adaos.i18n.translator import _
+from adaos.sdk.context import PACKAGE_DIR, BASE_DIR, SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
 from adaos.db import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
-
-PACKAGE_DIR = Path(__file__).resolve().parent.parent  # adaos/
-BASE_DIR = os.getenv("BASE_DIR", str(Path.home())) + "/.adaos"
-SKILLS_DIR = BASE_DIR + "/skills"
-TEMPLATES_DIR = str(PACKAGE_DIR / "runtime" / "skills_templates")
-MONOREPO_URL = os.getenv("SKILLS_REPO_URL")
 
 
 def _skill_subdir(skill_name: str) -> str:
@@ -94,57 +89,53 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
             version = yaml.safe_load(f).get("version", "1.0")
 
     add_or_update_skill(skill_name, version, MONOREPO_URL, installed=1)
+    set_current_skill(skill_name)
     return f"[green]{_('skill.created', skill_name=skill_name)}[/green]"
 
 
-def push_skill(skill_name: str, message: str = None) -> str:
+def push_skill(message: str = None) -> str:
     repo = _ensure_repo()
-    skill_subdir = _skill_subdir(skill_name)
-    skill_path = os.path.join(SKILLS_DIR, skill_subdir)
-
-    if not os.path.exists(skill_path):
-        return f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
-
     _sync_sparse_checkout(repo)
-    repo.git.add(skill_subdir)
+    repo.git.add(current_skill_name)
 
     if repo.is_dirty():
         repo.git.commit("-m", message or _("skill.push_message"))
         repo.remotes.origin.push()
-        return f"[green]{_('skill.pushed',skill_name=skill_name)}[/green]"
+        return f"[green]{_('skill.pushed',skill_name=current_skill_name)}[/green]"
     else:
         return f"[yellow]{_('skill.no_changes_push')}[/yellow]"
 
 
 def pull_skill(skill_name: str) -> str:
     repo = _ensure_repo()
-    set_installed_flag(skill_name, installed=1)
+    set_installed_flag(current_skill_name, installed=1)
     _sync_sparse_checkout(repo)
     repo.remotes.origin.pull()
 
-    yaml_path = os.path.join(SKILLS_DIR, skill_name, "skill.yaml")
+    yaml_path = os.path.join(SKILLS_DIR, current_skill_name, "skill.yaml")
     version = "unknown"
     if os.path.exists(yaml_path):
         with open(yaml_path, "r", encoding="utf-8") as f:
             version = yaml.safe_load(f).get("version", "unknown")
 
     add_or_update_skill(skill_name, version, MONOREPO_URL, installed=1)
+    set_current_skill(skill_name)
     return f"[green]{_('skill.pulled', skill_name=skill_name, version=version)}[/green]"
 
 
-def update_skill(skill_name: str) -> str:
+def update_skill() -> str:
     repo = _ensure_repo()
     _sync_sparse_checkout(repo)
     repo.remotes.origin.pull()
 
-    yaml_path = os.path.join(SKILLS_DIR, skill_name, "skill.yaml")
+    yaml_path = os.path.join(SKILLS_DIR, current_skill_name, "skill.yaml")
     version = "unknown"
     if os.path.exists(yaml_path):
         with open(yaml_path, "r", encoding="utf-8") as f:
             version = yaml.safe_load(f).get("version", "unknown")
 
-    update_skill_version(skill_name, version)
-    return f"[green]{_('skill.updated', skill_name=skill_name, version=version)}[/green]"
+    update_skill_version(current_skill_name, version)
+    return f"[green]{_('skill.updated', skill_name=current_skill_name, version=version)}[/green]"
 
 
 def install_skill(skill_name: str) -> str:
@@ -162,7 +153,8 @@ def uninstall_skill(skill_name: str) -> str:
 
 def install_skill_dependencies(skill_path: Path):
     """Устанавливает зависимости из get_dependencies() в handler.py"""
-    handler_file = skill_path / "handler.py"
+    print(type(current_skill_path), current_skill_path)
+    handler_file = current_skill_path / "handlers" / "main.py"
     if not handler_file.exists():
         return
 

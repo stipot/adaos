@@ -1,7 +1,7 @@
 import typer
 from pathlib import Path
 from adaos.i18n.translator import _
-from adaos.commands.skill_service import SKILLS_DIR, PACKAGE_DIR
+from adaos.sdk.skill_service import SKILLS_DIR, PACKAGE_DIR
 
 app = typer.Typer(help=_("cli.llm.help"))
 
@@ -11,7 +11,7 @@ def build_prep(skill_name: str, user_request: str):
     """
     Build prep prompt for a skill based on user request and save it in <skills>/<skill_name>/prep/prep_prompt.md
     """
-    from adaos.commands.skill_service import SKILLS_DIR
+    from adaos.sdk.skill_service import SKILLS_DIR
 
     base_prompt_path = Path(f"{PACKAGE_DIR}/runtime/LLM/prompts/prep_request.md")
     if not base_prompt_path.exists():
