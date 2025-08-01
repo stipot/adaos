@@ -2,9 +2,7 @@ import sqlite3
 import os
 from pathlib import Path
 from datetime import datetime
-
-DB_PATH = os.getenv("BASE_DIR", str(Path.home())) + "/.adaos/skill_db.sqlite"
-SKILLS_DIR = "./runtime/skills"
+from adaos.sdk.context import DB_PATH, SKILLS_DIR
 
 
 def init_db():
@@ -35,9 +33,9 @@ def init_db():
     """
     )
     # Сканируем папку skills
-    if os.path.exists(SKILLS_DIR):
-        for skill_name in os.listdir(SKILLS_DIR):
-            skill_path = os.path.join(SKILLS_DIR, skill_name)
+    if os.path.exists(Path(SKILLS_DIR)):
+        for skill_name in os.listdir(Path(SKILLS_DIR)):
+            skill_path = os.path.join(Path(SKILLS_DIR), skill_name)
             if os.path.isdir(skill_path):
                 # Проверяем, есть ли навык в базе
                 cursor.execute("SELECT id FROM skills WHERE name = ?", (skill_name,))

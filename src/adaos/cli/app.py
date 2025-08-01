@@ -7,8 +7,8 @@ from adaos.i18n.translator import _
 import typer
 from pathlib import Path
 from adaos.utils import setup_env
+from adaos.sdk.context import BASE_DIR
 
-BASE_DIR = Path(os.getenv("BASE_DIR", str(Path.home())) + "/.adaos")
 from adaos.cli.commands import db, skill, test, runtime, llm
 
 app = typer.Typer(help=_("cli.help"))
@@ -18,7 +18,7 @@ def ensure_environment(ctx: typer.Context):
     """Проверяем, инициализировано ли окружение"""
     if ctx.invoked_subcommand == "reset":
         return  # пропускаем auto-setup для reset
-    if not BASE_DIR.exists():
+    if not Path(BASE_DIR).exists():
         typer.echo(_("cli.no_env_creating"))
         setup_env.prepare_environment()
 
@@ -32,8 +32,8 @@ def auto_setup(ctx: typer.Context):
 @app.command()
 def reset():
     """Сброс окружения AdaOS"""
-    if BASE_DIR.exists():
-        shutil.rmtree(BASE_DIR)
+    if Path(BASE_DIR).exists():
+        shutil.rmtree(Path(BASE_DIR))
         typer.echo(_("cli.env_deleted"))
     else:
         typer.echo(_("cli.no_env"))

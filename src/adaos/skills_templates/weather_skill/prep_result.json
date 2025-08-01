@@ -1,0 +1,21 @@
+{
+  "status": "ok",
+  "timestamp": "2025-07-30T08:00:50.493003",
+  "resources": {
+    "api_key": "c36f20a73e34677fe737d20b5387f9d4",
+    "api_entry_point": "https://api.openweathermap.org/data/2.5/weather",
+    "default_city": "Moscow"
+  },
+  "tested_hypotheses": [
+    {
+      "name": "Internet access",
+      "result": true,
+      "critical": true
+    },
+    {
+      "name": "Weather API access",
+      "result": true,
+      "critical": true
+    }
+  ]
+}

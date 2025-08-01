@@ -2,8 +2,7 @@ import os
 import re
 import yaml
 from pathlib import Path
-
-SKILLS_DIR = Path("runtime/skills")
+from adaos.sdk.context import SKILLS_DIR
 
 
 def process_llm_output(llm_output: str, skill_name_hint="Skill"):
@@ -37,7 +36,7 @@ def process_llm_output(llm_output: str, skill_name_hint="Skill"):
         raise ValueError("Нет интентов в манифесте.")
 
     # Создаём папку навыка
-    skill_dir = SKILLS_DIR / skill_name.lower()
+    skill_dir = Path(SKILLS_DIR) / skill_name.lower()
     skill_dir.mkdir(parents=True, exist_ok=True)
 
     # Записываем файлы

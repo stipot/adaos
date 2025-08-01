@@ -1,0 +1,15 @@
+{
+  "prep.ask_default_city": "Enter default city for weather forecast: ",
+  "prep.ask_api_key": "Enter API key for OpenWeatherMap: ",
+  "prep.ask_api_entry_point": "Enter API entry point: ",
+  "prep.test_internet_access": "Testing internet access...",
+  "prep.fail_internet": "Internet access failed",
+  "prep.test_weather_api": "Testing weather API...",
+  "prep.fail_weather_api": "Weather API access failed",
+  "prep.unexpected_error": "Unexpected error occurred",
+  "prep.summary_header": "Preparation Summary",
+  "prep.collected_resources": "Collected Resources",
+  "prep.tested_hypotheses": "Tested Hypotheses",
+  "prep.failed_header": "Preparation Failed",
+  "prep.reason": "Reason"
+}

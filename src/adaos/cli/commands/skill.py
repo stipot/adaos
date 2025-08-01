@@ -11,7 +11,7 @@ from adaos.llm.process_llm_output import process_llm_output
 from adaos.utils.git_utils import commit_skill_changes, rollback_last_commit
 from adaos.db.db import list_skills, get_skill_versions, add_skill_version, list_versions
 from adaos.i18n.translator import _
-from adaos.sdk.context import PACKAGE_DIR, BASE_DIR, SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
+from adaos.sdk.context import SKILLS_DIR, set_current_skill, current_skill_path
 from adaos.sdk.skill_service import (
     create_skill,
     push_skill,

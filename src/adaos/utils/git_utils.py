@@ -2,22 +2,20 @@ import os
 from pathlib import Path
 from git import Repo
 from dotenv import load_dotenv, find_dotenv
+from adaos.sdk.context import SKILLS_DIR
 
 GIT_USER = os.getenv("GIT_USER", "adaos")
 GIT_EMAIL = os.getenv("GIT_EMAIL", "adaos@local")
 
-SKILLS_PATH = Path("runtime/skills")
-REPO_PATH = Path("skills_repo")
-
 
 def init_git_repo():
     """Инициализация репозитория Git для навыков с настройкой user/email"""
-    if not REPO_PATH.exists():
-        REPO_PATH.mkdir(parents=True, exist_ok=True)
-        repo = Repo.init(REPO_PATH)
+    if not Path(SKILLS_DIR).exists():
+        Path(SKILLS_DIR).mkdir(parents=True, exist_ok=True)
+        repo = Repo.init(Path(SKILLS_DIR))
 
         # Создаём папку skills внутри репозитория
-        skills_dir = REPO_PATH / "skills"
+        skills_dir = Path(SKILLS_DIR) / "skills"
         skills_dir.mkdir(parents=True, exist_ok=True)
 
         # Настраиваем user.name и user.email
@@ -27,7 +25,7 @@ def init_git_repo():
 
         print(f"[GIT] Репозиторий навыков инициализирован. user={GIT_USER}, email={GIT_EMAIL}")
     else:
-        repo = Repo(REPO_PATH)
+        repo = Repo(Path(SKILLS_DIR))
 
         # Проверяем, есть ли user/email в конфиге
         with repo.config_writer() as config:
@@ -41,8 +39,8 @@ def init_git_repo():
 
 def commit_skill_changes(skill_name: str, message: str):
     """Коммит изменений навыка"""
-    repo = Repo(REPO_PATH)
-    skills_dir = REPO_PATH / "skills" / skill_name.lower()
+    repo = Repo(Path(SKILLS_DIR))
+    skills_dir = Path(SKILLS_DIR) / "skills" / skill_name.lower()
 
     if not skills_dir.exists():
         print(f"[GIT] Навык {skill_name} не найден в репозитории")
@@ -57,7 +55,7 @@ def commit_skill_changes(skill_name: str, message: str):
 
 def rollback_last_commit():
     """Откат последнего коммита"""
-    repo = Repo(REPO_PATH)
+    repo = Repo(Path(SKILLS_DIR))
     if not repo.head.is_valid():
         print("[GIT] Нет коммитов для отката")
         return

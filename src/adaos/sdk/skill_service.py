@@ -6,7 +6,7 @@ from git import Repo
 import subprocess
 import importlib.util
 from adaos.i18n.translator import _
-from adaos.sdk.context import PACKAGE_DIR, BASE_DIR, SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
+from adaos.sdk.context import SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
 from adaos.db.db import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
 
 
@@ -15,8 +15,8 @@ def _skill_subdir(skill_name: str) -> str:
 
 
 def _ensure_repo() -> Repo:
-    os.makedirs(SKILLS_DIR, exist_ok=True)
-    git_dir = os.path.join(SKILLS_DIR, ".git")
+    os.makedirs(Path(SKILLS_DIR), exist_ok=True)
+    git_dir = os.path.join(Path(SKILLS_DIR), ".git")
 
     if not os.path.exists(git_dir):
         print(f"[cyan]{_('repo.clone')} {MONOREPO_URL}[/cyan]")
@@ -25,7 +25,7 @@ def _ensure_repo() -> Repo:
         repo.git.sparse_checkout("init", "--cone")
         return repo
 
-    repo = Repo(SKILLS_DIR)
+    repo = Repo(Path(SKILLS_DIR))
 
     try:
         current_index_ver = repo.git.config("index.version")
@@ -53,14 +53,14 @@ def _sync_sparse_checkout(repo: Repo):
 def create_skill(skill_name: str, template_name: str = "basic") -> str:
     repo = _ensure_repo()
     skill_subdir = _skill_subdir(skill_name)
-    skill_path = os.path.join(SKILLS_DIR, skill_subdir)
+    skill_path = os.path.join(Path(SKILLS_DIR), skill_subdir)
 
     # Проверяем, не существует ли уже папка с таким навыком
     if os.path.exists(skill_path):
         return f"[red]{_('skill.exists', skill_name=skill_name)}[/red]"
 
     # Проверяем, существует ли шаблон
-    template_path = os.path.join(TEMPLATES_DIR, template_name)
+    template_path = os.path.join(Path(TEMPLATES_DIR), template_name)
     if not os.path.exists(template_path):
         return f"[red]{_('template.not_found', template_name=template_name)}[/red]"
 
@@ -112,7 +112,7 @@ def pull_skill(skill_name: str) -> str:
     _sync_sparse_checkout(repo)
     repo.remotes.origin.pull()
 
-    yaml_path = os.path.join(SKILLS_DIR, current_skill_name, "skill.yaml")
+    yaml_path = os.path.join(Path(SKILLS_DIR), current_skill_name, "skill.yaml")
     version = "unknown"
     if os.path.exists(yaml_path):
         with open(yaml_path, "r", encoding="utf-8") as f:
@@ -128,7 +128,7 @@ def update_skill() -> str:
     _sync_sparse_checkout(repo)
     repo.remotes.origin.pull()
 
-    yaml_path = os.path.join(SKILLS_DIR, current_skill_name, "skill.yaml")
+    yaml_path = os.path.join(Path(SKILLS_DIR), current_skill_name, "skill.yaml")
     version = "unknown"
     if os.path.exists(yaml_path):
         with open(yaml_path, "r", encoding="utf-8") as f:
