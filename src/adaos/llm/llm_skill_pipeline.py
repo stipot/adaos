@@ -1,5 +1,5 @@
 from pathlib import Path
-from adaos.test_runner import TestRunner
+from adaos.core.test_runner import TestRunner
 from .llm_client import generate_test_yaml, generate_skill
 from process_llm_output import process_llm_output
 

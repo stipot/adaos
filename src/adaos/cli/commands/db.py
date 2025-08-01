@@ -1,5 +1,5 @@
 import typer
-from adaos.db import init_db
+from adaos.db.db import init_db
 
 app = typer.Typer()
 

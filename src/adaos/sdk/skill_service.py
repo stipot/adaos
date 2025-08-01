@@ -7,7 +7,7 @@ import subprocess
 import importlib.util
 from adaos.i18n.translator import _
 from adaos.sdk.context import PACKAGE_DIR, BASE_DIR, SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
-from adaos.db import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
+from adaos.db.db import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
 
 
 def _skill_subdir(skill_name: str) -> str:

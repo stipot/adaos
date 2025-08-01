@@ -2,8 +2,8 @@ import os
 import zipfile
 import urllib.request
 from pathlib import Path
-from adaos.db import init_db
-from adaos.git_utils import init_git_repo
+from adaos.db.db import init_db
+from adaos.utils.git_utils import init_git_repo
 
 BASE_DIR = Path(os.getenv("BASE_DIR", str(Path.home())) + "/.adaos")
 MODELS_DIR = BASE_DIR / "models"

@@ -6,10 +6,10 @@ load_dotenv(find_dotenv())
 from adaos.i18n.translator import _
 import typer
 from pathlib import Path
-from adaos import setup_env
+from adaos.utils import setup_env
 
 BASE_DIR = Path(os.getenv("BASE_DIR", str(Path.home())) + "/.adaos")
-from adaos.commands import db, skill, test, runtime, llm
+from adaos.cli.commands import db, skill, test, runtime, llm
 
 app = typer.Typer(help=_("cli.help"))
 

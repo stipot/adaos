@@ -1,6 +1,6 @@
 import typer
 from rich import print
-from adaos.test_runner import TestRunner
+from adaos.core.test_runner import TestRunner
 
 app = typer.Typer()
 
