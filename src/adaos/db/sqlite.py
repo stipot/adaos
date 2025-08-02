@@ -6,6 +6,7 @@ from adaos.sdk.context import DB_PATH, SKILLS_DIR
 
 
 def init_db():
+    Path(SKILLS_DIR).mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
@@ -35,6 +36,8 @@ def init_db():
     # Сканируем папку skills
     if os.path.exists(Path(SKILLS_DIR)):
         for skill_name in os.listdir(Path(SKILLS_DIR)):
+            if skill_name == ".git":
+                continue
             skill_path = os.path.join(Path(SKILLS_DIR), skill_name)
             if os.path.isdir(skill_path):
                 # Проверяем, есть ли навык в базе
@@ -149,7 +152,7 @@ def get_skill(name: str):
 def list_skills():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT name, active_version, repo_url FROM skills")
+    cursor.execute("SELECT name, active_version, repo_url, installed FROM skills")
     rows = cursor.fetchall()
     conn.close()
-    return [{"name": r[0], "active_version": r[1], "repo_url": r[2]} for r in rows]
+    return [{"name": r[0], "active_version": r[1], "repo_url": r[2], "installed": r[3]} for r in rows]

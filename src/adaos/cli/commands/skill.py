@@ -9,9 +9,9 @@ from adaos.llm.llm_client import generate_test_yaml, generate_skill
 from adaos.core.test_runner import TestRunner
 from adaos.llm.process_llm_output import process_llm_output
 from adaos.utils.git_utils import commit_skill_changes, rollback_last_commit
-from adaos.db.db import list_skills, get_skill_versions, add_skill_version, list_versions
+from adaos.db.sqlite import list_skills, get_skill_versions, add_skill_version, list_versions
 from adaos.core.i18n import _
-from adaos.sdk.context import SKILLS_DIR, set_current_skill, current_skill_path
+from adaos.sdk.context import SKILLS_DIR, set_current_skill, current_skill_path, current_skill_name
 from adaos.sdk.skill_service import (
     create_skill,
     push_skill,
@@ -86,7 +86,7 @@ def request_skill(user_request: str):
 @app.command("list")
 def list_installed_skills_cmd():
     """Список установленных навыков"""
-    skills = list_skills()
+    skills = [s for s in list_skills() if s.get("installed", 1)]
     if not skills:
         print(f"[yellow]{_('skill.list.empty')}[/yellow]")
         return
@@ -120,6 +120,7 @@ def install_command(skill_name: str):
 @app.command("uninstall")
 def uninstall_command(skill_name: str):
     """Удалить навык у пользователя"""
+    set_current_skill(skill_name)
     typer.echo(uninstall_skill(skill_name))
 
 
