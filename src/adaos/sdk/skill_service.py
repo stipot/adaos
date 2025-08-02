@@ -94,10 +94,10 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
     return f"[green]{_('skill.created', skill_name=skill_name)}[/green]"
 
 
-def push_skill(message: str = None) -> str:
+def push_skill(skill_name, message: str = None) -> str:
     repo, is_initial = _ensure_repo()
     _sync_sparse_checkout(repo)
-    repo.git.add(current_skill_name)
+    repo.git.add(skill_name)
 
     if repo.is_dirty():
         repo.git.commit("-m", message or _("skill.push_message"))

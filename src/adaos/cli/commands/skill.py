@@ -35,7 +35,7 @@ def create_command(skill_name: str, template: str = typer.Option("basic", "--tem
 def push_command(skill_name: str, message: str = typer.Option(_("skill.push_message"), "--message", "-m", help=_("cli.commit_message.help"))):
     """Отправить изменения навыка в monorepo"""
     set_current_skill(skill_name)
-    typer.echo(push_skill(message))
+    typer.echo(push_skill(skill_name, message))
 
 
 @app.command("pull")
