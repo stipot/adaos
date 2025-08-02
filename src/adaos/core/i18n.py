@@ -3,7 +3,9 @@ import json
 from pathlib import Path
 import logging
 import inspect
-from adaos.sdk.context import DEFAULT_LANG, LOCALES_DIR
+
+DEFAULT_LANG = "en"
+LOCALES_DIR = f"{Path(__file__).resolve().parent.parent}/i18n/locales"
 
 
 class Translator:
