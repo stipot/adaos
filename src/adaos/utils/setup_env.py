@@ -1,8 +1,9 @@
 import os
 import zipfile
 import urllib.request
+import shutil
 from pathlib import Path
-from adaos.db.db import init_db
+from adaos.db.sqlite import init_db
 from adaos.utils.git_utils import init_git_repo
 from adaos.sdk.context import BASE_DIR, DB_PATH
 
@@ -30,11 +31,17 @@ def download_vosk_model():
 
 
 def prepare_environment():
-    # БД
-    init_db()
+    env_sample = Path(__file__).parent.parent / ".env.sample"
+    env_file = Path(BASE_DIR) / ".env"
 
+    if not env_file.exists() and env_sample.exists():
+        shutil.copy(env_sample, env_file)
+        print(f"[AdaOS] Created .env file at {env_file}")
     # Git репозиторий навыков
     init_git_repo()
+
+    # БД
+    init_db()
 
     # Модель wake-word
     download_vosk_model()
