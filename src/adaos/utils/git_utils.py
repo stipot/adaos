@@ -8,31 +8,31 @@ GIT_USER = os.getenv("GIT_USER", "adaos")
 GIT_EMAIL = os.getenv("GIT_EMAIL", "adaos@local")
 
 
-def init_git_repo():
-    """Инициализация репозитория Git для навыков с настройкой user/email"""
-    if not Path(SKILLS_DIR).exists():
-        Path(SKILLS_DIR).mkdir(parents=True, exist_ok=True)
-        repo = Repo.init(Path(SKILLS_DIR))
+def init_git_repo() -> Repo:
+    """Инициализация с поддержкой sparse checkout"""
+    repo_url = "https://github.com/stipot/adaoskills.git"
+    skills_dir = Path(SKILLS_DIR)
 
-        # Создаём папку skills внутри репозитория
-        skills_dir = Path(SKILLS_DIR) / "skills"
-        skills_dir.mkdir(parents=True, exist_ok=True)
+    if (skills_dir / ".git").exists():
+        return Repo(skills_dir)
 
-        # Настраиваем user.name и user.email
-        with repo.config_writer() as config:
-            config.set_value("user", "name", GIT_USER)
-            config.set_value("user", "email", GIT_EMAIL)
+    # Создаем пустой репозиторий
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    repo = Repo.init(skills_dir)
 
-        print(f"[GIT] Репозиторий навыков инициализирован. user={GIT_USER}, email={GIT_EMAIL}")
-    else:
-        repo = Repo(Path(SKILLS_DIR))
+    # Настройка sparse checkout
+    with repo.config_writer() as config:
+        config.set_value("core", "sparseCheckout", "true")
+        config.set_value("pull", "rebase", "false")
 
-        # Проверяем, есть ли user/email в конфиге
-        with repo.config_writer() as config:
-            if not config.has_section("user") or not config.has_option("user", "name"):
-                config.set_value("user", "name", GIT_USER)
-            if not config.has_section("user") or not config.has_option("user", "email"):
-                config.set_value("user", "email", GIT_EMAIL)
+    # Инициализация sparse-checkout файла
+    sparse_file = skills_dir / ".git" / "info" / "sparse-checkout"
+    sparse_file.parent.mkdir(parents=True, exist_ok=True)
+    sparse_file.write_text("/*\n!/*/\n")  # Блокируем все папки по умолчанию
+
+    # Добавляем origin
+    origin = repo.create_remote("origin", repo_url)
+    origin.fetch()
 
     return repo
 

@@ -7,14 +7,14 @@ import subprocess
 import importlib.util
 from adaos.core.i18n import _
 from adaos.sdk.context import SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
-from adaos.db.db import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
+from adaos.db.sqlite import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
 
 
 def _skill_subdir(skill_name: str) -> str:
     return skill_name
 
 
-def _ensure_repo() -> Repo:
+def _ensure_repo() -> tuple[Repo, bool]:
     os.makedirs(Path(SKILLS_DIR), exist_ok=True)
     git_dir = os.path.join(Path(SKILLS_DIR), ".git")
 
@@ -23,7 +23,7 @@ def _ensure_repo() -> Repo:
         repo = Repo.clone_from(MONOREPO_URL, SKILLS_DIR)
         repo.git.config("index.version", "2")
         repo.git.sparse_checkout("init", "--cone")
-        return repo
+        return repo, True
 
     repo = Repo(Path(SKILLS_DIR))
 
@@ -38,20 +38,21 @@ def _ensure_repo() -> Repo:
         if repo.head.is_valid():
             repo.git.reset("--mixed")
 
-    return repo
+    return repo, False
 
 
 def _sync_sparse_checkout(repo: Repo):
     """Пересобираем sparse-checkout из всех установленных навыков"""
     installed = [s["name"] for s in list_skills() if s.get("installed", 1)]
-    if installed:
+    repo.git.sparse_checkout("set", *installed)
+    """ if installed:
         repo.git.sparse_checkout("set", *installed)
     else:
-        repo.git.sparse_checkout("disable")
+        repo.git.sparse_checkout("disable") """
 
 
 def create_skill(skill_name: str, template_name: str = "basic") -> str:
-    repo = _ensure_repo()
+    repo, is_initial = _ensure_repo()
     skill_subdir = _skill_subdir(skill_name)
     skill_path = os.path.join(Path(SKILLS_DIR), skill_subdir)
 
@@ -94,7 +95,7 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
 
 
 def push_skill(message: str = None) -> str:
-    repo = _ensure_repo()
+    repo, is_initial = _ensure_repo()
     _sync_sparse_checkout(repo)
     repo.git.add(current_skill_name)
 
@@ -107,12 +108,13 @@ def push_skill(message: str = None) -> str:
 
 
 def pull_skill(skill_name: str) -> str:
-    repo = _ensure_repo()
-    set_installed_flag(current_skill_name, installed=1)
+    repo, is_initial = _ensure_repo()
+    set_installed_flag(skill_name, installed=1)
     _sync_sparse_checkout(repo)
-    repo.remotes.origin.pull()
+    if not is_initial:
+        repo.remotes.origin.pull()
 
-    yaml_path = os.path.join(Path(SKILLS_DIR), current_skill_name, "skill.yaml")
+    yaml_path = os.path.join(Path(SKILLS_DIR), skill_name, "skill.yaml")
     version = "unknown"
     if os.path.exists(yaml_path):
         with open(yaml_path, "r", encoding="utf-8") as f:
@@ -124,7 +126,7 @@ def pull_skill(skill_name: str) -> str:
 
 
 def update_skill() -> str:
-    repo = _ensure_repo()
+    repo, is_initial = _ensure_repo()
     _sync_sparse_checkout(repo)
     repo.remotes.origin.pull()
 
@@ -145,7 +147,7 @@ def install_skill(skill_name: str) -> str:
 
 def uninstall_skill(skill_name: str) -> str:
     """Удаляет навык у пользователя (ставим installed=0 и пересобираем sparse-checkout)"""
-    repo = _ensure_repo()
+    repo, is_initial = _ensure_repo()
     set_installed_flag(skill_name, installed=0)
     _sync_sparse_checkout(repo)
     return f"[green]{_('skill.uninstalled', skill_name=skill_name)}[/green]"

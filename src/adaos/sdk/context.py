@@ -1,12 +1,13 @@
 from pathlib import Path
+from adaos.core.i18n import _
 import os
 
 
-BASE_DIR = f'{os.getenv("BASE_DIR", str(Path.home()))}/.adaos'
-SKILLS_DIR = f"{BASE_DIR}/skills"
 PACKAGE_DIR = Path(__file__).resolve().parent.parent  # adaos/
+BASE_DIR = f'{os.getenv("BASE_DIR", PACKAGE_DIR.parent.parent)}/.adaos'  # str(Path.home())
+SKILLS_DIR = f"{BASE_DIR}/skills"
 TEMPLATES_DIR = str(PACKAGE_DIR / "skills_templates")
-MONOREPO_URL = os.getenv("SKILLS_REPO_URL")
+MONOREPO_URL = os.getenv("SKILLS_REPO_URL", "https://github.com/stipot/adaoskills.git")
 DB_PATH = f"{BASE_DIR}/skill_db.sqlite"
 LOCALES_DIR = f"{PACKAGE_DIR}/i18n/locales"
 DEFAULT_LANG = "en"
@@ -20,7 +21,6 @@ def set_current_skill(skill_name: str):
     current_skill_path = os.path.join(Path(SKILLS_DIR), skill_name)
     if not os.path.exists(current_skill_path):
         return f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
-    print("point1", type(current_skill_path), current_skill_path)
     current_skill_name = skill_name
 
 
