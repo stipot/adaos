@@ -1,13 +1,15 @@
 import os
 from openai import OpenAI
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def getOpenAIClient():
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def generate_test_yaml(user_request: str):
     # Пример использования LLM
     prompt = f"Сформируй YAML тест для запроса: {user_request}"
-    response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
+    response = getOpenAIClient().chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
     return response.choices[0].message["content"]
 
 
