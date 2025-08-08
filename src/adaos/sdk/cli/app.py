@@ -9,7 +9,7 @@ from pathlib import Path
 from adaos.sdk.utils.setup_env import prepare_environment
 from adaos.sdk.context import BASE_DIR
 
-from adaos.sdk.cli.commands import db, skill, test, runtime, llm
+from adaos.sdk.cli.commands import db, skill, test, runtime, llm, ovos
 
 app = typer.Typer(help=_("cli.help"))
 
@@ -45,6 +45,7 @@ app.add_typer(skill.app, name="skill", help=_("cli.help_skill"))
 app.add_typer(test.app, name="test", help=_("cli.help_test"))
 app.add_typer(runtime.app, name="runtime", help=_("cli.help_runtime"))
 app.add_typer(llm.app, name="llm", help=_("cli.help_llm"))
+app.add_typer(ovos.app, name="ovos")
 
 if __name__ == "__main__":
     app()
