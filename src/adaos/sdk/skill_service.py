@@ -5,9 +5,9 @@ from pathlib import Path
 from git import Repo
 import subprocess
 import importlib.util
-from adaos.core.i18n import _
+from adaos.sdk.skills.i18n import _
 from adaos.sdk.context import SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
-from adaos.db.sqlite import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
+from adaos.agent.db.sqlite import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
 
 
 def _skill_subdir(skill_name: str) -> str:

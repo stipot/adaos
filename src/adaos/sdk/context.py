@@ -1,5 +1,5 @@
 from pathlib import Path
-from adaos.core.i18n import _
+from adaos.sdk.skills.i18n import _
 import os
 
 
@@ -9,7 +9,7 @@ SKILLS_DIR = f"{BASE_DIR}/skills"
 TEMPLATES_DIR = str(PACKAGE_DIR / "skills_templates")
 MONOREPO_URL = os.getenv("SKILLS_REPO_URL", "https://github.com/stipot/adaoskills.git")
 DB_PATH = f"{BASE_DIR}/skill_db.sqlite"
-LOCALES_DIR = f"{PACKAGE_DIR}/i18n/locales"
+LOCALES_DIR = f"{PACKAGE_DIR}/sdk/locales"
 DEFAULT_LANG = "en"
 
 current_skill_path: Path | None = None
