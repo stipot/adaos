@@ -33,6 +33,7 @@ dependencies = [
   "watchdog>=4.0.1",
   "vosk>=0.3.45",
   "sounddevice>=0.4.7",
+  "requests>=2.31.0",
 ]
 
 [project.scripts]
