@@ -11,6 +11,7 @@ MONOREPO_URL = os.getenv("SKILLS_REPO_URL", "https://github.com/stipot/adaoskill
 DB_PATH = f"{BASE_DIR}/skill_db.sqlite"
 LOCALES_DIR = f"{PACKAGE_DIR}/sdk/locales"
 DEFAULT_LANG = "en"
+ADAOS_VOSK_MODEL = f"{BASE_DIR}/models/vosk/en-us"
 
 current_skill_path: Path | None = None
 current_skill_name: str = ""
