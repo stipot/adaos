@@ -5,10 +5,10 @@ import json
 import queue
 from pathlib import Path
 from typing import Callable, Optional
-from adaos.sdk.context import ADAOS_VOSK_MODEL
 
 import sounddevice as sd
 from vosk import Model, KaldiRecognizer  # type: ignore
+from adaos.sdk.context import ADAOS_VOSK_MODEL
 
 from adaos.agent.utils.model_manager import ensure_vosk_model
 
@@ -21,19 +21,21 @@ class VoskSTT:
         device: Optional[int] = None,
         blocksize: int = 8000,
         lang: Optional[str] = None,
+        model_zip: Optional[Path] = None,
     ):
         """
         model_path: если не задан, берём ADAOS_VOSK_MODEL, иначе auto‑ensure по lang (или 'en')
         lang: 'en' / 'ru' и т.п. — автозагрузка и выбор алиаса модели
         """
-        if model_path:
+        """ if model_path:
             model_dir = Path(model_path)
         else:
-            env_path = ADAOS_VOSK_MODEL
+            env_path = os.environ.get("ADAOS_VOSK_MODEL")
             if env_path:
                 model_dir = Path(env_path)
-        model_dir = ensure_vosk_model(lang or "en", base_dir=ADAOS_VOSK_MODEL)
-        print("ADAOS_VOSK_MODEL_log", ADAOS_VOSK_MODEL)
+            else:
+                model_dir = ensure_vosk_model(lang or "en", base_dir=ADAOS_VOSK_MODEL, local_zip=model_zip) """
+        model_dir = ensure_vosk_model(lang or "en", base_dir=ADAOS_VOSK_MODEL, local_zip=model_zip)
         if not model_dir.exists():
             raise RuntimeError(f"Vosk модель не найдена: {model_dir.resolve()}\n" "Укажи --model или ADAOS_VOSK_MODEL, либо используй --lang для авто‑загрузки.")
 
