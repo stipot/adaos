@@ -221,16 +221,22 @@ project_root/
 ├── setup.py
 ├── README.md
 │
-├── adaos/                   # Код CLI и ядра системы
-│   ├── cli.py               # Точка входа CLI
-│   ├── db.py                # Работа с SQLite базой
-│   ├── commands/            # Модули команд (skill, runtime, test)
-│   ├── i18n/                # Локализация CLI
-│   ├── runtime/             # LLM, SDK и шаблоны навыков
-│   │   ├── skills_templates/  # Шаблоны для генерации новых навыков
-│   │   │   └── AlarmSkill/     # Пример шаблона навыка
-│   │   └── LLM/, sdk/, tests/
-│   └── ...
+├── src/adaos/
+    ├── agent/                  # Runtime
+    │   ├── core/              # State machine, skill_loader
+    │   ├── db/                # SQLite persistence
+    │   ├── i18n/              # TTS / UI strings
+    │   └── audio/             # asr, tts, wake_word (если используется)
+    │
+    ├── sdk/                   # CLI и DevTools
+    │   ├── cli/               # Typer CLI
+    │   ├── skills/            # Компиляторы / шаблоны / генерация
+    │   ├── llm/               # Подключение и промпты
+    │   ├── locales/           # Локализация CLI
+    │   └── utils/             # Общие утилиты (git, env)
+    │
+    ├── common/                # Опционально: конфиг, логгер, схемы
+    └── skills_templates/      # YAML/intent-шаблоны
 │
 └── .adaos/                  # Рабочая среда пользователя (динамическая)
     ├── skill_db.sqlite      # База данных навыков (версии, установленные навыки)

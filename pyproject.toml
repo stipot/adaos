@@ -3,18 +3,22 @@ build-backend = "setuptools.build_meta"
 requires = ["setuptools>=65.0", "wheel"]
 
 [project]
-authors = [{name = "AdaOS Team"}]
-classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Intended Audience :: Developers",
-  "Programming Language :: Python :: 3.10",
-]
 description = "AdaOS - платформа для навыков и голосового управления"
 license = {text = "MIT"}
 name = "adaos"
 readme = "README.md"
 requires-python = ">=3.10"
 version = "0.1.0"
+
+authors = [
+  {name = "AdaOS Team"},
+]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.10",
+]
 
 dependencies = [
   "typer>=0.16.0",
@@ -29,10 +33,12 @@ dependencies = [
   "watchdog>=4.0.1",
   "vosk>=0.3.45",
   "sounddevice>=0.4.7",
+  "requests>=2.31.0",
+  "pyttsx3",
 ]
 
 [project.scripts]
-adaos = "adaos.cli.app:app" # Точка входа CLI
+adaos = "adaos.sdk.cli.app:app"
 
 [project.urls]
 Homepage = "https://github.com/stipot/adaos"
@@ -42,8 +48,9 @@ include-package-data = true
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
+# EXTRA_MODULES_START
+# EXTRA_MODULES_END
 where = ["src"]
-
 [tool.setuptools.package-data]
 adaos = [
   "skills_templates/**/*.yaml",

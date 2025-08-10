@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict
 import requests
 
-from adaos.core.i18n import _
+from adaos.sdk.skills.i18n import _
 from adaos.sdk.context import current_skill_path
 from adaos.sdk.output import output
 from adaos.sdk.skill_env import get_env, set_env
