@@ -11,11 +11,11 @@ app = typer.Typer(help="Нативные офлайн-команды (TTS/STT)")
 
 @app.command("say")
 def say(
-    text: str,
-    lang: Optional[str] = typer.Option(None, "--lang", "-l"),
-    voice: Optional[str] = typer.Option(None, "--voice", "-v"),
-    rate: Optional[int] = typer.Option(None, "--rate"),
-    volume: Optional[float] = typer.Option(None, "--volume"),
+    text: str = typer.Argument(..., help="Текст для озвучивания"),
+    lang: str = typer.Option(None, "--lang", "-l", help="Язык"),
+    voice: str = typer.Option(None, "--voice", "-v", help="Голос"),
+    rate: int = typer.Option(None, "--rate", help="Скорость речи"),
+    volume: float = typer.Option(None, "--volume", help="Громкость [0..1]"),
 ):
     tts = NativeTTS(voice=voice, rate=rate, volume=volume, lang_hint=(lang or "").lower() or None)
     tts.say(text)
@@ -27,7 +27,13 @@ from adaos.agent.audio.stt.vosk_stt import VoskSTT
 
 
 @app.command("start")
-def start(lang: str = "en", samplerate: int = 16000, device: str | int | None = None, echo: bool = True, model_path: str | None = None):
+def start(
+    lang: str = typer.Option("en", "--lang", help="Язык"),
+    samplerate: int = typer.Option(16000, "--samplerate", help="Частота дискретизации"),
+    device: str = typer.Option(None, "--device", help="Устройство"),
+    echo: bool = typer.Option(True, "--echo", help="Эхо-тест"),
+    model_path: str = typer.Option(None, "--model-path", help="Путь к модели"),
+):
     """
     Запускает офлайн-слушатель (Vosk). Ctrl+C для выхода.
     """

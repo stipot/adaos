@@ -3,6 +3,8 @@ import json
 import queue
 from pathlib import Path
 from typing import Generator, Optional
+import typer
+
 from adaos.sdk.context import ADAOS_VOSK_MODEL
 
 import sounddevice as sd
@@ -10,7 +12,7 @@ import vosk
 
 
 class VoskSTT:
-    def __init__(self, model_path: Optional[str] = None, samplerate: int = 16000, device: Optional[int | str] = None, lang: str = "en"):
+    def __init__(self, model_path: str = typer.Option(None), samplerate: int = 16000, device: Optional[int | str] = None, lang: str = "en"):
         # Инициализация модели
         if model_path:
             model_dir = Path(model_path)

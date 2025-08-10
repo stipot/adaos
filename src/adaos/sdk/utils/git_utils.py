@@ -3,7 +3,7 @@ from pathlib import Path
 from git import Repo
 from dotenv import load_dotenv, find_dotenv
 from adaos.sdk.context import SKILLS_DIR, MONOREPO_URL
-from adaos.core.i18n import _
+from adaos.sdk.i18n import _
 
 GIT_USER = os.getenv("GIT_USER", "adaos")
 GIT_EMAIL = os.getenv("GIT_EMAIL", "adaos@local")

@@ -27,7 +27,7 @@ except Exception:
     RhasspyTTSAdapter = None  # type: ignore
 
 
-def _pick_provider(provider: ProviderEnum, rhasspy_url: Optional[str]) -> ProviderEnum:
+def _pick_provider(provider: ProviderEnum, rhasspy_url: str) -> ProviderEnum:
     if provider == ProviderEnum.auto:
         if rhasspy_url or os.getenv("ADAOS_RHASSPY_URL"):
             return ProviderEnum.rhasspy
@@ -39,12 +39,10 @@ def _pick_provider(provider: ProviderEnum, rhasspy_url: Optional[str]) -> Provid
 def say(
     text: str,
     provider: ProviderEnum = typer.Option(ProviderEnum.auto, "--provider", case_sensitive=False),
-    # OVOS
-    ovos_voice: Optional[str] = typer.Option(None, "--ovos-voice"),
-    # Rhasspy
-    rhasspy_url: Optional[str] = typer.Option(None, "--rhasspy-url"),
-    rhasspy_voice: Optional[str] = typer.Option(None, "--rhasspy-voice"),
-    rhasspy_lang: Optional[str] = typer.Option(None, "--rhasspy-lang"),
+    ovos_voice: str = typer.Option(None, "--ovos-voice"),
+    rhasspy_url: str = typer.Option(None, "--rhasspy-url"),
+    rhasspy_voice: str = typer.Option(None, "--rhasspy-voice"),
+    rhasspy_lang: str = typer.Option(None, "--rhasspy-lang"),
 ):
     """Произнести фразу через выбранный провайдер TTS."""
     effective = _pick_provider(provider, rhasspy_url)

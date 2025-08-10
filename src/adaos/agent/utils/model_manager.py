@@ -7,6 +7,7 @@ import zipfile
 import tempfile
 from pathlib import Path
 from typing import Optional, List
+import typer
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 

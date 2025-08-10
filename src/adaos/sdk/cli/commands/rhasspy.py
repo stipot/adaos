@@ -45,6 +45,6 @@ def stop(container: str = typer.Option(DEFAULT_CONTAINER, "--name")):
 
 
 @app.command("status")
-def status(base_url: Optional[str] = typer.Option(None, "--url"), port: int = typer.Option(DEFAULT_PORT, "--port"), container: str = typer.Option(DEFAULT_CONTAINER, "--name")):
+def status(base_url: str = typer.Option(None, "--url"), port: int = typer.Option(DEFAULT_PORT, "--port"), container: str = typer.Option(DEFAULT_CONTAINER, "--name")):
     info = status_rhasspy(base_url=base_url, port=port, container_name=container)
     typer.echo(info)

@@ -6,6 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Optional
+import typer
 
 import json
 
@@ -61,7 +62,7 @@ def stop_rhasspy(container_name: str = DEFAULT_CONTAINER) -> None:
     print(f"[Rhasspy Runner] Контейнер {container_name} остановлен.")
 
 
-def status_rhasspy(base_url: Optional[str] = None, port: int = DEFAULT_PORT, container_name: str = DEFAULT_CONTAINER) -> dict:
+def status_rhasspy(base_url: str = typer.Option(None), port: int = DEFAULT_PORT, container_name: str = DEFAULT_CONTAINER) -> dict:
     """Проверка статуса: docker и HTTP /api/health (если requests доступен)."""
     result = {"docker": None, "container": None, "http": None}
 
@@ -92,7 +93,7 @@ def status_rhasspy(base_url: Optional[str] = None, port: int = DEFAULT_PORT, con
     return result
 
 
-def wait_until_ready(base_url: Optional[str] = None, port: int = DEFAULT_PORT, timeout: int = 20) -> bool:
+def wait_until_ready(base_url: str = typer.Option(None), port: int = DEFAULT_PORT, timeout: int = 20) -> bool:
     if not requests:
         return False
     url = base_url or f"http://127.0.0.1:{port}"
