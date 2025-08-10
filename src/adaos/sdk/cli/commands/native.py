@@ -21,25 +21,42 @@ def say(
     tts.say(text)
 
 
+import typer
+
+from adaos.agent.audio.stt.vosk_stt import VoskSTT
+
+
 @app.command("start")
-def start(
-    text_on_start: Optional[str] = typer.Option(None, "--greet"),
-    model_path: Optional[str] = typer.Option(None, "--model", "-m"),
-    model_zip: Optional[Path] = typer.Option(None, "--model-zip", help="Локальный путь к ZIP с моделью Vosk"),
-    device: Optional[int] = typer.Option(None, "--device"),
-    samplerate: int = typer.Option(16000, "--samplerate", "-r"),
-    echo: bool = typer.Option(True, "--echo/--no-echo"),
-    lang: Optional[str] = typer.Option(None, "--lang", "-l"),
-):
-    stt = VoskSTT(model_path=model_path, samplerate=samplerate, device=device, lang=lang, model_zip=model_zip)
-    tts = NativeTTS(lang_hint=lang) if echo or text_on_start else None
+def start(lang: str = "en", samplerate: int = 16000, device: str | int | None = None, echo: bool = True, model_path: str | None = None):
+    """
+    Запускает офлайн-слушатель (Vosk). Ctrl+C для выхода.
+    """
+    stt = VoskSTT(model_path=model_path, samplerate=samplerate, device=device, lang=lang)
 
-    if text_on_start and tts:
-        tts.say(text_on_start)
+    tts = None
+    if echo:
+        try:
+            # Android TTS (если запускаемся внутри APK)
+            from adaos.platform.android.android_tts import AndroidTTS
 
-    def on_text(text: str):
-        typer.echo(f"[ASR] {text}")
-        if tts and echo:
-            tts.say(text)
+            tts = AndroidTTS(lang_hint="en-US" if lang.startswith("en") else "ru-RU")
+        except Exception:
+            # Десктоп/фоллбек
+            from adaos.agent.audio.tts.native_tts import NativeTTS
 
-    stt.listen(on_text=on_text)
+            tts = NativeTTS(lang_hint=lang)
+
+    typer.echo("[Vosk] Ready. Say something...")
+
+    try:
+        for phrase in stt.listen_stream():
+            typer.echo(f"[STT] {phrase}")
+            if tts:
+                try:
+                    tts.say(phrase)  # Говорим каждую итоговую фразу
+                except Exception as e:
+                    typer.echo(f"[TTS error] {e}")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stt.close()
