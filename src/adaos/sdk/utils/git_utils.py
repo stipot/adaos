@@ -91,7 +91,7 @@ def rollback_last_commit():
     print(f"[GIT] Откат на коммит {last_commit.hexsha[:7]}")
 
 
-def _ensure_repo() -> tuple[Repo, bool]:
+def _ensure_repo() -> Repo:
     os.makedirs(Path(SKILLS_DIR), exist_ok=True)
     git_dir = os.path.join(Path(SKILLS_DIR), ".git")
 

@@ -4,7 +4,7 @@ import urllib.request
 import shutil
 from pathlib import Path
 from adaos.agent.db.sqlite import init_db
-from adaos.sdk.utils.git_utils import init_git_repo
+from adaos.sdk.utils.git_utils import init_git_repo, _ensure_repo
 from adaos.sdk.context import BASE_DIR, DB_PATH
 
 MODELS_DIR = f"{BASE_DIR}/models"
