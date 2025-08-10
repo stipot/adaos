@@ -1,9 +1,10 @@
 from pathlib import Path
 from adaos.sdk.skills.i18n import _
 import os
-
-import os
 from pathlib import Path
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv())
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent  # adaos/
 
@@ -46,16 +47,12 @@ def get_base_dir() -> Path:
         return _android_base_dir()
 
     # 3) Десктоп по-умолчанию (~/.adaos)
-    print("getenv", os.getenv("ENV_TYPE"))
-    return PACKAGE_DIR if os.getenv("ENV_TYPE") == "dev" else Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
+    return f"{PACKAGE_DIR}/.adaos" if os.getenv("ENV_TYPE") == "dev" else Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
 
 
 # Экспортируем как раньше, чтобы не ломать импорты
 BASE_DIR = str(get_base_dir())
 
-
-BASE_DIR_OLD = f'{os.getenv("BASE_DIR", PACKAGE_DIR.parent.parent)}/.adaos'  # str(Path.home())
-print(f"BASE_DIR {BASE_DIR}, OLD_BASE_DIR: {BASE_DIR_OLD}")
 SKILLS_DIR = f"{BASE_DIR}/skills"
 TEMPLATES_DIR = str(PACKAGE_DIR / "skills_templates")
 MONOREPO_URL = os.getenv("SKILLS_REPO_URL", "https://github.com/stipot/adaoskills.git")
