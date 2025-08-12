@@ -20,15 +20,22 @@ def _read_catalog(repo: Repo) -> List[str]:
     Подтягивает и читает каталог навыков из монорепо (skills.yaml).
     Работает через sparse-checkout только этого файла.
     """
-    # включаем только каталог, чтобы почти ничего не тянуть
-    repo.git.sparse_checkout("set", CATALOG_FILENAME)
+    # гарантируем no-cone
+    try:
+        repo.git.sparse_checkout("init", "--no-cone")
+    except Exception:
+        pass
+
+    # добавить одиночный файл (в корне)
+    try:
+        repo.git.sparse_checkout("set", "--no-cone", "--skip-checks", CATALOG_FILENAME)
+    except Exception:
+        # на старых git может не быть --skip-checks — пробуем без него
+        repo.git.sparse_checkout("set", "--no-cone", CATALOG_FILENAME)
+
     repo.remotes.origin.pull()
 
     catalog_path = Path(SKILLS_DIR).parent / CATALOG_FILENAME  # SKILLS_DIR/<..>/skills.yaml
-    if not catalog_path.exists():
-        # fallback: попробуем в рабочем каталоге (на случай иной структуры)
-        catalog_path = Path(repo.working_tree_dir) / CATALOG_FILENAME
-
     if not catalog_path.exists():
         raise FileNotFoundError(f"Catalog file '{CATALOG_FILENAME}' not found in monorepo.")
 
@@ -73,8 +80,19 @@ def _sync_sparse_checkout(repo: Repo, installed=[]):
     repo.git.sparse_checkout("set", *installed)
 
 
+def _ensure_git_identity(repo: Repo):
+    try:
+        # проверим наличие; если нет — установим локально
+        repo.config_reader().get_value("user", "email")
+        repo.config_reader().get_value("user", "name")
+    except Exception:
+        repo.config_writer().set_value("user", "name", os.environ.get("GIT_AUTHOR_NAME", "AdaOS Bot")).release()
+        repo.config_writer().set_value("user", "email", os.environ.get("GIT_AUTHOR_EMAIL", "bot@example.com")).release()
+
+
 def create_skill(skill_name: str, template_name: str = "basic") -> str:
     repo = _ensure_repo()
+    _ensure_git_identity(repo)
     skill_subdir = _skill_subdir(skill_name)
     skill_path = os.path.join(Path(SKILLS_DIR), skill_subdir)
 
@@ -100,7 +118,11 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
     # Если есть изменения – коммитим
     if repo.is_dirty():
         repo.git.commit("-m", _("skill.commit_message", skill_name=skill_name, template_name=template_name))
-        repo.remotes.origin.push()
+        # в тестах пуш отключаем
+        if os.environ.get("ADAOS_TESTING") != "1":
+            repo.remotes.origin.push()
+        else:
+            print("[yellow]TEST MODE: skip push to remote[/yellow]")
     else:
         print(f"[yellow]{_('skill.no_changes')}[/yellow]")
 
@@ -118,12 +140,16 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
 
 def push_skill(skill_name, message: str = None) -> str:
     repo = _ensure_repo()
+    _ensure_git_identity(repo)
     _sync_sparse_checkout(repo)
     repo.git.add(skill_name)
 
     if repo.is_dirty():
         repo.git.commit("-m", message or _("skill.push_message"))
-        repo.remotes.origin.push()
+        if os.environ.get("ADAOS_TESTING") != "1":
+            repo.remotes.origin.push()
+        else:
+            print("[yellow]TEST MODE: skip push to remote[/yellow]")
         return f"[green]{_('skill.pushed',skill_name=current_skill_name)}[/green]"
     else:
         return f"[yellow]{_('skill.no_changes_push')}[/yellow]"

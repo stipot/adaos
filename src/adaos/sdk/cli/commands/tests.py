@@ -7,6 +7,7 @@ import typer
 
 from adaos.sdk.context import SKILLS_DIR
 from adaos.sdk.skill_service import install_all_skills
+from adaos.sdk.utils.git_utils import _ensure_repo
 
 app = typer.Typer(help="Run AdaOS test suites")
 
@@ -19,7 +20,28 @@ def _ensure_tmp_base_dir() -> Path:
     os.environ["ADAOS_BASE_DIR"] = str(p)
     os.environ.setdefault("HOME", str(p))
     os.environ.setdefault("USERPROFILE", str(p))
+    # git identity + флаг тестов
+    os.environ.setdefault("GIT_AUTHOR_NAME", "AdaOS Test Bot")
+    os.environ.setdefault("GIT_AUTHOR_EMAIL", "testbot@example.com")
+    os.environ.setdefault("GIT_COMMITTER_NAME", "AdaOS Test Bot")
+    os.environ.setdefault("GIT_COMMITTER_EMAIL", "testbot@example.com")
+    os.environ["ADAOS_TESTING"] = "1"
     return p
+
+
+def _ensure_skills_repo():
+    """
+    Гарантируем, что в SKILLS_DIR есть корректный git-репозиторий монорепо навыков,
+    как в рантайме. Пользуемся тем же _ensure_repo(), который вы уже используете в сервисе.
+    """
+    # _ensure_repo сам создаст/склонирует репозиторий по MONOREPO_URL в правильное место
+    repo = _ensure_repo()
+    # на всякий возьмём «cone» (быстро) если доступно; не критично, игнорируем ошибки
+    try:
+        repo.git.sparse_checkout("init", "--cone")
+    except Exception:
+        pass
+    return repo
 
 
 def _collect_test_dirs(root: Path) -> List[str]:
@@ -38,6 +60,7 @@ def run_tests(
     marker: Optional[str] = typer.Option(None, "--m", help="Pytest -m expression"),
     use_real_base: bool = typer.Option(False, help="Do NOT isolate ADAOS_BASE_DIR."),
     no_install: bool = typer.Option(False, help="Do not auto-install skills before running tests."),
+    no_clone: bool = typer.Option(False, help="Do not clone/init skills monorepo (expect it to exist)."),
     extra: Optional[List[str]] = typer.Argument(None),
 ):
     """
@@ -70,6 +93,14 @@ def run_tests(
 
     # --- Skill tests ---
     if not only_sdk:
+        # 1) гарантируем наличие монорепо навыков (как в рантайме)
+        if not no_clone:
+            try:
+                repo = _ensure_skills_repo()
+                typer.secho(f"[AdaOS] Skills monorepo ready at {repo.working_tree_dir}", fg=typer.colors.BLUE)
+            except Exception as e:
+                typer.secho(f"[AdaOS] Failed to prepare skills monorepo: {e}", fg=typer.colors.RED)
+                raise typer.Exit(code=1)
         # авто-установка навыков перед тестами, если не отключено
         if not no_install:
             try:
