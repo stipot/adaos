@@ -1,3 +1,4 @@
+# src\adaos\sdk\skill_service.py
 import os
 import shutil
 import yaml
@@ -9,6 +10,57 @@ from adaos.sdk.skills.i18n import _
 from adaos.sdk.context import SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
 from adaos.agent.db.sqlite import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
 from adaos.sdk.utils.git_utils import _ensure_repo
+from typing import List, Optional
+
+CATALOG_FILENAME = "skills.yaml"  # имя файла каталога в корне монорепо
+
+
+def _read_catalog(repo: Repo) -> List[str]:
+    """
+    Подтягивает и читает каталог навыков из монорепо (skills.yaml).
+    Работает через sparse-checkout только этого файла.
+    """
+    # включаем только каталог, чтобы почти ничего не тянуть
+    repo.git.sparse_checkout("set", CATALOG_FILENAME)
+    repo.remotes.origin.pull()
+
+    catalog_path = Path(SKILLS_DIR).parent / CATALOG_FILENAME  # SKILLS_DIR/<..>/skills.yaml
+    if not catalog_path.exists():
+        # fallback: попробуем в рабочем каталоге (на случай иной структуры)
+        catalog_path = Path(repo.working_tree_dir) / CATALOG_FILENAME
+
+    if not catalog_path.exists():
+        raise FileNotFoundError(f"Catalog file '{CATALOG_FILENAME}' not found in monorepo.")
+
+    with open(catalog_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    skills = data.get("skills") or []
+    if not isinstance(skills, list):
+        raise ValueError(f"'{CATALOG_FILENAME}' must contain list under key 'skills'")
+    return [str(s).strip() for s in skills if str(s).strip()]
+
+
+def install_all_skills(limit: Optional[int] = None) -> List[str]:
+    """
+    Устанавливает все навыки из каталога монорепо.
+    Возвращает список успешно установленных имён.
+    """
+    repo = _ensure_repo()
+    names = _read_catalog(repo)
+    if limit:
+        names = names[:limit]
+
+    installed = []
+    for name in names:
+        try:
+            pull_skill(name)  # это же ваше install_skill
+            installed.append(name)
+        except Exception as e:
+            print(f"[yellow]Skip installing {name}: {e}[/yellow]")
+
+    # после массовой установки — собрать sparse под установленные
+    _sync_sparse_checkout(repo)
+    return installed
 
 
 def _skill_subdir(skill_name: str) -> str:

@@ -39,6 +39,7 @@ def _android_base_dir() -> Path:
 def get_base_dir() -> Path:
     # 1) Явная переменная окружения имеет приоритет
     override = os.getenv("ADAOS_BASE_DIR")
+    print(f"PACKAGE_DIR: {PACKAGE_DIR.parent.parent}, override {override}, ENV_TYPE: {os.getenv('ENV_TYPE')}")
     if override:
         return Path(override).expanduser().resolve()
 
@@ -47,7 +48,7 @@ def get_base_dir() -> Path:
         return _android_base_dir()
 
     # 3) Десктоп по-умолчанию (~/.adaos)
-    return f"{PACKAGE_DIR}/.adaos" if os.getenv("ENV_TYPE") == "dev" else Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
+    return f"{PACKAGE_DIR.parent.parent}/.adaos" if os.getenv("ENV_TYPE") == "dev" else Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
 
 
 # Экспортируем как раньше, чтобы не ломать импорты

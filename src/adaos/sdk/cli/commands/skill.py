@@ -1,4 +1,4 @@
-import os
+# src\adaos\sdk\cli\commands\skill.py
 import typer
 from rich import print
 import importlib.util
@@ -20,6 +20,7 @@ from adaos.sdk.skill_service import (
     install_skill,
     uninstall_skill,
     install_skill_dependencies,
+    install_all_skills,
 )
 
 app = typer.Typer(help=_("cli.help"))
@@ -112,8 +113,25 @@ def rollback_skill():
 
 
 @app.command("install")
-def install_command(skill_name: str):
-    """Установить навык из monorepo"""
+def install_command(
+    skill_name: str = typer.Argument(None),
+    all: bool = typer.Option(False, "--all", help=_("skill.install_all.help")),  # «Установить все навыки из монорепо»
+    limit: int = typer.Option(None, "--limit", help=_("skill.install_all.limit.help")),  # «Ограничить количество для --all»
+):
+    """Установить навык из monorepo или все навыки (--all)"""
+    if all:
+        installed = install_all_skills(limit=limit)
+        if installed:
+            print(f"[green]{_('skill.installed_many')}[/green] " + ", ".join(installed))
+            raise typer.Exit(0)
+        else:
+            print(f"[yellow]{_('skill.install_all.empty')}[/yellow]")
+            raise typer.Exit(1)
+
+    if not skill_name:
+        print(f"[red]{_('skill.install.missing_name')}[/red]")
+        raise typer.Exit(2)
+
     typer.echo(install_skill(skill_name))
 
 
