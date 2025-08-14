@@ -34,13 +34,19 @@ jobs:
       ADAOS_TESTING: "1"
 
     steps:
-      - name: Force UTF-8 console
+      - name: Force UTF-8 on Windows
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           chcp.com 65001 > $null
           [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
           $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
           $env:PYTHONUTF8=1
+      - name: Force UTF-8 on Linux
+        if: runner.os == 'Linux'
+        run: |
+          export PYTHONUTF8=1
+          export PYTHONIOENCODING=utf-8
       - name: Checkout
         uses: actions/checkout@v4
         with:

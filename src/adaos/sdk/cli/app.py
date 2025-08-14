@@ -17,10 +17,10 @@ app = typer.Typer(help=_("cli.help"))
 
 def ensure_environment(ctx: typer.Context):
     """Проверяем, инициализировано ли окружение"""
-    if ctx.invoked_subcommand == "reset":
-        return  # пропускаем auto-setup для reset
     if os.getenv("ADAOS_TESTING") == "1":
         return  # В CI/юнит‑тестах окружение не готовим и ничего не скачиваем
+    if ctx.invoked_subcommand == "reset":
+        return  # пропускаем auto-setup для reset
     if not Path(BASE_DIR).exists():
         typer.echo(_("cli.no_env_creating"))
         prepare_environment()
