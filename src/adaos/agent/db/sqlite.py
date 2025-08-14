@@ -1,16 +1,12 @@
+# src\adaos\agent\db\sqlite.py
 import sqlite3
 import os
 from pathlib import Path
 from datetime import datetime
 from adaos.sdk.context import DB_PATH, SKILLS_DIR
 
-
-def init_db():
-    Path(SKILLS_DIR).mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
+_SCHEMA_SQL = (
+    """
     CREATE TABLE IF NOT EXISTS skills (
         id INTEGER PRIMARY KEY,
         name TEXT UNIQUE,
@@ -18,11 +14,9 @@ def init_db():
         repo_url TEXT,
         installed BOOLEAN DEFAULT 1,
         last_updated TIMESTAMP
-    )
+    );
+    """,
     """
-    )
-    cursor.execute(
-        """
     CREATE TABLE IF NOT EXISTS skill_versions (
         id INTEGER PRIMARY KEY,
         skill_name TEXT,
@@ -30,15 +24,47 @@ def init_db():
         path TEXT,
         status TEXT,
         created_at TIMESTAMP
-    )
-    """
-    )
+    );
+    """,
+)
+
+
+def _ensure_dirs():
+    Path(SKILLS_DIR).mkdir(parents=True, exist_ok=True)
+    db_parent = Path(DB_PATH).parent
+    db_parent.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_schema(conn: sqlite3.Connection):
+    cur = conn.cursor()
+    for sql in _SCHEMA_SQL:
+        cur.execute(sql)
+    conn.commit()
+
+
+def _connect() -> sqlite3.Connection:
+    """Единая точка подключения: гарантирует каталоги и схему БД."""
+    _ensure_dirs()
+    conn = _connect()
+    # включим foreign_keys на будущее (безопасно, даже если пока не используем)
+    try:
+        conn.execute("PRAGMA foreign_keys = ON;")
+    except Exception:
+        pass
+    _ensure_schema(conn)
+    return conn
+
+
+def init_db():
+    _ensure_dirs()
+    conn = _connect()
+    cursor = conn.cursor()
     # Сканируем папку skills
-    if os.path.exists(Path(SKILLS_DIR)):
-        for skill_name in os.listdir(Path(SKILLS_DIR)):
+    if os.path.exists(SKILLS_DIR):
+        for skill_name in os.listdir(SKILLS_DIR):
             if skill_name == ".git":
                 continue
-            skill_path = os.path.join(Path(SKILLS_DIR), skill_name)
+            skill_path = os.path.join(SKILLS_DIR, skill_name)
             if os.path.isdir(skill_path):
                 # Проверяем, есть ли навык в базе
                 cursor.execute("SELECT id FROM skills WHERE name = ?", (skill_name,))
@@ -53,24 +79,15 @@ def init_db():
 
 def set_installed_flag(name: str, installed: int):
     """Устанавливает или сбрасывает флаг installed для навыка"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     cursor.execute("UPDATE skills SET installed=? WHERE name=?", (installed, name))
     conn.commit()
     conn.close()
 
 
-def list_skills():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, active_version FROM skills")
-    rows = cursor.fetchall()
-    conn.close()
-    return [{"name": r[0], "active_version": r[1]} for r in rows]
-
-
 def get_skill_versions(skill_name: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     cursor.execute("SELECT version, status FROM skill_versions WHERE skill_name = ?", (skill_name,))
     rows = cursor.fetchall()
@@ -79,7 +96,7 @@ def get_skill_versions(skill_name: str):
 
 
 def list_versions(skill_name: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     cursor.execute("SELECT active_version FROM skills WHERE name = ?", (skill_name,))
     row = cursor.fetchone()
@@ -89,7 +106,7 @@ def list_versions(skill_name: str):
 
 
 def add_skill_version(skill_name: str, version: str, path: str, status: str = "active"):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     now = datetime.now().isoformat()
 
@@ -117,7 +134,7 @@ def add_skill_version(skill_name: str, version: str, path: str, status: str = "a
 
 
 def add_or_update_skill(name: str, version: str, repo_url: str, installed: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -133,7 +150,7 @@ def add_or_update_skill(name: str, version: str, repo_url: str, installed: int):
 
 
 def update_skill_version(name: str, version: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     cursor.execute("UPDATE skills SET active_version = ? WHERE name = ?", (version, name))
     conn.commit()
@@ -141,7 +158,7 @@ def update_skill_version(name: str, version: str):
 
 
 def get_skill(name: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     cursor.execute("SELECT name, active_version, repo_url FROM skills WHERE name = ?", (name,))
     row = cursor.fetchone()
@@ -150,7 +167,7 @@ def get_skill(name: str):
 
 
 def list_skills():
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.cursor()
     cursor.execute("SELECT name, active_version, repo_url, installed FROM skills")
     rows = cursor.fetchall()
