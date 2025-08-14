@@ -22,6 +22,7 @@ jobs:
 
     env:
       # публичный URL можно оставить по умолчанию; если монорепо приватный — задайте секрет
+      PYTHONIOENCODING: utf-8
       MONOREPO_URL: ${{ secrets.ADAOS_MONOREPO_URL || 'https://github.com/stipot/adaoskills.git' }}
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       # чтобы наши коммиты/тесты не падали из‑за отсутствия git identity
@@ -33,6 +34,13 @@ jobs:
       ADAOS_TESTING: "1"
 
     steps:
+      - name: Force UTF-8 console
+        shell: pwsh
+        run: |
+          chcp.com 65001 > $null
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+          $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+          $env:PYTHONUTF8=1
       - name: Checkout
         uses: actions/checkout@v4
         with:
