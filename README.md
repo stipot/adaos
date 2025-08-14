@@ -1,5 +1,7 @@
 # AdaOS
 
+![AdaOS CI](https://github.com/stipot/adaos/actions/workflows/ci.yml/badge.svg)
+
 ## Установка
 
 ```bash

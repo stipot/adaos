@@ -1,0 +1,71 @@
+name: AdaOS CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.11", "3.12"]
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      # публичный URL можно оставить по умолчанию; если монорепо приватный — задайте секрет
+      MONOREPO_URL: ${{ secrets.ADAOS_MONOREPO_URL || 'https://github.com/stipot/adaoskills.git' }}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      # чтобы наши коммиты/тесты не падали из‑за отсутствия git identity
+      GIT_AUTHOR_NAME: "AdaOS CI Bot"
+      GIT_AUTHOR_EMAIL: "ci-bot@example.com"
+      GIT_COMMITTER_NAME: "AdaOS CI Bot"
+      GIT_COMMITTER_EMAIL: "ci-bot@example.com"
+      # ускоряем тесты, если в коде учтено (необязательно)
+      ADAOS_TESTING: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: "pip"
+
+      - name: Install project (editable) + dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -e .[dev]
+
+      # --- быстрый прогон SDK-тестов (не трогаем навыки) ---
+      - name: Run SDK tests (only)
+        run: |
+          adaos tests run --only-sdk -- --junitxml=reports/sdk-junit.xml -q
+        continue-on-error: false
+
+      # --- навыковые тесты (авто-клон и авто-установка) ---
+      - name: Run skills tests
+        run: |
+          adaos tests run -- -q --junitxml=reports/skills-junit.xml
+        # Если навыков пока нет/они нестабильны — временно можно поставить continue-on-error: true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.os }}-py${{ matrix.python }}
+          path: |
+            reports/*.xml
