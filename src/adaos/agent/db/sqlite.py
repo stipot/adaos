@@ -45,7 +45,7 @@ def _ensure_schema(conn: sqlite3.Connection):
 def _connect() -> sqlite3.Connection:
     """Единая точка подключения: гарантирует каталоги и схему БД."""
     _ensure_dirs()
-    conn = _connect()
+    conn = sqlite3.connect(DB_PATH)
     # включим foreign_keys на будущее (безопасно, даже если пока не используем)
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
