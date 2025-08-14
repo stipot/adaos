@@ -85,9 +85,14 @@ def request_skill(user_request: str):
 
 
 @app.command("list")
-def list_installed_skills_cmd():
+def list_installed_skills_cmd(json_output: bool = typer.Option(False, "--json", help="Вывод в JSON")):
     """Список установленных навыков"""
     skills = [s for s in list_skills() if s.get("installed", 1)]
+    if json_output:
+        payload = {"skills": [{"name": s["name"], "version": s.get("active_version") or "unknown"} for s in skills]}
+        print(json.dumps(payload, ensure_ascii=False))
+        return
+
     if not skills:
         print(f"[yellow]{_('skill.list.empty')}[/yellow]")
         return
