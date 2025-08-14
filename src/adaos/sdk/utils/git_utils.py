@@ -3,7 +3,6 @@ from pathlib import Path
 from git import Repo
 from dotenv import load_dotenv, find_dotenv
 from adaos.sdk.context import SKILLS_DIR, MONOREPO_URL
-from adaos.sdk.i18n import _
 
 GIT_USER = os.getenv("GIT_USER", "adaos")
 GIT_EMAIL = os.getenv("GIT_EMAIL", "adaos@local")
@@ -14,7 +13,7 @@ def clone_git_repo() -> Repo:
     git_dir = os.path.join(Path(SKILLS_DIR), ".git")
 
     if not os.path.exists(git_dir):
-        print(f"[cyan]{_('repo.clone')} {MONOREPO_URL}[/cyan]")
+        print(f"[cyan]The repo is cloned: {MONOREPO_URL}[/cyan]")
         repo = Repo.clone_from(MONOREPO_URL, SKILLS_DIR)
         repo.git.config("index.version", "2")
         repo.git.sparse_checkout("init", "--cone")
@@ -28,7 +27,7 @@ def clone_git_repo() -> Repo:
         current_index_ver = "3"
 
     if current_index_ver != "2":
-        print(f"[yellow]{_('repo.rebuild_index')}[/yellow]")
+        print(f"[yellow]The repo index has been rebuilt[/yellow]")
         repo.git.config("index.version", "2")
         if repo.head.is_valid():
             repo.git.reset("--mixed")
