@@ -1,0 +1,217 @@
+# src\adaos\sdk\skill_service.py
+import os
+import shutil
+import yaml
+from pathlib import Path
+from git import Repo
+import subprocess
+import importlib.util
+from adaos.sdk.skills.i18n import _
+from adaos.sdk.context import SKILLS_DIR, TEMPLATES_DIR, MONOREPO_URL, get_current_skill_path, set_current_skill, current_skill_name, current_skill_path
+from adaos.agent.db.sqlite import add_or_update_skill, update_skill_version, list_skills, set_installed_flag
+from adaos.sdk.utils.git_utils import _ensure_repo
+from typing import List, Optional
+
+CATALOG_FILENAME = "skills.yaml"  # имя файла каталога в корне монорепо
+
+
+def _read_catalog(repo: Repo) -> List[str]:
+    """
+    Подтягивает и читает каталог навыков из монорепо (skills.yaml).
+    Работает через sparse-checkout только этого файла.
+    """
+    # гарантируем no-cone
+    try:
+        repo.git.sparse_checkout("init", "--no-cone")
+    except Exception:
+        pass
+
+    # добавить одиночный файл (в корне)
+    try:
+        repo.git.sparse_checkout("set", "--no-cone", "--skip-checks", CATALOG_FILENAME)
+    except Exception:
+        # на старых git может не быть --skip-checks — пробуем без него
+        repo.git.sparse_checkout("set", "--no-cone", CATALOG_FILENAME)
+
+    repo.remotes.origin.pull()
+
+    catalog_path = Path(SKILLS_DIR).parent / CATALOG_FILENAME  # SKILLS_DIR/<..>/skills.yaml
+    if not catalog_path.exists():
+        raise FileNotFoundError(f"Catalog file '{CATALOG_FILENAME}' not found in monorepo.")
+
+    with open(catalog_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    skills = data.get("skills") or []
+    if not isinstance(skills, list):
+        raise ValueError(f"'{CATALOG_FILENAME}' must contain list under key 'skills'")
+    return [str(s).strip() for s in skills if str(s).strip()]
+
+
+def install_all_skills(limit: Optional[int] = None) -> List[str]:
+    """
+    Устанавливает все навыки из каталога монорепо.
+    Возвращает список успешно установленных имён.
+    """
+    repo = _ensure_repo()
+    names = _read_catalog(repo)
+    if limit:
+        names = names[:limit]
+
+    installed = []
+    for name in names:
+        try:
+            pull_skill(name)  # это же ваше install_skill
+            installed.append(name)
+        except Exception as e:
+            print(f"[yellow]Skip installing {name}: {e}[/yellow]")
+
+    # после массовой установки — собрать sparse под установленные
+    _sync_sparse_checkout(repo)
+    return installed
+
+
+def _skill_subdir(skill_name: str) -> str:
+    return skill_name
+
+
+def _sync_sparse_checkout(repo: Repo, installed=[]):
+    """Пересобираем sparse-checkout из всех установленных навыков"""
+    installed = [s["name"] for s in list_skills() if s.get("installed", 1)] + installed
+    repo.git.sparse_checkout("set", *installed)
+
+
+def _ensure_git_identity(repo: Repo):
+    try:
+        # проверим наличие; если нет — установим локально
+        repo.config_reader().get_value("user", "email")
+        repo.config_reader().get_value("user", "name")
+    except Exception:
+        repo.config_writer().set_value("user", "name", os.environ.get("GIT_AUTHOR_NAME", "AdaOS Bot")).release()
+        repo.config_writer().set_value("user", "email", os.environ.get("GIT_AUTHOR_EMAIL", "bot@example.com")).release()
+
+
+def create_skill(skill_name: str, template_name: str = "basic") -> str:
+    repo = _ensure_repo()
+    _ensure_git_identity(repo)
+    skill_subdir = _skill_subdir(skill_name)
+    skill_path = os.path.join(Path(SKILLS_DIR), skill_subdir)
+
+    # Проверяем, не существует ли уже папка с таким навыком
+    if os.path.exists(skill_path):
+        return f"[red]{_('skill.exists', skill_name=skill_name)}[/red]"
+
+    # Проверяем, существует ли шаблон
+    template_path = os.path.join(Path(TEMPLATES_DIR), template_name)
+    if not os.path.exists(template_path):
+        return f"[red]{_('template.not_found', template_name=template_name)}[/red]"
+
+    # Копируем шаблон в папку навыка
+    print(f"[cyan]{_('skill.create', skill_name=skill_name, template_name=template_name)}[/cyan]")
+    shutil.copytree(template_path, skill_path)
+
+    # ВАЖНО: добавляем новый навык в sparse-checkout
+    repo.git.sparse_checkout("add", skill_subdir)
+
+    # Добавляем файлы в индекс
+    repo.git.add(skill_subdir)
+
+    # Если есть изменения – коммитим
+    if repo.is_dirty():
+        repo.git.commit("-m", _("skill.commit_message", skill_name=skill_name, template_name=template_name))
+        # в тестах пуш отключаем
+        if os.environ.get("ADAOS_TESTING") != "1":
+            repo.remotes.origin.push()
+        else:
+            print("[yellow]TEST MODE: skip push to remote[/yellow]")
+    else:
+        print(f"[yellow]{_('skill.no_changes')}[/yellow]")
+
+    # Обновляем БД версией из skill.yaml
+    yaml_path = os.path.join(skill_path, "skill.yaml")
+    version = "1.0"
+    if os.path.exists(yaml_path):
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            version = yaml.safe_load(f).get("version", "1.0")
+
+    add_or_update_skill(skill_name, version, MONOREPO_URL, installed=1)
+    set_current_skill(skill_name)
+    return f"[green]{_('skill.created', skill_name=skill_name)}[/green]"
+
+
+def push_skill(skill_name, message: str = None) -> str:
+    repo = _ensure_repo()
+    _ensure_git_identity(repo)
+    _sync_sparse_checkout(repo)
+    repo.git.add(skill_name)
+
+    if repo.is_dirty():
+        repo.git.commit("-m", message or _("skill.push_message"))
+        if os.environ.get("ADAOS_TESTING") != "1":
+            repo.remotes.origin.push()
+        else:
+            print("[yellow]TEST MODE: skip push to remote[/yellow]")
+        return f"[green]{_('skill.pushed',skill_name=current_skill_name)}[/green]"
+    else:
+        return f"[yellow]{_('skill.no_changes_push')}[/yellow]"
+
+
+def pull_skill(skill_name: str) -> str:
+    repo = _ensure_repo()
+    set_installed_flag(skill_name, installed=1)
+    _sync_sparse_checkout(repo, installed=[skill_name])
+    repo.remotes.origin.pull()
+
+    yaml_path = os.path.join(Path(SKILLS_DIR), skill_name, "skill.yaml")
+    version = "unknown"
+    if os.path.exists(yaml_path):
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            version = yaml.safe_load(f).get("version", "unknown")
+
+    add_or_update_skill(skill_name, version, MONOREPO_URL, installed=1)
+    set_current_skill(skill_name)
+    return f"[green]{_('skill.pulled', skill_name=skill_name, version=version)}[/green]"
+
+
+def update_skill() -> str:
+    repo = _ensure_repo()
+    _sync_sparse_checkout(repo)
+    repo.remotes.origin.pull()
+
+    yaml_path = os.path.join(Path(SKILLS_DIR), current_skill_name, "skill.yaml")
+    version = "unknown"
+    if os.path.exists(yaml_path):
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            version = yaml.safe_load(f).get("version", "unknown")
+
+    update_skill_version(current_skill_name, version)
+    return f"[green]{_('skill.updated', skill_name=current_skill_name, version=version)}[/green]"
+
+
+def install_skill(skill_name: str) -> str:
+    """Устанавливает навык из monorepo (фактически pull + флаг installed=1)"""
+    return pull_skill(skill_name)
+
+
+def uninstall_skill(skill_name: str) -> str:
+    """Удаляет навык у пользователя (ставим installed=0 и пересобираем sparse-checkout)"""
+    repo = _ensure_repo()
+    set_installed_flag(skill_name, installed=0)
+    _sync_sparse_checkout(repo)
+    return f"[green]{_('skill.uninstalled', skill_name=skill_name)}[/green]"
+
+
+def install_skill_dependencies(skill_path: Path):
+    """Устанавливает зависимости из get_dependencies() в handler.py"""
+    print(type(current_skill_path), current_skill_path)
+    handler_file = current_skill_path / "handlers" / "main.py"
+    if not handler_file.exists():
+        return
+
+    spec = importlib.util.spec_from_file_location("handler", handler_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    if hasattr(module, "get_dependencies"):
+        deps = module.get_dependencies()
+        for dep in deps:
+            subprocess.run(["pip", "install", dep], check=True)

@@ -1,0 +1,16 @@
+name: AlarmSkill
+version: 0.1.0
+description: Простой голосовой будильник
+entrypoint: handlers/main.py
+intents:
+  - set.intent
+  - cancel.intent
+permissions:
+  - time.access
+  - audio.speak
+  - alarm.set
+  - alarm.cancel
+  - audio.playback
+triggers:
+  - voice: "поставь будильник на *"
+  - voice: "отмени будильник"

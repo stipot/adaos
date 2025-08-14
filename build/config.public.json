@@ -1,0 +1,5 @@
+{
+	"profile": "public",
+	"include": [],
+	"exclude": ["adaos.orchestrator", "adaos.pmhub", "adaos.store"]
+}

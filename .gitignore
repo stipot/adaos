@@ -1,1 +1,9 @@
 Sandbox/voskapi/vosk-model-small-ru-0.22/
+.env
+__pycache__/
+commands/__pycache__/
+.adaos/
+adaos.egg-info/
+src/adaos/orchestrator/
+src/adaos/devportal/
+src/adaos/store/

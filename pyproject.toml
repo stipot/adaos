@@ -1,0 +1,73 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=65.0", "wheel"]
+
+[project]
+description = "AdaOS - платформа для навыков и голосового управления"
+license = {text = "MIT"}
+name = "adaos"
+readme = "README.md"
+requires-python = ">=3.10"
+version = "0.1.0"
+
+authors = [
+  {name = "AdaOS Team"},
+]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.10",
+]
+
+dependencies = [
+  "typer>=0.16.0",
+  "rich>=13.7.1",
+  "openai>=1.43.0",
+  "litellm>=0.1.14",
+  "GitPython>=3.1.43",
+  "SQLAlchemy>=2.0.32",
+  "sqlite-utils>=3.36",
+  "PyYAML>=6.0.2",
+  "pytest>=8.3.2",
+  "watchdog>=4.0.1",
+  "vosk>=0.3.45",
+  "sounddevice>=0.4.7",
+  "requests>=2.31.0",
+  "pyttsx3",
+  "ovos_plugin_manager", # TODO move to optional-dependencies = {  }
+  "ovos_config",
+]
+
+[project.scripts]
+adaos = "adaos.sdk.cli.app:app"
+
+[project.urls]
+Homepage = "https://github.com/stipot/adaos"
+
+[tool.setuptools]
+include-package-data = true
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+# EXTRA_MODULES_START
+# EXTRA_MODULES_END
+where = ["src"]
+[tool.setuptools.package-data]
+adaos = [
+  "skills_templates/**/*.yaml",
+  "skills_templates/**/*.py",
+]
+[project.optional-dependencies]
+dev = ["pytest>=8", "responses>=0.25", "pytest-cov>=5"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+markers = [
+  "integration: integration tests",
+  "e2e: end-to-end tests",
+]
+testpaths = [
+  "tests", # для SDK/API тестов
+  "src/adaos/skills/**/tests", # для внутренних тестов навыков
+]

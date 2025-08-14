@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  adaos:
+    build: .
+    container_name: adaos
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./runtime:/app/runtime
+      - ./skills_repo:/app/skills_repo
+      - ./skill_db.sqlite:/app/skill_db.sqlite
+    command: ["python", "cli.py"]
+    depends_on:
+      - sqlite
+
+  sqlite:
+    image: nouchka/sqlite3:latest
+    container_name: adaos_sqlite
+    volumes:
+      - ./skill_db.sqlite:/data/skill_db.sqlite
+    entrypoint: ["tail", "-f", "/dev/null"]
+
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: adaos_mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    env_file:
+      - .env
+    volumes:
+      - ./config/mosquitto:/mosquitto/config
+      - ./data/mosquitto:/mosquitto/data
+      - ./log/mosquitto:/mosquitto/log
