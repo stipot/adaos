@@ -4,11 +4,19 @@ import queue
 from pathlib import Path
 from typing import Generator, Optional
 import typer
-
 from adaos.sdk.context import ADAOS_VOSK_MODEL
-
-import sounddevice as sd
 import vosk
+
+sd = None
+_sd_error = None
+try:
+    import sounddevice as sd  # требует PortAudio
+except OSError as e:
+    _sd_error = e
+    sd = None
+except Exception as e:
+    _sd_error = e
+    sd = None
 
 
 class VoskSTT:
@@ -24,7 +32,12 @@ class VoskSTT:
 
         if not Path(model_dir).exists():
             raise RuntimeError(f"Vosk model not found: {model_dir}")
-
+        if sd is None:
+            raise RuntimeError(
+                "Audio backend (sounddevice/PortAudio) is unavailable. "
+                f"Original error: {_sd_error}. "
+                "Install system libportaudio (and dev headers) or run without native audio."
+            )
         self.model = vosk.Model(str(model_dir))
         self.samplerate = samplerate
         self.rec = vosk.KaldiRecognizer(self.model, self.samplerate)

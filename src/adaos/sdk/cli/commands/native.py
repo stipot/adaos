@@ -3,10 +3,10 @@ import typer
 from typing import Optional
 from pathlib import Path
 
-from adaos.agent.audio.tts.native_tts import NativeTTS
+VoskSTT = None  # ленивый импорт
 from adaos.agent.audio.stt.vosk_stt import VoskSTT
 
-app = typer.Typer(help="Нативные офлайн-команды (TTS/STT)")
+app = typer.Typer(help="Native (audio) commands")
 
 
 @app.command("say")
@@ -37,6 +37,9 @@ def start(
     """
     Запускает офлайн-слушатель (Vosk). Ctrl+C для выхода.
     """
+    global VoskSTT
+    if VoskSTT is None:
+        from adaos.agent.audio.stt.vosk_stt import VoskSTT
     stt = VoskSTT(model_path=model_path, samplerate=samplerate, device=device, lang=lang)
 
     tts = None
