@@ -18,7 +18,7 @@ def clone_git_repo() -> Repo:
         repo = Repo.clone_from(MONOREPO_URL, SKILLS_DIR)
         repo.git.config("index.version", "2")
         repo.git.sparse_checkout("init", "--cone")
-        return repo, True
+        return repo
 
     repo = Repo(Path(SKILLS_DIR))
 
