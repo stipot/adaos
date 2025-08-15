@@ -4,8 +4,9 @@ import queue
 from pathlib import Path
 from typing import Generator, Optional
 import typer
-from adaos.sdk.context import ADAOS_VOSK_MODEL
+from typing import Generator, Optional, Iterable
 import vosk
+from adaos.sdk.context import ADAOS_VOSK_MODEL
 
 sd = None
 _sd_error = None
@@ -20,7 +21,9 @@ except Exception as e:
 
 
 class VoskSTT:
-    def __init__(self, model_path: str = typer.Option(None), samplerate: int = 16000, device: Optional[int | str] = None, lang: str = "en"):
+    def __init__(
+        self, model_path: Optional[str] = None, samplerate: int = 16000, device: Optional[int | str] = None, lang: str = "en", external_stream: Optional[Iterable[bytes]] = None
+    ):
         # Инициализация модели
         if model_path:
             model_dir = Path(model_path)
@@ -42,13 +45,24 @@ class VoskSTT:
         self.samplerate = samplerate
         self.rec = vosk.KaldiRecognizer(self.model, self.samplerate)
         self.rec.SetWords(True)
+        self._external_stream = external_stream
+        self._q = None
+        self.stream = None
+        if external_stream is None:
+            import queue, sounddevice as sd
 
-        # Очередь аудио-чанков из callback’а
-        self._q: queue.Queue[bytes] = queue.Queue()
+            self._q = queue.Queue()
+            self.stream = sd.RawInputStream(samplerate=self.samplerate, blocksize=8000, dtype="int16", channels=1, callback=self._on_audio, device=device)
+            self.stream.start()
+        else:
+            # Очередь аудио-чанков из callback’а
+            self._q: queue.Queue[bytes] = queue.Queue()
 
-        # Аудио-поток
-        self.stream = sd.RawInputStream(samplerate=self.samplerate, blocksize=8000, dtype="int16", channels=1, callback=self._on_audio, device=device)  # ≈0.5s при 16кГц int16 mono
-        self.stream.start()
+            # Аудио-поток
+            self.stream = sd.RawInputStream(
+                samplerate=self.samplerate, blocksize=8000, dtype="int16", channels=1, callback=self._on_audio, device=device
+            )  # ≈0.5s при 16кГц int16 mono
+            self.stream.start()
 
     def _on_audio(self, indata, frames, time_info, status):
         if status:
@@ -58,6 +72,16 @@ class VoskSTT:
 
     def listen_stream(self) -> Generator[str, None, None]:
         """Бесконечный генератор итоговых фраз (final results)."""
+        if self._external_stream is not None:
+            for chunk in self._external_stream:
+                if self.rec.AcceptWaveform(chunk):
+                    res = json.loads(self.rec.Result())
+                    text = (res.get("text") or "").strip()
+                    if text:
+                        yield text
+            return
+
+        # штатный режим через sounddevice очередь
         while True:
             data = self._q.get()
             if self.rec.AcceptWaveform(data):
@@ -65,10 +89,6 @@ class VoskSTT:
                 text = (res.get("text") or "").strip()
                 if text:
                     yield text
-            else:
-                # partial = json.loads(self.rec.PartialResult()).get("partial", "")
-                # при желании можно отдавать partial через другой канал
-                pass
 
     def close(self):
         try:
