@@ -4,6 +4,7 @@
 * [x] Реализован CLI с управлением навыками (`create`, `list`, `install`, `uninstall`, `push`, `update`).
 * [x] Настроен `sparse-checkout` и хранение навыков в SQLite с флагом `installed`.
 * [x] Подготовлены шаблоны навыков (`skills_templates`) и система локализации.
+* [x] Каркас тестирования
 
 ---
 
