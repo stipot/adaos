@@ -97,3 +97,4 @@ echo "Токен:               $ADAOS_TOKEN"
 echo
 echo "Проверка:"
 echo "  curl -H 'X-AdaOS-Token: $ADAOS_TOKEN' -X POST http://127.0.0.1:$GW_PORT/api/say -d '{\"text\":\"Hello from AdaOS!\"}'"
+# TODO “socket activation” на Linux вместо sentinel
