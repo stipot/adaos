@@ -3,6 +3,8 @@ import typer, sys, os
 from typing import Optional
 from pathlib import Path
 
+from adaos.agent.audio.tts.native_tts import NativeTTS
+
 VoskSTT = None  # ленивый импорт
 from adaos.agent.audio.stt.vosk_stt import VoskSTT
 

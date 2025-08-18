@@ -51,6 +51,7 @@ class OVOSTTSAdapter:
             self._tts.init(voice, tts_cfg)
 
     def say(self, text: str) -> None:
+        print("its OVOSTTSAdapter")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             wav_path = tmp.name
 

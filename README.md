@@ -11,14 +11,70 @@ adaos --help
 adaos skill list
 ```
 
-## Использование
+# Использование
 
-# **CLI AdaOS**
+## AdaOS API
+
+AdaOS CLI дополнен встроенным HTTP API (по умолчанию на `http://127.0.0.1:8777`).  
+Аутентификация — через заголовок `X-AdaOS-Token`. Токен задаётся переменной окружения `ADAOS_API_TOKEN` (по умолчанию: `dev-local-token`).
+
+### POST `/api/say`
+
+Озвучивание текста через выбранный TTS-бэкенд (native / OVOS / Rhasspy).
+
+**Запрос:**
+
+```json
+{
+  "text": "Hello from AdaOS",
+  "provider": "auto",     // необязательный параметр ("auto"|"ovos"|"rhasspy")
+  "voice": "default"      // необязательный параметр (в зависимости от бэкенда)
+}
+````
+
+**Ответ:**
+
+```json
+{
+  "status": "ok",
+  "provider": "ovos",
+  "text": "Hello from AdaOS"
+}
+```
+
+### Примеры использования
+
+#### Linux / macOS
+
+```bash
+curl -X POST http://127.0.0.1:8777/api/say \
+  -H "X-AdaOS-Token: dev-local-token" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello from AdaOS"}'
+```
+
+#### Windows PowerShell
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8777/api/say `
+  -Headers @{ "X-AdaOS-Token" = "dev-local-token" } `
+  -ContentType "application/json" `
+  -Body (@{ text = "Hello from AdaOS" } | ConvertTo-Json)
+```
+
+---
+
+### Статус / расширение API
+
+* [x] `/api/say` — озвучивание текста
+* [ ] `/api/listen` — захват аудио и STT (планируется)
+* [ ] `/api/skills` — управление навыками
+* [ ] `/api/runtime` — управление окружением
+
+## **CLI AdaOS**
 
 AdaOS CLI позволяет управлять навыками, тестами и Runtime через удобный интерфейс командной строки.
 Все команды поддерживают локализацию (`ru`/`en`).
-
----
 
 ## **Общая структура**
 
