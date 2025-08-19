@@ -5,6 +5,8 @@ import importlib.util
 from pathlib import Path
 from git import Repo
 import yaml, json
+import asyncio
+import importlib.util
 from adaos.sdk.llm.llm_client import generate_test_yaml, generate_skill
 from adaos.agent.core.test_runner import TestRunner
 from adaos.sdk.llm.process_llm_output import process_llm_output
@@ -24,9 +26,9 @@ from adaos.sdk.skill_service import (
 )
 from adaos.sdk.bus import emit
 from adaos.agent.core.event_bus import BUS
-import asyncio
-import importlib.util
+from dataclasses import asdict
 from adaos.sdk.decorators import register_subscriptions
+from adaos.sdk.skill_validator import validate_skill
 
 app = typer.Typer(help=_("cli.help"))
 
@@ -232,3 +234,28 @@ def run_skill(
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         module.handle(intent, json.loads(entities), get_current_skill().path)
+
+
+@app.command("validate")
+def validate_command(
+    skill_name: str = typer.Argument(None),
+    strict: bool = typer.Option(False, "--strict", help="install-mode: warnings treated as errors"),
+    json_output: bool = typer.Option(False, "--json", help="JSON отчёт"),
+    probe_tools: bool = typer.Option(False, "--probe-tools", help="Пробный вызов инструментов (опасно)"),
+):
+    report = validate_skill(skill_name, install_mode=strict, probe_tools=json_output)
+    if json_output:
+        payload = {
+            "ok": report.ok,
+            "issues": [asdict(i) for i in report.issues],
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+    else:
+        if not report.issues:
+            print("[green]OK[/green]")
+        else:
+            for i in report.issues:
+                lvl = "red" if i.level == "error" else "yellow"
+                where = f" [{i.where}]" if i.where else ""
+                print(f"[{lvl}]{i.level}[/{lvl}] {i.code}{where}: {i.message}")
+    raise typer.Exit(0 if report.ok else 1)

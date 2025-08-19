@@ -121,6 +121,15 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
 
     add_or_update_skill(skill_name, version, _agent.monorepo_url, installed=1)
     set_current_skill(skill_name)
+    # validate in install-mode (strict)
+    from adaos.sdk.skill_validator import validate_skill
+
+    report = validate_skill(skill_name, install_mode=True, probe_tools=False)
+    if not report.ok:
+        # откатываем флаг installed
+        set_installed_flag(skill_name, installed=0)
+        details = "; ".join(f"{i.code}: {i.message}" for i in report.issues if i.level == "error")
+        return f"[red]{_('skill.install.validation_failed')}[/red] {details}"
     return f"[green]{_('skill.created', skill_name=skill_name)}[/green]"
 
 
@@ -153,9 +162,17 @@ def pull_skill(skill_name: str) -> str:
     if yaml_path.exists():
         with open(yaml_path, "r", encoding="utf-8") as f:
             version = yaml.safe_load(f).get("version", "unknown")
-
     add_or_update_skill(skill_name, version, _agent.monorepo_url, installed=1)
     set_current_skill(skill_name)
+    # validate in install-mode (strict)
+    from adaos.sdk.skill_validator import validate_skill
+
+    report = validate_skill(skill_name, install_mode=True, probe_tools=False)
+    if not report.ok:
+        # откатываем флаг installed
+        set_installed_flag(skill_name, installed=0)
+        details = "; ".join(f"{i.code}: {i.message}" for i in report.issues if i.level == "error")
+        return f"[red]{_('skill.install.validation_failed')}[/red] {details}"
     return f"[green]{_('skill.pulled', skill_name=skill_name, version=version)}[/green]"
 
 
