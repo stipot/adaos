@@ -10,6 +10,8 @@ pip install -e .
 adaos --help
 adaos skill list
 adaos api serve --host 127.0.0.1 --port 8777
+curl -i http://127.0.0.1:8777/health/live
+curl -i http://127.0.0.1:8777/health/ready
 adaos skill run weather_skill weather.get --event --wait-notify --entities '{"city":"Berlin"}'
 ```
 
