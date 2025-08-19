@@ -141,6 +141,31 @@ adaos skill create <skill_name> [--template <template_name>]
 adaos skill create alarm_skill -t AlarmSkill
 ```
 
+### **2. Проверка навыка**
+
+Статические проверки (без импорта кода):
+
+skill.yaml существует и валиден по схеме.
+
+обязательные файлы: handlers/main.py.
+
+dependencies: корректные строки; requirements.txt при желании.
+
+tools[].name уникальны, схемы валидны (draft 2020-12).
+
+events.subscribe[]/publish[] — строки, без дубликатов.
+
+Динамические проверки (с импорта handler):
+6) @tool("<name>") реально экспортирован для каждого tools[].name.
+7) Есть подписчик @subscribe(topic) для каждого events.subscribe[].
+8) (опц.) «сухой вызов» каждого инструмента с пустыми/моком аргументов — только если --probe-tools, иначе пропускаем.
+
+```bash
+adaos skill validate weather_skill
+adaos skill validate weather_skill --json
+adaos skill validate weather_skill --strict
+```
+
 ---
 
 ### **3. Установка навыка из monorepo**
