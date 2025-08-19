@@ -9,6 +9,8 @@ git clone https://github.com/stipot/adaos.git
 pip install -e .
 adaos --help
 adaos skill list
+adaos api serve --host 127.0.0.1 --port 8777
+adaos skill run weather_skill weather.get --event --wait-notify --entities '{"city":"Berlin"}'
 ```
 
 # Использование
