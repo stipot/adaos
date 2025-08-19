@@ -11,7 +11,7 @@ from adaos.sdk.llm.process_llm_output import process_llm_output
 from adaos.sdk.utils.git_utils import commit_skill_changes, rollback_last_commit
 from adaos.agent.db.sqlite import list_skills, get_skill_versions, add_skill_version, list_versions
 from adaos.sdk.skills.i18n import _
-from adaos.sdk.context import SKILLS_DIR, set_current_skill, current_skill_path, current_skill_name
+from adaos.sdk.context import set_current_skill, get_current_skill
 from adaos.sdk.skill_service import (
     create_skill,
     push_skill,
@@ -22,6 +22,11 @@ from adaos.sdk.skill_service import (
     install_skill_dependencies,
     install_all_skills,
 )
+from adaos.sdk.bus import emit
+from adaos.agent.core.event_bus import BUS
+import asyncio
+import importlib.util
+from adaos.sdk.decorators import register_subscriptions
 
 app = typer.Typer(help=_("cli.help"))
 
@@ -151,7 +156,7 @@ def uninstall_command(skill_name: str):
 def prep_command(skill_name: str):
     """Запуск стадии подготовки (discover) для навыка"""
     set_current_skill(skill_name)
-    skill_path = Path(SKILLS_DIR) / skill_name
+    skill_path = get_current_skill().path
 
     prep_script = skill_path / "prep" / "prepare.py"
     if not prep_script.exists():
@@ -174,15 +179,56 @@ def prep_command(skill_name: str):
 
 
 @app.command("run")
-def run_skill(skill_name: str, intent: str, entities: str = "{}"):
+def run_skill(
+    skill_name: str,
+    intent: str,
+    entities: str = "{}",
+    via_event: bool = typer.Option(False, "--event", help="Отправить intent через шину событий"),
+    wait_notify: bool = typer.Option(False, "--wait-notify", help="Дождаться первого ui.notify и вывести его"),
+    timeout: float = typer.Option(2.0, "--timeout", help="Таймаут ожидания ui.notify, сек."),
+):
     set_current_skill(skill_name)
 
     # Устанавливаем зависимости перед запуском
-    install_skill_dependencies(current_skill_path)
+    install_skill_dependencies(get_current_skill().path)
 
-    # Загружаем handler
-    spec = importlib.util.spec_from_file_location("handler", current_skill_path / "handlers" / "main.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    if via_event:
+        # 1) Импортируем handlers, чтобы декоратор @subscribe заполнил реестр
+        spec = importlib.util.spec_from_file_location("handler", get_current_skill().path / "handlers" / "main.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
 
-    module.handle(intent, json.loads(entities), current_skill_path)
+        # 2) Регистрируем подписки в рабочем event loop
+        async def _main():
+            await register_subscriptions()
+            notify_event = asyncio.Event()
+            msg_holder = {"text": None}
+            unsubscribe = None
+            if wait_notify:
+
+                async def tap(evt):
+                    msg = evt.payload.get("text")
+                    if msg is not None:
+                        msg_holder["text"] = msg
+                        notify_event.set()
+
+                await BUS.subscribe("ui.notify", tap)
+            await emit(f"nlp.intent.{intent}", json.loads(entities), actor="user:local", source="cli")
+            if wait_notify:
+                try:
+                    await asyncio.wait_for(notify_event.wait(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    print("[yellow]timeout waiting ui.notify[/yellow]")
+                else:
+                    print(msg_holder["text"])
+            else:
+                # дать шанс обработчику отработать
+                await asyncio.sleep(0.05)
+
+        asyncio.run(_main())
+    else:
+        # Старый путь: прямой вызов handler
+        spec = importlib.util.spec_from_file_location("handler", get_current_skill().path / "handlers" / "main.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.handle(intent, json.loads(entities), get_current_skill().path)

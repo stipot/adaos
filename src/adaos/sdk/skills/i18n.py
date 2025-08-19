@@ -28,7 +28,7 @@ class Translator:
         """
         for frame_info in inspect.stack():
             filename = Path(frame_info.filename)
-            if filename.name == "prepare.py" and "skills" in filename.parts:
+            if ("prepare.py" in filename.parts or "main.py" in filename.parts) and "skills" in filename.parts:
                 return filename.parent.parent
         return None
 

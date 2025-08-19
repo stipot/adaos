@@ -1,3 +1,4 @@
+# src\adaos\api\server.py
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel, Field
 import platform
@@ -18,9 +19,10 @@ except Exception:
     RhasspyTTSAdapter = None
 
 from adaos.agent.audio.tts.native_tts import NativeTTS  # ваш нативный
-
+from adaos.api import tool_bridge
 
 app = FastAPI(title="AdaOS API", version="0.1.0")
+app.include_router(tool_bridge.router, prefix="/api")  # /api/tools/call
 
 
 class SayRequest(BaseModel):
