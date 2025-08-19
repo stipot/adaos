@@ -113,7 +113,7 @@ def get_base_dir() -> Path:
         return _android_base_dir()
 
     # 3) Десктоп по-умолчанию (~/.adaos)
-    return f"{PACKAGE_DIR.parent.parent}/.adaos" if os.getenv("ENV_TYPE") == "dev" else Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
+    return Path(f"{PACKAGE_DIR.parent.parent}/.adaos").resolve() if os.getenv("ENV_TYPE") == "dev" else Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
 
 
 _env = EnvironmentContext()
