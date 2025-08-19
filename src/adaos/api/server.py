@@ -11,7 +11,7 @@ from adaos.agent.audio.tts.native_tts import NativeTTS
 # наши роутеры
 from adaos.api import tool_bridge
 from adaos.api import subnet_api
-from adaos.agent.core.lifecycle import run_boot_sequence
+from adaos.agent.core.lifecycle import run_boot_sequence, shutdown, is_ready
 
 app: FastAPI  # объявим ниже
 
@@ -36,9 +36,16 @@ async def lifespan(app: FastAPI):
     # await shutdown()
 
 
-app = FastAPI(title="AdaOS API", version="0.1.0", lifespan=lifespan)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    await run_boot_sequence(app)
+    yield
+    # shutdown
+    await shutdown()
 
-# Подключаем роутеры (ВАЖНО: после создания app)
+
+app = FastAPI(title="AdaOS API", version="0.1.0", lifespan=lifespan)
 app.include_router(tool_bridge.router, prefix="/api")
 app.include_router(subnet_api.router, prefix="/api")
 
@@ -84,3 +91,17 @@ async def say(payload: SayRequest):
     _make_tts().say(payload.text)
     dt = int((time.perf_counter() - t0) * 1000)
     return SayResponse(ok=True, duration_ms=dt)
+
+
+# --- health endpoints (без авторизации; удобно для оркестраторов/проб) ---
+@app.get("/health/live")
+async def health_live():
+    return {"ok": True}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    # 200 только когда прошёл boot sequence
+    if not is_ready():
+        raise HTTPException(status_code=503, detail="not ready")
+    return {"ok": True}

@@ -12,10 +12,16 @@ from adaos.sdk.bus import emit
 from adaos.agent.core.subnet_context import CTX
 
 _BOOT_TASKS: List[asyncio.Task] = []
+_BOOTED: bool = False
+_READY_EVENT: asyncio.Event | None = None
+
+
+def is_ready() -> bool:
+    ev = _READY_EVENT
+    return bool(ev and ev.is_set())
 
 
 async def _import_all_handlers():
-    # импортируем все установленные навыки → декораторы наполнят реестры
     root = Path(SKILLS_DIR)
     for handler in root.rglob("handlers/main.py"):
         spec = importlib.util.spec_from_file_location("handler", handler)
@@ -30,7 +36,6 @@ async def _member_register_and_heartbeat():
     url_hb = f"{conf.hub_url.rstrip('/')}/api/subnet/heartbeat"
     headers = {"X-AdaOS-Token": conf.token}
 
-    # регистрация
     payload = {
         "node_id": conf.node_id,
         "subnet_id": conf.subnet_id,
@@ -42,11 +47,10 @@ async def _member_register_and_heartbeat():
         r.raise_for_status()
     except Exception as e:
         await emit("net.subnet.register.error", {"error": str(e)}, source="lifecycle", actor="system")
-        return
+        return None
 
     await emit("net.subnet.registered", {"hub": conf.hub_url}, source="lifecycle", actor="system")
 
-    # heartbeat loop
     async def loop():
         backoff = 1
         while True:
@@ -60,34 +64,44 @@ async def _member_register_and_heartbeat():
                 backoff = min(backoff * 2, 30)
             await asyncio.sleep(backoff if backoff > 1 else 5)
 
-    return asyncio.create_task(loop())
+    return asyncio.create_task(loop(), name="adaos-heartbeat")
 
 
 async def run_boot_sequence(app):
+    global _BOOTED, _READY_EVENT
+    if _BOOTED:
+        return
+    _READY_EVENT = _READY_EVENT or asyncio.Event()
+
     conf = load_config()
     await emit("sys.boot.start", {"role": conf.role, "node_id": conf.node_id, "subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
 
-    # 1) импортируем навыки
     await _import_all_handlers()
-
-    # 2) регистрируем подписки
     await register_subscriptions()
     await emit("sys.bus.ready", {}, source="lifecycle", actor="system")
 
-    # 3) режимы ролей
     if conf.role == "hub":
-        # hub готов; контекст доступен локально
         await emit("net.subnet.hub.ready", {"subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
     else:
         task = await _member_register_and_heartbeat()
         if task:
             _BOOT_TASKS.append(task)
 
-    # 4) узел готов
+    _READY_EVENT.set()
+    _BOOTED = True
     await emit("sys.ready", {"ts": time.time()}, source="lifecycle", actor="system")
 
 
 async def shutdown():
-    # будущая остановка задач; сейчас просто отменяем heartbeat
-    for t in _BOOT_TASKS:
-        t.cancel()
+    # сигнал остановки
+    await emit("sys.stopping", {}, source="lifecycle", actor="system")
+    # отменяем фоновые задачи (heartbeat и пр.)
+    for t in list(_BOOT_TASKS):
+        try:
+            t.cancel()
+        except Exception:
+            pass
+    if _BOOT_TASKS:
+        await asyncio.gather(*_BOOT_TASKS, return_exceptions=True)
+        _BOOT_TASKS.clear()
+    await emit("sys.stopped", {}, source="lifecycle", actor="system")
