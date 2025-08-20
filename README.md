@@ -9,16 +9,92 @@ git clone https://github.com/stipot/adaos.git
 pip install -e .
 adaos --help
 adaos skill list
+adaos api serve --host 127.0.0.1 --port 8777
+curl -i http://127.0.0.1:8777/health/live
+curl -i http://127.0.0.1:8777/health/ready
+adaos skill run weather_skill weather.get --event --wait-notify --entities '{"city":"Berlin"}'
+# Windows запустить альтернативную ноду в той-же кодовой базе
+$env:ADAOS_BASE_DIR_SUFFIX="_1"; adaos api serve --host 127.0.0.1 --port 8778
+
+### Сменить роль ноды
+```python
+headers = {"X-AdaOS-Token": "dev-local-token"}
+
+# 1) проверить статус
+print(requests.get("http://127.0.0.1:8778/api/node/status", headers=headers).json())
+
+# 2) сменить роль на member или hub (и задать hub_url)
+payload = {"role": "member", "hub_url": "http://127.0.0.1:8777"}
+print(requests.post("http://127.0.0.1:8778/api/node/role", json=payload, headers=headers).json())
+
+# 3) снова статус — должен быть role=member, ready=true
+print(requests.get("http://127.0.0.1:8778/api/node/status", headers=headers).json())
 ```
 
 ## Использование
 
-# **CLI AdaOS**
+## AdaOS API
+
+AdaOS CLI дополнен встроенным HTTP API (по умолчанию на `http://127.0.0.1:8777`).  
+Аутентификация — через заголовок `X-AdaOS-Token`. Токен задаётся переменной окружения `ADAOS_API_TOKEN` (по умолчанию: `dev-local-token`).
+
+### POST `/api/say`
+
+Озвучивание текста через выбранный TTS-бэкенд (native / OVOS / Rhasspy).
+
+**Запрос:**
+
+```json
+{
+  "text": "Hello from AdaOS",
+  "provider": "auto",     // необязательный параметр ("auto"|"ovos"|"rhasspy")
+  "voice": "default"      // необязательный параметр (в зависимости от бэкенда)
+}
+````
+
+**Ответ:**
+
+```json
+{
+  "status": "ok",
+  "provider": "ovos",
+  "text": "Hello from AdaOS"
+}
+```
+
+### Примеры использования
+
+#### Linux / macOS
+
+```bash
+curl -X POST http://127.0.0.1:8777/api/say \
+  -H "X-AdaOS-Token: dev-local-token" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello from AdaOS"}'
+```
+
+#### Windows PowerShell
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8777/api/say `
+  -Headers @{ "X-AdaOS-Token" = "dev-local-token" } `
+  -ContentType "application/json" `
+  -Body (@{ text = "Hello from AdaOS" } | ConvertTo-Json)
+```
+
+---
+
+### Статус / расширение API
+
+* [x] `/api/say` — озвучивание текста
+* [ ] `/api/listen` — захват аудио и STT (планируется)
+* [ ] `/api/skills` — управление навыками
+* [ ] `/api/runtime` — управление окружением
+
+## **CLI AdaOS**
 
 AdaOS CLI позволяет управлять навыками, тестами и Runtime через удобный интерфейс командной строки.
 Все команды поддерживают локализацию (`ru`/`en`).
-
----
 
 ## **Общая структура**
 
@@ -81,6 +157,31 @@ adaos skill create <skill_name> [--template <template_name>]
 
 ```bash
 adaos skill create alarm_skill -t AlarmSkill
+```
+
+### **2. Проверка навыка**
+
+Статические проверки (без импорта кода):
+
+skill.yaml существует и валиден по схеме.
+
+обязательные файлы: handlers/main.py.
+
+dependencies: корректные строки; requirements.txt при желании.
+
+tools[].name уникальны, схемы валидны (draft 2020-12).
+
+events.subscribe[]/publish[] — строки, без дубликатов.
+
+Динамические проверки (с импорта handler):
+6) @tool("<name>") реально экспортирован для каждого tools[].name.
+7) Есть подписчик @subscribe(topic) для каждого events.subscribe[].
+8) (опц.) «сухой вызов» каждого инструмента с пустыми/моком аргументов — только если --probe-tools, иначе пропускаем.
+
+```bash
+adaos skill validate weather_skill
+adaos skill validate weather_skill --json
+adaos skill validate weather_skill --strict
 ```
 
 ---

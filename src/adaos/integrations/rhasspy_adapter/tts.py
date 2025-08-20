@@ -55,6 +55,7 @@ class RhasspyTTSAdapter:
         self.lang = lang
 
     def say(self, text: str) -> None:
+        print("its RhasspyTTSAdapter")
         wav = self._synthesize(text)
         if not wav:
             print("[Rhasspy] Пустой ответ от /api/tts", file=sys.stderr)

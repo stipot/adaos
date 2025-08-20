@@ -37,6 +37,7 @@ dependencies = [
   "pyttsx3",
   "ovos_plugin_manager", # TODO move to optional-dependencies = {  }
   "ovos_config",
+  "uvicorn",
 ]
 
 [project.scripts]

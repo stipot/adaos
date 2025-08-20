@@ -1,12 +1,35 @@
 # -*- coding: utf-8 -*-
-import typer
+import typer, sys, os
 from typing import Optional
 from pathlib import Path
+
+from adaos.agent.audio.tts.native_tts import NativeTTS
 
 VoskSTT = None  # ленивый импорт
 from adaos.agent.audio.stt.vosk_stt import VoskSTT
 
 app = typer.Typer(help="Native (audio) commands")
+
+
+def _is_android() -> bool:
+    return sys.platform == "android" or "ANDROID_ARGUMENT" in os.environ
+
+
+def _try_start_android_service():
+    # Стартуем Foreground Service через Java-интент
+    try:
+        from jnius import autoclass
+
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Intent = autoclass("android.content.Intent")
+        context = PythonActivity.mActivity
+        service_cls = autoclass("ai.adaos.platform.android.AdaOSAudioService")
+        intent = Intent(context, service_cls)
+        context.startForegroundService(intent)
+        return True
+    except Exception as e:
+        typer.echo(f"[AndroidService] failed: {e}")
+        return False
 
 
 @app.command("say")
@@ -33,10 +56,18 @@ def start(
     device: str = typer.Option(None, "--device", help="Устройство"),
     echo: bool = typer.Option(True, "--echo", help="Эхо-тест"),
     model_path: str = typer.Option(None, "--model-path", help="Путь к модели"),
+    use_android_service: bool = True,
 ):
     """
     Запускает офлайн-слушатель (Vosk). Ctrl+C для выхода.
     """
+    external = None
+    if use_android_service and _is_android():
+        ok = _try_start_android_service()
+        if ok:
+            from adaos.platform.android.mic_udp import AndroidMicUDP
+
+            external = AndroidMicUDP().listen_stream()
     global VoskSTT
     if VoskSTT is None:
         from adaos.agent.audio.stt.vosk_stt import VoskSTT

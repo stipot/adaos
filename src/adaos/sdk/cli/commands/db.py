@@ -1,3 +1,4 @@
+# src\adaos\sdk\cli\commands\db.py
 import typer
 from adaos.agent.db.sqlite import init_db
 
