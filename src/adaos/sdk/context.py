@@ -14,6 +14,9 @@ class EnvironmentContext:
     def __init__(self):
         self.package_dir = Path(__file__).resolve().parent.parent  # adaos/
         self.env_type = os.getenv("ENV_TYPE", "prod")
+        print("ADAOS_BASE_DIR_SUFFIX", os.getenv("ADAOS_BASE_DIR_SUFFIX", ""))
+        self.override_base_suffix = os.getenv("ADAOS_BASE_DIR_SUFFIX", "")
+        """ Вариация окружения для разных нод в одной кодовой базе """
         self.override_base = os.getenv("ADAOS_BASE_DIR")
 
     def is_android(self) -> bool:
@@ -38,7 +41,7 @@ class EnvironmentContext:
         if self.is_android():
             return self._android_base_dir()
         if self.env_type == "dev":
-            return self.package_dir.parent.parent / ".adaos"
+            return self.package_dir.parent.parent / f".adaos{self.override_base_suffix}"
         return Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
 
 
@@ -46,6 +49,7 @@ class AgentContext:
     def __init__(self, env: EnvironmentContext):
         self.env = env
         self.base_dir = env.get_base_dir()
+        print("get_base_dir", env.get_base_dir())
         self.skills_dir = self.base_dir / "skills"
         self.templates_dir = self.env.package_dir / "skills_templates"
         self.db_path = self.base_dir / "skill_db.sqlite"
@@ -103,24 +107,14 @@ def _android_base_dir() -> Path:
 
 
 def get_base_dir() -> Path:
-    # 1) Явная переменная окружения имеет приоритет
-    override = os.getenv("ADAOS_BASE_DIR")
-    if override:
-        return Path(override).expanduser().resolve()
-
-    # 2) Android-специфичный путь
-    if _is_android():
-        return _android_base_dir()
-
-    # 3) Десктоп по-умолчанию (~/.adaos)
-    return Path(f"{PACKAGE_DIR.parent.parent}/.adaos").resolve() if os.getenv("ENV_TYPE") == "dev" else Path(os.getenv("BASE_DIR") or (Path.home() / ".adaos")).resolve()
+    return _env.get_base_dir()
 
 
 _env = EnvironmentContext()
 _agent = AgentContext(_env)
 
 # Экспортируем как раньше, чтобы не ломать импорты
-BASE_DIR = str(get_base_dir())
+BASE_DIR = _env.get_base_dir()
 
 SKILLS_DIR = f"{BASE_DIR}/skills"
 TEMPLATES_DIR = str(PACKAGE_DIR / "skills_templates")

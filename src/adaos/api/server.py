@@ -11,6 +11,7 @@ from adaos.agent.audio.tts.native_tts import NativeTTS
 # наши роутеры
 from adaos.api import tool_bridge
 from adaos.api import subnet_api
+from adaos.api import node_api
 from adaos.agent.core.lifecycle import run_boot_sequence, shutdown, is_ready
 
 app: FastAPI  # объявим ниже
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AdaOS API", version="0.1.0", lifespan=lifespan)
 app.include_router(tool_bridge.router, prefix="/api")
 app.include_router(subnet_api.router, prefix="/api")
+app.include_router(node_api.router, prefix="/api")
 
 
 # --- базовые эндпоинты (для проверки, что всё живо) ---

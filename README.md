@@ -13,9 +13,25 @@ adaos api serve --host 127.0.0.1 --port 8777
 curl -i http://127.0.0.1:8777/health/live
 curl -i http://127.0.0.1:8777/health/ready
 adaos skill run weather_skill weather.get --event --wait-notify --entities '{"city":"Berlin"}'
+# Windows запустить альтернативную ноду в той-же кодовой базе
+$env:ADAOS_BASE_DIR_SUFFIX="_1"; adaos api serve --host 127.0.0.1 --port 8778
+
+### Сменить роль ноды
+```python
+headers = {"X-AdaOS-Token": "dev-local-token"}
+
+# 1) проверить статус
+print(requests.get("http://127.0.0.1:8778/api/node/status", headers=headers).json())
+
+# 2) сменить роль на member или hub (и задать hub_url)
+payload = {"role": "member", "hub_url": "http://127.0.0.1:8777"}
+print(requests.post("http://127.0.0.1:8778/api/node/role", json=payload, headers=headers).json())
+
+# 3) снова статус — должен быть role=member, ready=true
+print(requests.get("http://127.0.0.1:8778/api/node/status", headers=headers).json())
 ```
 
-# Использование
+## Использование
 
 ## AdaOS API
 
