@@ -19,6 +19,7 @@ from adaos.agent.db.sqlite import (
     set_installed_flag,
 )
 from adaos.sdk.utils.git_utils import _ensure_repo
+from adaos.sdk.skill_validator import validate_skill
 
 CATALOG_FILENAME = "skills.yaml"  # имя файла каталога в корне монорепо
 
@@ -120,9 +121,8 @@ def create_skill(skill_name: str, template_name: str = "basic") -> str:
             version = yaml.safe_load(f).get("version", "1.0")
 
     add_or_update_skill(skill_name, version, _agent.monorepo_url, installed=1)
-    set_current_skill(skill_name)
-    # validate in install-mode (strict)
-    from adaos.sdk.skill_validator import validate_skill
+    if not set_current_skill(skill_name):
+        return f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
 
     report = validate_skill(skill_name, install_mode=True, probe_tools=False)
     if not report.ok:
@@ -163,8 +163,8 @@ def pull_skill(skill_name: str) -> str:
         with open(yaml_path, "r", encoding="utf-8") as f:
             version = yaml.safe_load(f).get("version", "unknown")
     add_or_update_skill(skill_name, version, _agent.monorepo_url, installed=1)
-    set_current_skill(skill_name)
-    # validate in install-mode (strict)
+    if not set_current_skill(skill_name):
+        return f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
     from adaos.sdk.skill_validator import validate_skill
 
     report = validate_skill(skill_name, install_mode=True, probe_tools=False)

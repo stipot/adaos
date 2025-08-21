@@ -10,7 +10,7 @@ import requests
 from adaos.agent.core.node_config import load_config, set_role as cfg_set_role, NodeConfig
 from adaos.sdk.context import SKILLS_DIR
 from adaos.sdk.decorators import register_subscriptions
-from adaos.sdk.bus import emit
+import adaos.sdk.bus as bus
 from adaos.agent.core.subnet_context import CTX
 from adaos.agent.core.subnet_registry import mark_down_if_expired, get_node, NodeInfo
 
@@ -49,13 +49,13 @@ async def _member_register_and_heartbeat(conf: NodeConfig):
     try:
         r = requests.post(url_reg, json=payload, headers=headers, timeout=3)
         if r.status_code != 200:
-            await emit("net.subnet.register.error", {"status": r.status_code, "text": r.text}, source="lifecycle", actor="system")
+            await bus.emit("net.subnet.register.error", {"status": r.status_code, "text": r.text}, source="lifecycle", actor="system")
             return None
     except Exception as e:
-        await emit("net.subnet.register.error", {"error": str(e)}, source="lifecycle", actor="system")
+        await bus.emit("net.subnet.register.error", {"error": str(e)}, source="lifecycle", actor="system")
         return None
 
-    await emit("net.subnet.registered", {"hub": conf.hub_url}, source="lifecycle", actor="system")
+    await bus.emit("net.subnet.registered", {"hub": conf.hub_url}, source="lifecycle", actor="system")
 
     async def loop():
         backoff = 1
@@ -65,10 +65,10 @@ async def _member_register_and_heartbeat(conf: NodeConfig):
                 if rr.status_code == 200:
                     backoff = 1
                 else:
-                    await emit("net.subnet.heartbeat.warn", {"status": rr.status_code, "text": rr.text}, source="lifecycle", actor="system")
+                    await bus.emit("net.subnet.heartbeat.warn", {"status": rr.status_code, "text": rr.text}, source="lifecycle", actor="system")
                     backoff = min(backoff * 2, 30)
             except Exception:
-                await emit("net.subnet.heartbeat.error", {"error": str(e)}, source="lifecycle", actor="system")
+                await bus.emit("net.subnet.heartbeat.error", {"error": str(e)}, source="lifecycle", actor="system")
                 backoff = min(backoff * 2, 30)
             await asyncio.sleep(backoff if backoff > 1 else 5)
 
@@ -83,14 +83,14 @@ async def run_boot_sequence(app):
     _READY_EVENT = _READY_EVENT or asyncio.Event()
 
     conf = load_config()
-    await emit("sys.boot.start", {"role": conf.role, "node_id": conf.node_id, "subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
+    await bus.emit("sys.boot.start", {"role": conf.role, "node_id": conf.node_id, "subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
 
     await _import_all_handlers()
     await register_subscriptions()
-    await emit("sys.bus.ready", {}, source="lifecycle", actor="system")
+    await bus.emit("sys.bus.ready", {}, source="lifecycle", actor="system")
 
     if conf.role == "hub":
-        await emit("net.subnet.hub.ready", {"subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
+        await bus.emit("net.subnet.hub.ready", {"subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
 
         # стартуем lease‑монитор нод
         async def lease_monitor():
@@ -98,14 +98,14 @@ async def run_boot_sequence(app):
                 # отмечаем down просроченные ноды и шлём события
                 down_list = mark_down_if_expired()
                 for info in down_list:
-                    await emit("net.subnet.node.down", {"node_id": info.node_id}, source="lifecycle", actor="system")
+                    await bus.emit("net.subnet.node.down", {"node_id": info.node_id}, source="lifecycle", actor="system")
                 await asyncio.sleep(5)
 
         _BOOT_TASKS.append(asyncio.create_task(lease_monitor(), name="adaos-lease-monitor"))
         # hub готов сразу
         _READY_EVENT.set()
         _BOOTED = True
-        await emit("sys.ready", {"ts": time.time()}, source="lifecycle", actor="system")
+        await bus.emit("sys.ready", {"ts": time.time()}, source="lifecycle", actor="system")
     else:
         # для member флаг ready поднимаем ТОЛЬКО после успешной регистрации
         task = await _member_register_and_heartbeat(conf)
@@ -113,12 +113,12 @@ async def run_boot_sequence(app):
             _BOOT_TASKS.append(task)
             _READY_EVENT.set()
             _BOOTED = True
-            await emit("sys.ready", {"ts": time.time()}, source="lifecycle", actor="system")
+            await bus.emit("sys.ready", {"ts": time.time()}, source="lifecycle", actor="system")
 
 
 async def shutdown():
     # сигнал остановки
-    await emit("sys.stopping", {}, source="lifecycle", actor="system")
+    await bus.emit("sys.stopping", {}, source="lifecycle", actor="system")
     # отменяем фоновые задачи (heartbeat и пр.)
     for t in list(_BOOT_TASKS):
         try:
@@ -136,7 +136,7 @@ async def shutdown():
             _READY_EVENT.clear()
         except Exception:
             pass
-    await emit("sys.stopped", {}, source="lifecycle", actor="system")
+    await bus.emit("sys.stopped", {}, source="lifecycle", actor="system")
 
 
 async def switch_role(app, role: str, *, hub_url: str | None = None, subnet_id: str | None = None) -> NodeConfig:

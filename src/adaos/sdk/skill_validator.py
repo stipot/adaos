@@ -1,3 +1,4 @@
+# src\adaos\sdk\skill_validator.py
 from __future__ import annotations
 import os, sys, json, subprocess, importlib.util
 from dataclasses import dataclass, asdict
@@ -146,7 +147,8 @@ print(json.dumps({{"ok": True, "tools": exports, "subs": subs}}))
 def validate_skill(skill_name: str | None = None, install_mode: bool = False, probe_tools: bool = False) -> ValidationReport:
     # определяем каталог навыка
     if skill_name:
-        set_current_skill(skill_name)
+        if not set_current_skill(skill_name):
+            return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
     current = get_current_skill()
     if current is None or current.path is None:
         return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])

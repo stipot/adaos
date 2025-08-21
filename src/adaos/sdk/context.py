@@ -14,7 +14,6 @@ class EnvironmentContext:
     def __init__(self):
         self.package_dir = Path(__file__).resolve().parent.parent  # adaos/
         self.env_type = os.getenv("ENV_TYPE", "prod")
-        print("ADAOS_BASE_DIR_SUFFIX", os.getenv("ADAOS_BASE_DIR_SUFFIX", ""))
         self.override_base_suffix = os.getenv("ADAOS_BASE_DIR_SUFFIX", "")
         """ Вариация окружения для разных нод в одной кодовой базе """
         self.override_base = os.getenv("ADAOS_BASE_DIR")
@@ -55,12 +54,23 @@ class AgentContext:
         self.db_path = self.base_dir / "skill_db.sqlite"
         self.locales_dir = self.env.package_dir / "sdk/locales"
         self.models_dir = self.base_dir / "models"
+        self._current_skill: SkillContext | None = None
 
         self.monorepo_url = os.getenv("SKILLS_REPO_URL", "https://github.com/stipot/adaoskills.git")
         self.default_lang = os.getenv("ADAOS_DEFAULT_LANG", "en")
 
     def get_skill_context(self, skill_name: str) -> "SkillContext":
         return SkillContext(skill_name, self.skills_dir / skill_name)
+
+    def set_current_skill(self, skill_name: str):
+        if not (self.skills_dir / skill_name).exists():
+            return False
+        else:
+            self._current_skill = SkillContext(skill_name, self.skills_dir / skill_name)
+            return True
+
+    def get_current_skill(self):
+        return self._current_skill
 
 
 class SkillContext:
@@ -129,27 +139,16 @@ current_skill_name: str = ""
 
 
 def set_current_skill(skill_name: str):
-    global _current_skill
-    try:
-        _current_skill = _agent.get_skill_context(skill_name)
-    except FileNotFoundError:
-        from adaos.sdk.skills.i18n import _
-
-        return f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
-
-
-def set_current_skill_path(path: Path):
-    global _current_skill
-    _current_skill = SkillContext(path.name, path)
+    # f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
+    return True if _agent.set_current_skill(skill_name) else False
 
 
 def get_current_skill_path() -> Path:
-    if _current_skill is None:
+    if _agent.get_current_skill() is not None:
+        return _agent.get_current_skill().path
+    else:
         raise RuntimeError("Skill path not set in context")
-    return _current_skill.path
 
 
 def get_current_skill() -> SkillContext:
-    if _current_skill is None:
-        raise RuntimeError("No current skill set")
-    return _current_skill
+    return _agent.get_current_skill()

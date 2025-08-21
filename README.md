@@ -15,8 +15,27 @@ curl -i http://127.0.0.1:8777/health/ready
 adaos skill run weather_skill weather.get --event --wait-notify --entities '{"city":"Berlin"}'
 # Windows запустить альтернативную ноду в той-же кодовой базе
 $env:ADAOS_BASE_DIR_SUFFIX="_1"; adaos api serve --host 127.0.0.1 --port 8778
+# Мониотринг
+#
+adaos api serve --host 127.0.0.1 --port 8777
+$env:ADAOS_BASE_DIR_SUFFIX="_1"; adaos api serve --host 127.0.0.1 --port 8778
+adaos monitor sse http://127.0.0.1:8777/api/observe/stream
+curl -H "X-AdaOS-Token: dev-local-token" -X POST http://127.0.0.1:8778/api/observe/test
+# Вариант 2
+# 1) Узнай node_id member-ноды:
+curl -H "X-AdaOS-Token: dev-local-token" http://127.0.0.1:8777/api/subnet/nodes
+# 2) Подними SSE со строгим фильтром:
+adaos monitor sse http://127.0.0.1:8777/api/observe/stream --topic net.subnet.
+# 3) Попроси хаб дерегистрировать эту ноду (сразу прилетит net.subnet.node.down):
+curl -H "X-AdaOS-Token: dev-local-token" -H "Content-Type: application/json" \
+     -X POST http://127.0.0.1:8777/api/subnet/deregister \
+     -d '{"node_id":"<member-node-id>"}'
+# С хвостом
+adaos monitor sse http://127.0.0.1:8777/api/observe/stream?replay_lines=50 --topic net.subnet.
+```
 
 ### Сменить роль ноды
+
 ```python
 headers = {"X-AdaOS-Token": "dev-local-token"}
 

@@ -13,7 +13,7 @@ from adaos.sdk.utils.setup_env import prepare_environment
 from adaos.sdk.context import BASE_DIR
 
 # общие подкоманды
-from adaos.sdk.cli.commands import db, skill, runtime, llm, tests as tests_cmd, api
+from adaos.sdk.cli.commands import db, monitor, skill, runtime, llm, tests as tests_cmd, api
 
 # интеграции
 from adaos.sdk.cli.commands import native
@@ -115,6 +115,7 @@ app.add_typer(tests_cmd.app, name="tests", help=_("cli.help_test"))
 app.add_typer(runtime.app, name="runtime", help=_("cli.help_runtime"))
 app.add_typer(llm.app, name="llm", help=_("cli.help_llm"))
 app.add_typer(api.app, name="api")
+app.add_typer(monitor.app, name="monitor")
 
 # ---- Фильтрация интеграций по ENV ----
 _tts = _read("ADAOS_TTS", "native")
