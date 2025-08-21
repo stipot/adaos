@@ -1,7 +1,7 @@
 from __future__ import annotations
-import asyncio, json, time, uuid
+import asyncio, json, time, uuid, gzip
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, AsyncIterator
 
 import requests
 
@@ -9,10 +9,42 @@ from adaos.agent.core.node_config import load_config
 from adaos.sdk.context import get_base_dir
 from adaos.sdk import bus as bus_module  # будем мягко оборачивать emit
 
+# --- настройки ротации ---
+_MAX_BYTES = 5 * 1024 * 1024  # 5MB на файл
+_KEEP = 3  # events.log, .1.gz, .2.gz, .3.gz
+
 _LOG_TASK: Optional[asyncio.Task] = None
 _QUEUE: "asyncio.Queue[Dict[str, Any]]" | None = None
 _ORIG_EMIT = None
 _LOG_FILE: Path | None = None
+
+
+# --- простой broadcaster для SSE ---
+class EventBroadcaster:
+    def __init__(self):
+        self._subs: List[asyncio.Queue] = []
+
+    async def publish(self, evt: Dict[str, Any]):
+        # не блокируем продьюсер: мелкая очередь, дропаем по переполнению
+        for q in list(self._subs):
+            try:
+                if q.full():
+                    _ = q.get_nowait()
+                q.put_nowait(evt)
+            except Exception:
+                try:
+                    self._subs.remove(q)
+                except Exception:
+                    pass
+
+    def subscribe(self, *, topic_prefix: str | None, node_id: str | None, since_ts: float | None) -> "asyncio.Queue[Dict[str, Any]]":
+        q: asyncio.Queue = asyncio.Queue(maxsize=500)
+        q._adaos_filter = {"topic_prefix": topic_prefix, "node_id": node_id, "since": since_ts}  # type: ignore[attr-defined]
+        self._subs.append(q)
+        return q
+
+
+BROADCAST = EventBroadcaster()
 
 
 def _log_path() -> Path:
@@ -44,6 +76,27 @@ def _serialize_event(topic: str, payload: Dict[str, Any], kwargs: Dict[str, Any]
         "node_id": conf.node_id,
         "role": conf.role,
     }
+
+
+def _rotate_if_needed(path: Path):
+    try:
+        if path.exists() and path.stat().st_size >= _MAX_BYTES:
+            # сдвигаем .(n-1).gz → .n.gz
+            for i in range(_KEEP, 0, -1):
+                src = path.with_suffix(path.suffix + ("" if i == 1 else f".{i-1}.gz"))
+                dst = path.with_suffix(path.suffix + f".{i}.gz")
+                if i == 1:
+                    # src = events.log -> compress to .1.gz
+                    if path.exists():
+                        data = path.read_bytes()
+                        with gzip.open(path.with_suffix(path.suffix + ".1.gz"), "wb") as gz:
+                            gz.write(data)
+                        path.unlink(missing_ok=True)
+                else:
+                    if src.exists():
+                        src.rename(dst)
+    except Exception:
+        pass
 
 
 def _write_local(e: Dict[str, Any]) -> None:
@@ -103,16 +156,15 @@ async def _emit_wrapper(topic: str, payload: Dict[str, Any], **kwargs):
     # затем логирование
     event = _serialize_event(topic, payload, kwargs)
     conf = load_config()
-    if conf.role == "hub":
-        _write_local(event)
-    else:
-        # member: в очередь для отправки на hub + дублируем локально
-        _write_local(event)
-        if _QUEUE:
-            try:
-                _QUEUE.put_nowait(event)
-            except Exception:
-                pass
+    # запись локально + публикация
+    _write_local(event)
+    await BROADCAST.publish(event)
+    # отправка на hub (только у member)
+    if conf.role == "member" and _QUEUE:
+        try:
+            _QUEUE.put_nowait(event)
+        except Exception:
+            pass
     return res
 
 
@@ -130,7 +182,7 @@ def attach_http_trace_headers(request_headers: Dict[str, str], response_headers:
 async def start_observer():
     """
     Подключает обёртку над emit и поднимает фоновые задачи (для member).
-    Идempotent: повторные вызовы безопасны.
+    Идемпотентно подключает обёртку над emit и фоновые таски.
     """
     global _ORIG_EMIT, _QUEUE, _LOG_TASK
     if _ORIG_EMIT is not None:
@@ -162,3 +214,14 @@ async def stop_observer():
     if _ORIG_EMIT is not None:
         bus_module.emit = _ORIG_EMIT  # type: ignore
         _ORIG_EMIT = None
+
+
+def pass_filters(evt: Dict[str, Any], topic_prefix: str | None, node_id: str | None, since_ts: float | None) -> bool:
+    """Вспомогательное: фильтрация событий для подписчика (исп. в observe_api)"""
+    if topic_prefix and not str(evt.get("topic", "")).startswith(topic_prefix):
+        return False
+    if node_id and str(evt.get("node_id")) != node_id:
+        return False
+    if since_ts and float(evt.get("ts", 0.0)) < float(since_ts):
+        return False
+    return True

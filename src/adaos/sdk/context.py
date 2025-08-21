@@ -54,7 +54,7 @@ class AgentContext:
         self.db_path = self.base_dir / "skill_db.sqlite"
         self.locales_dir = self.env.package_dir / "sdk/locales"
         self.models_dir = self.base_dir / "models"
-        self._current_skill = None
+        self._current_skill: SkillContext | None = None
 
         self.monorepo_url = os.getenv("SKILLS_REPO_URL", "https://github.com/stipot/adaoskills.git")
         self.default_lang = os.getenv("ADAOS_DEFAULT_LANG", "en")
