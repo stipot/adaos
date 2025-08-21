@@ -77,6 +77,24 @@ def _sync_sparse_checkout(repo: Repo, installed=[]):
     repo.git.sparse_checkout("set", *installed)
 
 
+def _ensure_in_sparse(repo: Repo, path: str):
+    """
+    Гарантирует, что указанный путь попал в sparse-checkout.
+    Без этого git add <path> падает с advice.updateSparsePath.
+    """
+    try:
+        # инициализируем режим no-cone, если уже инициализирован — git сам проигнорирует
+        repo.git.sparse_checkout("init", "--no-cone")
+    except Exception:
+        pass
+    try:
+        repo.git.sparse_checkout("add", path)
+    except Exception:
+        # старые git без 'add' могут требовать set — подхватим через _sync_sparse_checkout
+        # но сначала расширим текущий список
+        _sync_sparse_checkout(repo, installed=[path])
+
+
 def _ensure_git_identity(repo: Repo):
     try:
         repo.config_reader().get_value("user", "email")
@@ -137,7 +155,8 @@ def push_skill(skill_name, message: str = None) -> str:
     repo = _ensure_repo()
     _ensure_git_identity(repo)
     _sync_sparse_checkout(repo)
-    repo.git.add(skill_name)
+    _ensure_in_sparse(repo, skill_name)  # ДОБАВЛЯЕМ текущий навык в sparse
+    repo.git.add("--", skill_name)  # '--' защитит от совпадения с опциями
 
     if repo.is_dirty():
         repo.git.commit("-m", message or _("skill.push_message"))
