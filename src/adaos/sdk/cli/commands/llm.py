@@ -11,13 +11,20 @@ def build_prep(skill_name: str, user_request: str):
     """
     Build prep prompt for a skill based on user request and save it in <skills>/<skill_name>/prep/prep_prompt.md
     """
-    base_prompt_path = Path(f"{PACKAGE_DIR}/llm/prompts/prep_request.md")
+    base_prompt_path = Path(f"{PACKAGE_DIR}/sdk/llm/prompts/prep_request.md")
     if not base_prompt_path.exists():
         typer.echo(f"[red]{_('cli.llm.prep.template_missing')}[/red]")
         raise typer.Exit(1)
 
+    miniface_prompt_path = Path(f"{PACKAGE_DIR}/sdk/llm/prompts/adaos_skills_miniface.md")
+    if not miniface_prompt_path.exists():
+        typer.echo(f"[red]{_('cli.llm.prep.template_miniface_missing')}[/red]")
+        raise typer.Exit(1)
+
     # Подставляем запрос пользователя
-    prompt = base_prompt_path.read_text(encoding="utf-8").replace("<<<USER_REQUEST>>>", user_request)
+    prompt = (
+        base_prompt_path.read_text(encoding="utf-8").replace("<<<USER_REQUEST>>>", user_request).replace("<<<ADAOS_MINIFACE>>>", miniface_prompt_path.read_text(encoding="utf-8"))
+    )
 
     # Путь к файлу навыка
     out_dir = Path(SKILLS_DIR) / skill_name / "prep"
@@ -33,7 +40,7 @@ def build_skill(skill_name: str, user_request: str):
     """
     Build skill prompt based on user request and existing prep_result.json
     """
-    base_prompt_path = Path(f"{PACKAGE_DIR}/llm/prompts/skill_request.md")
+    base_prompt_path = Path(f"{PACKAGE_DIR}/sdk/llm/prompts/skill_request.md")
     if not base_prompt_path.exists():
         typer.echo(f"[red]{_('cli.llm.skill.template_missing')}[/red]")
         raise typer.Exit(1)
