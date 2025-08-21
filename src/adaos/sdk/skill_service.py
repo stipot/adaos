@@ -86,7 +86,7 @@ def _ensure_git_identity(repo: Repo):
         repo.config_writer().set_value("user", "email", os.environ.get("GIT_AUTHOR_EMAIL", "bot@example.com")).release()
 
 
-def create_skill(skill_name: str, template_name: str = "basic") -> str:
+def create_skill(skill_name: str, template_name: str = "demo_skill") -> str:
     repo = _ensure_repo()
     _ensure_git_identity(repo)
     skill_subdir = _skill_subdir(skill_name)

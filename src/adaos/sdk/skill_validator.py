@@ -4,9 +4,10 @@ import os, sys, json, subprocess, importlib.util
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+import copy
 
 import yaml
-from jsonschema import validate as js_validate, Draft202012Validator, ValidationError
+from jsonschema import validate as js_validate, Draft202012Validator, ValidationError, Draft7Validator
 
 from adaos.sdk.context import get_current_skill, set_current_skill
 from adaos.sdk.decorators import resolve_tool, _SUBSCRIPTIONS  # реестр подписок из декораторов
@@ -41,6 +42,40 @@ def _read_yaml(path: Path) -> Dict[str, Any]:
         raise RuntimeError(f"failed to read yaml: {e}")
 
 
+def _normalize_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Подставляем дефолты для опциональных полей и приводим типы:
+    - dependencies         → []
+    - events               → {}
+      - events.subscribe   → []
+      - events.publish     → []
+    - tools                → []
+    - exports              → {}
+      - exports.tools      → []
+    """
+    s = copy.deepcopy(spec or {})
+    # простые поля
+    if s.get("description") is None:
+        s["description"] = ""
+    # массивы/объекты
+    if not isinstance(s.get("dependencies"), list):
+        s["dependencies"] = []
+    if not isinstance(s.get("tools"), list):
+        s["tools"] = []
+    if not isinstance(s.get("exports"), dict):
+        s["exports"] = {}
+    if not isinstance(s["exports"].get("tools"), list):
+        s["exports"]["tools"] = []
+    # events
+    if not isinstance(s.get("events"), dict):
+        s["events"] = {}
+    if not isinstance(s["events"].get("subscribe"), list):
+        s["events"]["subscribe"] = []
+    if not isinstance(s["events"].get("publish"), list):
+        s["events"]["publish"] = []
+    return s
+
+
 def _static_checks(skill_dir: Path, install_mode: bool) -> List[Issue]:
     issues: List[Issue] = []
     # 1) skill.yaml
@@ -48,7 +83,8 @@ def _static_checks(skill_dir: Path, install_mode: bool) -> List[Issue]:
     if not sy.exists():
         issues.append(Issue("error", "missing.skill_yaml", "skill.yaml not found", str(sy)))
         return issues
-    data = _read_yaml(sy)
+    raw = _read_yaml(sy)
+    data = _normalize_spec(raw)
     # 2) схема
     try:
         schema = _load_schema()
@@ -128,7 +164,7 @@ print(json.dumps({{"ok": True, "tools": exports, "subs": subs}}))
         return issues
 
     # Сверка с skill.yaml
-    data = _read_yaml(skill_dir / "skill.yaml")
+    data = _normalize_spec(_read_yaml(skill_dir / "skill.yaml"))
     declared_tools = [t.get("name") for t in (data.get("tools") or []) if isinstance(t, dict)]
     exported_tools = set(payload.get("tools") or [])
     for name in declared_tools:
