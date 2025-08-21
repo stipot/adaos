@@ -42,8 +42,10 @@ def create_command(skill_name: str, template: str = typer.Option("basic", "--tem
 @app.command("push")
 def push_command(skill_name: str, message: str = typer.Option(_("skill.push_message"), "--message", "-m", help=_("cli.commit_message.help"))):
     """Отправить изменения навыка в monorepo"""
-    set_current_skill(skill_name)
-    typer.echo(push_skill(skill_name, message))
+    if not set_current_skill(skill_name):
+        typer.echo(f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]")
+    else:
+        typer.echo(push_skill(skill_name, message))
 
 
 @app.command("pull")
@@ -55,8 +57,10 @@ def pull_command(skill_name: str):
 @app.command("update")
 def update_command(skill_name: str):
     """Обновить навык из monorepo"""
-    set_current_skill(skill_name)
-    typer.echo(update_skill())
+    if not set_current_skill(skill_name):
+        typer.echo(f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]")
+    else:
+        typer.echo(update_skill())
 
 
 @app.command("request")
@@ -150,14 +154,18 @@ def install_command(
 @app.command("uninstall")
 def uninstall_command(skill_name: str):
     """Удалить навык у пользователя"""
-    set_current_skill(skill_name)
-    typer.echo(uninstall_skill(skill_name))
+    if not set_current_skill(skill_name):
+        typer.echo(f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]")
+    else:
+        typer.echo(uninstall_skill(skill_name))
 
 
 @app.command("prep")
 def prep_command(skill_name: str):
     """Запуск стадии подготовки (discover) для навыка"""
-    set_current_skill(skill_name)
+    if not set_current_skill(skill_name):
+        typer.echo(f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]")
+        raise typer.Exit(code=1)
     skill_path = get_current_skill().path
 
     prep_script = skill_path / "prep" / "prepare.py"
@@ -189,7 +197,8 @@ def run_skill(
     wait_notify: bool = typer.Option(False, "--wait-notify", help="Дождаться первого ui.notify и вывести его"),
     timeout: float = typer.Option(2.0, "--timeout", help="Таймаут ожидания ui.notify, сек."),
 ):
-    set_current_skill(skill_name)
+    if not set_current_skill(skill_name):
+        typer.echo(f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]")
 
     # Устанавливаем зависимости перед запуском
     install_skill_dependencies(get_current_skill().path)

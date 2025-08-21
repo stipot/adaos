@@ -11,8 +11,10 @@ from adaos.agent.audio.tts.native_tts import NativeTTS
 # наши роутеры
 from adaos.api import tool_bridge
 from adaos.api import subnet_api
+from adaos.api import observe_api
 from adaos.api import node_api
 from adaos.agent.core.lifecycle import run_boot_sequence, shutdown, is_ready
+from adaos.agent.core.observe import start_observer, stop_observer, attach_http_trace_headers
 
 app: FastAPI  # объявим ниже
 
@@ -20,6 +22,7 @@ app: FastAPI  # объявим ниже
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # STARTUP
+    await start_observer()
     await run_boot_sequence(app)
 
     # Диагностика: распечатать все маршруты
@@ -32,17 +35,8 @@ async def lifespan(app: FastAPI):
     print()
 
     yield
-    # SHUTDOWN — если нужно:
-    # from adaos.agent.core.lifecycle import shutdown
-    # await shutdown()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # startup
-    await run_boot_sequence(app)
-    yield
     # shutdown
+    await stop_observer()
     await shutdown()
 
 
@@ -50,6 +44,7 @@ app = FastAPI(title="AdaOS API", version="0.1.0", lifespan=lifespan)
 app.include_router(tool_bridge.router, prefix="/api")
 app.include_router(subnet_api.router, prefix="/api")
 app.include_router(node_api.router, prefix="/api")
+app.include_router(observe_api.router, prefix="/api")
 
 
 # --- базовые эндпоинты (для проверки, что всё живо) ---

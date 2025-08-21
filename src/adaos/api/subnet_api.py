@@ -16,7 +16,7 @@ from adaos.agent.core.subnet_registry import (
     LEASE_SECONDS_DEFAULT,
 )
 
-from adaos.sdk.bus import emit
+import adaos.sdk.bus as bus
 
 router = APIRouter()
 
@@ -77,7 +77,7 @@ async def register(body: RegisterRequest):
 
     # Сигнализируем о появлении ноды (node.up)
     if was is None or (isinstance(was, dict) and was.get("status") != "up"):
-        await emit("net.subnet.node.up", {"node_id": body.node_id}, source="subnet_api", actor="system")
+        await bus.emit("net.subnet.node.up", {"node_id": body.node_id}, source="subnet_api", actor="system")
 
     return RegisterResponse(ok=True, lease_seconds=LEASE_SECONDS_DEFAULT)
 
@@ -99,7 +99,7 @@ async def heartbeat(body: HeartbeatRequest):
 
     # Если статус был 'down' и поднялся в 'up' — шлём node.up
     if before and isinstance(before, dict) and before.get("status") == "down" and info.status == "up":
-        await emit("net.subnet.node.up", {"node_id": body.node_id}, source="subnet_api", actor="system")
+        await bus.emit("net.subnet.node.up", {"node_id": body.node_id}, source="subnet_api", actor="system")
 
     return HeartbeatResponse(ok=True, lease_seconds=LEASE_SECONDS_DEFAULT)
 
@@ -112,7 +112,7 @@ async def deregister(body: DeregisterRequest):
         raise HTTPException(status_code=403, detail="only hub node accepts deregistration")
     existed = registry_unregister(body.node_id)
     if existed:
-        await emit("net.subnet.node.down", {"node_id": body.node_id}, source="subnet_api", actor="system")
+        await bus.emit("net.subnet.node.down", {"node_id": body.node_id}, source="subnet_api", actor="system")
     return {"ok": True, "existed": bool(existed)}
 
 

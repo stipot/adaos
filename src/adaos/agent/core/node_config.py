@@ -10,7 +10,7 @@ CONFIG_PATH = Path(f"{get_base_dir()}/node.yaml")
 
 def _config_path() -> Path:
     """Всегда вычисляем путь динамически из общего контекста."""
-    base = Path(get_base_dir()).expanduser().resolve()
+    base = Path(get_base_dir())
     p = base / "node.yaml"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p

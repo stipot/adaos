@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+# src\adaos\api\tool_bridge.py
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from pydantic import BaseModel
 import importlib.util
 from typing import Any, Dict
@@ -6,6 +7,8 @@ from typing import Any, Dict
 from adaos.api.auth import require_token
 from adaos.sdk.context import get_current_skill, set_current_skill
 from adaos.sdk.decorators import resolve_tool
+from adaos.sdk.context import set_current_skill
+from adaos.agent.core.observe import attach_http_trace_headers
 
 
 router = APIRouter()
@@ -25,7 +28,7 @@ class ToolCall(BaseModel):
 
 
 @router.post("/tools/call", dependencies=[Depends(require_token)])
-async def call_tool(body: ToolCall):
+async def call_tool(body: ToolCall, request: Request, response: Response):
     # 1) Разбираем "<skill_name>:<public_tool_name>"
     if ":" not in body.tool:
         raise HTTPException(status_code=400, detail="tool must be in '<skill_name>:<public_tool_name>' format")
@@ -35,7 +38,8 @@ async def call_tool(body: ToolCall):
         raise HTTPException(status_code=400, detail="invalid tool spec")
 
     # 2) Устанавливаем текущий навык на время выполнения запроса
-    set_current_skill(skill_name)
+    if not set_current_skill(skill_name):
+        raise HTTPException(status_code=503, detail=f"The skill {skill_name} is not found")
 
     # 3) Получаем текущий навык (после установки)
     current = get_current_skill()
@@ -50,7 +54,7 @@ async def call_tool(body: ToolCall):
     # 5) Грузим модуль обработчика навыка
     handler_file = current.path / "handlers" / "main.py"
     if not handler_file.exists():
-        raise HTTPException(status_code=404, detail=f"handler not found for skill '{skill_name}'")
+        raise HTTPException(status_code=404, detail=f"skill '{skill_name}' is not installed (handlers/main.py missing)")
 
     mod_name = f"adaos_skill_{skill_name}_handlers_main"
     spec = importlib.util.spec_from_file_location(mod_name, handler_file)
@@ -58,7 +62,10 @@ async def call_tool(body: ToolCall):
         raise HTTPException(status_code=500, detail="failed to load skill module")
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to import skill '{skill_name}': {type(e).__name__}: {e}")
 
     # 6) Ищем инструмент по публичному имени, зарегистрированному @tool("<public_name>")
     fn = resolve_tool(mod_name, public_tool)
@@ -66,9 +73,17 @@ async def call_tool(body: ToolCall):
         raise HTTPException(status_code=404, detail=f"tool '{public_tool}' is not exported by skill '{skill_name}'")
 
     # 7) Вызываем инструмент (sync/async совместимость)
+    # trace_id в HTTP: читаем входной/ставим в ответ
+    trace = attach_http_trace_headers(request.headers, response.headers)
     args = body.arguments or {}
-    result = fn(**args)
-    if hasattr(result, "__await__"):
-        result = await result
+    try:
+        result = fn(**args)
+        if hasattr(result, "__await__"):
+            result = await result
+    except TypeError as e:
+        # частый кейс: некорректные аргументы
+        raise HTTPException(status_code=400, detail=f"invalid arguments: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"tool runtime error: {type(e).__name__}: {e}")
 
-    return {"ok": True, "result": result}
+    return {"ok": True, "result": result, "trace_id": trace}
