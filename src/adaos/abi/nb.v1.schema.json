@@ -1,0 +1,32 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "adaos.nb.v1",
+	"title": "Norm Bundle",
+	"type": "object",
+	"required": ["schema", "id", "device_class"],
+	"properties": {
+		"schema": { "const": "adaos.nb.v1" },
+		"id": { "type": "string" },
+		"device_class": { "type": "string" },
+		"os": { "type": "object", "additionalProperties": true },
+		"resources": { "type": "object", "additionalProperties": true },
+		"endpoints": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["proto"],
+				"properties": {
+					"proto": { "type": "string" },
+					"base": { "type": "string" },
+					"topic_base": { "type": "string" }
+				},
+				"additionalProperties": true
+			}
+		},
+		"capabilities": { "type": "array", "items": { "type": "object" } },
+		"skills": { "type": "object", "additionalProperties": true },
+		"features": { "type": "array", "items": { "type": "string" } },
+		"latent": { "type": "object", "additionalProperties": true }
+	},
+	"additionalProperties": false
+}

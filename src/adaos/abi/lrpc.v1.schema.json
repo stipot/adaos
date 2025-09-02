@@ -1,0 +1,21 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "adaos.lrpc.v1",
+	"title": "Latent RPC Packet",
+	"type": "object",
+	"required": ["schema", "cb_ref", "op_code"],
+	"properties": {
+		"schema": { "const": "adaos.lrpc.v1" },
+		"cb_ref": { "type": "string" },
+		"adapter": { "type": "string" },
+		"op_code": { "type": "integer", "minimum": 0 },
+		"arg_slots": {
+			"type": "array",
+			"items": { "type": "integer", "minimum": 0 }
+		},
+		"resid": { "type": "object", "additionalProperties": true },
+		"rid": { "type": "string" },
+		"qos": { "type": "object", "additionalProperties": true }
+	},
+	"additionalProperties": false
+}
