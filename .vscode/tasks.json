@@ -2,6 +2,23 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "AdaOS:node1",
+			"type": "shell",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"command": "${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8777",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "AdaOS:node2",
+			"type": "shell",
+			"command": "$env:ADAOS_BASE_DIR_SUFFIX='_1';${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8778",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
 			"label": "redis:docker",
 			"type": "shell",
 			"command": "docker run --rm -p 6379:6379 --name inimatic-redis redis:7-alpine",
@@ -31,7 +48,7 @@
 			"label": "backend:ts-node",
 			"type": "shell",
 			"options": {
-				"cwd": "${workspaceFolder}/src/adaos/integrations/inimatic/backend"
+				"cwd": "${workspaceFolder}/src/adaos/integrations/inimatic"
 			},
 			"command": "npm",
 			"args": ["run", "start:api-dev"],
