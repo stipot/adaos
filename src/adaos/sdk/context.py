@@ -15,6 +15,7 @@ class EnvironmentContext:
         self.package_dir = Path(__file__).resolve().parent.parent  # adaos/
         self.env_type = os.getenv("ENV_TYPE", "prod")
         self.override_base_suffix = os.getenv("ADAOS_BASE_DIR_SUFFIX", "")
+        print("ADAOS_BASE_DIR_SUFFIX", self.override_base_suffix)
         """ Вариация окружения для разных нод в одной кодовой базе """
         self.override_base = os.getenv("ADAOS_BASE_DIR")
 

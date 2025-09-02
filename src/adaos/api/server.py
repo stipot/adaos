@@ -1,6 +1,7 @@
 # src/adaos/api/server.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import platform, time
 
@@ -45,7 +46,13 @@ app.include_router(tool_bridge.router, prefix="/api")
 app.include_router(subnet_api.router, prefix="/api")
 app.include_router(node_api.router, prefix="/api")
 app.include_router(observe_api.router, prefix="/api")
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200", "http://127.0.0.1:4200", "*"],  # под dev и/или произвольный origin
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-AdaOS-Token"],
+    allow_credentials=False,  # токен идёт в заголовке, куки не нужны
+)
 
 # --- базовые эндпоинты (для проверки, что всё живо) ---
 
