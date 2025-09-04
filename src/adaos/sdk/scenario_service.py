@@ -230,7 +230,6 @@ def pull_scenario(sid: str) -> str:
         pass
 
     p = scenario_proto_path(sid)
-    print("p_log", p, _agent.scenarios_dir, _agent.monorepo_scens_url)
     if not p.exists():
         return f"[red]scenario '{sid}' not found in repo[/red]"
     data = json.loads(p.read_text(encoding="utf-8"))

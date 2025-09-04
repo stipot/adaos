@@ -180,7 +180,6 @@ def pull_repo(repo_path: Union[str, Path]) -> None:
 # - --------------
 def _sync_sparse_checkout(repo: Repo, el_list, installed=[]):
     installed = [s["name"] for s in el_list if s.get("installed", 1)] + installed
-    print("installed_log", installed)
     repo.git.sparse_checkout("set", *installed)
 
 
