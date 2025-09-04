@@ -13,7 +13,7 @@ from adaos.sdk.utils.setup_env import prepare_environment
 from adaos.sdk.context import BASE_DIR
 
 # общие подкоманды
-from adaos.sdk.cli.commands import db, monitor, skill, runtime, llm, tests as tests_cmd, api
+from adaos.sdk.cli.commands import monitor, skill, runtime, llm, tests as tests_cmd, api, scenario
 
 # интеграции
 from adaos.sdk.cli.commands import native
@@ -109,13 +109,13 @@ def switch_stt(mode: str = typer.Argument(..., help="vosk | rhasspy | ovos | nat
 
 
 # Подкоманды
-app.add_typer(db.app, name="db", help=_("cli.help_db"))
 app.add_typer(skill.app, name="skill", help=_("cli.help_skill"))
 app.add_typer(tests_cmd.app, name="tests", help=_("cli.help_test"))
 app.add_typer(runtime.app, name="runtime", help=_("cli.help_runtime"))
 app.add_typer(llm.app, name="llm", help=_("cli.help_llm"))
 app.add_typer(api.app, name="api")
 app.add_typer(monitor.app, name="monitor")
+app.add_typer(scenario.scenario_app, name="scenario")
 
 # ---- Фильтрация интеграций по ENV ----
 _tts = _read("ADAOS_TTS", "native")
