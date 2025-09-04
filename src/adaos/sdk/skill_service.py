@@ -9,16 +9,17 @@ import subprocess
 import importlib.util
 from typing import List, Optional
 import json
-
+from adaos.sdk.skill_validator import validate_skill
 from adaos.sdk.skills.i18n import _
 from adaos.sdk.context import _agent, set_current_skill, get_current_skill_path, get_current_skill  # новый AgentContext (глобальный)
 from adaos.agent.db.sqlite import (
-    add_or_update_skill,
+    add_or_update_entity,
     update_skill_version,
-    list_skills,
+    list_entities,
     set_installed_flag,
 )
-from adaos.sdk.utils.git_utils import _ensure_repo
+from adaos.sdk.utils.git_utils import _ensure_in_sparse
+from adaos.sdk.utils import git_utils as _git
 from adaos.sdk.skill_validator import validate_skill
 
 CATALOG_FILENAME = "skills.yaml"  # имя файла каталога в корне монорепо
@@ -51,7 +52,7 @@ def _read_catalog(repo: Repo) -> List[str]:
 
 
 def install_all_skills(limit: Optional[int] = None) -> List[str]:
-    repo = _ensure_repo()
+    repo = _git._ensure_repo(_agent.skills_dir, _agent.monorepo_url)
     names = _read_catalog(repo)
     if limit:
         names = names[:limit]
@@ -64,17 +65,12 @@ def install_all_skills(limit: Optional[int] = None) -> List[str]:
         except Exception as e:
             print(f"[yellow]Skip installing {name}: {e}[/yellow]")
 
-    _sync_sparse_checkout(repo)
+    _git._sync_sparse_checkout(repo, list_entities())
     return installed
 
 
 def _skill_subdir(skill_name: str) -> str:
     return skill_name
-
-
-def _sync_sparse_checkout(repo: Repo, installed=[]):
-    installed = [s["name"] for s in list_skills() if s.get("installed", 1)] + installed
-    repo.git.sparse_checkout("set", *installed)
 
 
 def _ensure_in_sparse(repo: Repo, path: str):
@@ -90,9 +86,9 @@ def _ensure_in_sparse(repo: Repo, path: str):
     try:
         repo.git.sparse_checkout("add", path)
     except Exception:
-        # старые git без 'add' могут требовать set — подхватим через _sync_sparse_checkout
+        # старые git без 'add' могут требовать set — подхватим через _git._sync_sparse_checkout
         # но сначала расширим текущий список
-        _sync_sparse_checkout(repo, installed=[path])
+        _git._sync_sparse_checkout(repo, list_entities(), installed=[path])
 
 
 def _ensure_git_identity(repo: Repo):
@@ -105,7 +101,7 @@ def _ensure_git_identity(repo: Repo):
 
 
 def create_skill(skill_name: str, template_name: str = "demo_skill") -> str:
-    repo = _ensure_repo()
+    repo = _git._ensure_repo(_agent.skills_dir, _agent.monorepo_url)
     _ensure_git_identity(repo)
     skill_subdir = _skill_subdir(skill_name)
     skill_path = _agent.skills_dir / skill_subdir
@@ -138,23 +134,23 @@ def create_skill(skill_name: str, template_name: str = "demo_skill") -> str:
         with open(yaml_path, "r", encoding="utf-8") as f:
             version = yaml.safe_load(f).get("version", "1.0")
 
-    add_or_update_skill(skill_name, version, _agent.monorepo_url, installed=1)
+    add_or_update_entity("skill", skill_name, version, _agent.monorepo_url, installed=1)
     if not set_current_skill(skill_name):
         return f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
 
     report = validate_skill(skill_name, install_mode=True, probe_tools=False)
     if not report.ok:
         # откатываем флаг installed
-        set_installed_flag(skill_name, installed=0)
+        set_installed_flag("skill", skill_name, installed=0)
         details = "; ".join(f"{i.code}: {i.message}" for i in report.issues if i.level == "error")
         return f"[red]{_('skill.install.validation_failed')}[/red] {details}"
     return f"[green]{_('skill.created', skill_name=skill_name)}[/green]"
 
 
 def push_skill(skill_name, message: str = None) -> str:
-    repo = _ensure_repo()
+    repo = _git._ensure_repo(_agent.skills_dir, _agent.monorepo_url)
     _ensure_git_identity(repo)
-    _sync_sparse_checkout(repo)
+    _git._sync_sparse_checkout(repo, list_entities())
     _ensure_in_sparse(repo, skill_name)  # ДОБАВЛЯЕМ текущий навык в sparse
     repo.git.add("--", skill_name)  # '--' защитит от совпадения с опциями
 
@@ -171,25 +167,28 @@ def push_skill(skill_name, message: str = None) -> str:
 
 
 def pull_skill(skill_name: str) -> str:
-    repo = _ensure_repo()
-    set_installed_flag(skill_name, installed=1)
-    _sync_sparse_checkout(repo, installed=[skill_name])
-    repo.remotes.origin.pull()
+    repo = _git._ensure_repo(_agent.skills_dir, _agent.monorepo_url)
+    set_installed_flag("skill", skill_name, installed=1)
+    _git._sync_sparse_checkout(repo, list_entities(), installed=[skill_name])
+    try:
+        repo.remotes.origin.pull(rebase=False)
+    except Exception:
+        pass
 
     yaml_path = _agent.skills_dir / skill_name / "skill.yaml"
     version = "unknown"
-    if yaml_path.exists():
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            version = yaml.safe_load(f).get("version", "unknown")
-    add_or_update_skill(skill_name, version, _agent.monorepo_url, installed=1)
+    if not yaml_path.exists():
+        return f"[red]skill '{skill_name}' not found in repo[/red]"
+    with open(yaml_path, "r", encoding="utf-8") as f:
+        version = yaml.safe_load(f).get("version", "unknown")
+    add_or_update_entity("skill", skill_name, version, _agent.monorepo_url, installed=1)
     if not set_current_skill(skill_name):
         return f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
-    from adaos.sdk.skill_validator import validate_skill
 
     report = validate_skill(skill_name, install_mode=True, probe_tools=False)
     if not report.ok:
         # откатываем флаг installed
-        set_installed_flag(skill_name, installed=0)
+        set_installed_flag("skill", skill_name, installed=0)
         details = "; ".join(f"{i.code}: {i.message}" for i in report.issues if i.level == "error")
         return f"[red]{_('skill.install.validation_failed')}[/red] {details}"
     return f"[green]{_('skill.pulled', skill_name=skill_name, version=version)}[/green]"
@@ -198,8 +197,8 @@ def pull_skill(skill_name: str) -> str:
 def update_skill() -> str:
     if not get_current_skill():
         raise RuntimeError("No current skill set")
-    repo = _ensure_repo()
-    _sync_sparse_checkout(repo)
+    repo = _git._ensure_repo(_agent.skills_dir, _agent.monorepo_url)
+    _git._sync_sparse_checkout(repo, list_entities())
     repo.remotes.origin.pull()
 
     yaml_path = get_current_skill().path / "skill.yaml"
@@ -217,9 +216,9 @@ def install_skill(skill_name: str) -> str:
 
 
 def uninstall_skill(skill_name: str) -> str:
-    repo = _ensure_repo()
-    set_installed_flag(skill_name, installed=0)
-    _sync_sparse_checkout(repo)
+    repo = _git._ensure_repo(_agent.skills_dir, _agent.monorepo_url)
+    set_installed_flag("skill", skill_name, installed=0)
+    _git._sync_sparse_checkout(repo, list_entities())
     return f"[green]{_('skill.uninstalled', skill_name=skill_name)}[/green]"
 
 

@@ -20,7 +20,7 @@ class IngestBatch(BaseModel):
     events: List[Dict[str, Any]]
 
 
-@router.post("/observe/ingest", dependencies=[Depends(require_token)])
+@router.post("/ingest", dependencies=[Depends(require_token)])
 async def observe_ingest(batch: IngestBatch):
     """Приём батчей логов с member-нод (hub-only). Также публикуем в SSE."""
     conf = load_config()
@@ -41,7 +41,7 @@ async def observe_ingest(batch: IngestBatch):
     return {"ok": True, "ingested": ingested}
 
 
-@router.get("/observe/tail", dependencies=[Depends(require_token)])
+@router.get("/tail", dependencies=[Depends(require_token)])
 async def observe_tail(lines: int = 200, topic_prefix: str | None = None, node_id: str | None = None):
     """Последние N строк, можно фильтровать по topic_prefix и node_id (hub/member)."""
     logf = _log_path()
@@ -116,7 +116,7 @@ async def _sse_iter(topic_prefix: str | None, node_id: str | None, since: float 
         return
 
 
-@router.get("/observe/stream")
+@router.get("/stream")
 async def observe_stream(
     topic_prefix: str | None = None, node_id: str | None = None, since: float | None = None, replay_lines: int | None = None, dependencies=[Depends(require_token)]
 ):
@@ -135,7 +135,7 @@ async def observe_stream(
     return StreamingResponse(_sse_iter(topic_prefix, node_id, since, replay_lines), media_type="text/event-stream", headers=headers)
 
 
-@router.post("/observe/test", dependencies=[Depends(require_token)])
+@router.post("/test", dependencies=[Depends(require_token)])
 async def observe_test(kind: str = "ping", note: str | None = None, topic: str | None = None):
     """
     Сгенерировать тестовое событие на BUS без навыков.

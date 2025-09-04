@@ -3,7 +3,10 @@ import sqlite3
 import os
 from pathlib import Path
 from datetime import datetime
-from adaos.sdk.context import DB_PATH, SKILLS_DIR
+from adaos.sdk.context import DB_PATH, SKILLS_DIR, get_base_dir
+from pathlib import Path
+
+SCENARIOS_DIR = Path(get_base_dir()) / "scenarios"
 
 _SCHEMA_SQL = (
     """
@@ -26,11 +29,32 @@ _SCHEMA_SQL = (
         created_at TIMESTAMP
     );
     """,
+    """
+    CREATE TABLE IF NOT EXISTS scenarios (
+        id INTEGER PRIMARY KEY,
+        name TEXT UNIQUE,
+        active_version TEXT,
+        repo_url TEXT,
+        installed BOOLEAN DEFAULT 1,
+        last_updated TIMESTAMP
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS scenario_versions (
+        id INTEGER PRIMARY KEY,
+        scenario_name TEXT,
+        version TEXT,
+        path TEXT,
+        status TEXT,
+        created_at TIMESTAMP
+    );
+    """,
 )
 
 
 def _ensure_dirs():
     Path(SKILLS_DIR).mkdir(parents=True, exist_ok=True)
+    SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)  # NEW
     db_parent = Path(DB_PATH).parent
     db_parent.mkdir(parents=True, exist_ok=True)
 
@@ -77,11 +101,16 @@ def init_db():
     conn.close()
 
 
-def set_installed_flag(name: str, installed: int):
-    """Устанавливает или сбрасывает флаг installed для навыка"""
+def set_installed_flag(el_type: str, name: str, installed: int):
+    """Устанавливает или сбрасывает флаг installed для навыка или сценария
+    @ type = "skill" | "scenario"
+    """
+    sql: str = "UPDATE skills SET installed=?, last_updated=CURRENT_TIMESTAMP WHERE name=?"
+    if el_type == "scenario":
+        sql = "UPDATE scenarios SET installed=?, last_updated=CURRENT_TIMESTAMP WHERE name=?"
     conn = _connect()
     cursor = conn.cursor()
-    cursor.execute("UPDATE skills SET installed=? WHERE name=?", (installed, name))
+    cursor.execute(sql, (installed, name))
     conn.commit()
     conn.close()
 
@@ -133,16 +162,25 @@ def add_skill_version(skill_name: str, version: str, path: str, status: str = "a
     conn.close()
 
 
-def add_or_update_skill(name: str, version: str, repo_url: str, installed: int):
-    conn = _connect()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
+def add_or_update_entity(entity: str, name: str, version: str, repo_url: str, installed: int):
+    """entity="skill" | "scenario" """
+    sql = """
         INSERT INTO skills (name, active_version, repo_url, installed)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(name)
         DO UPDATE SET active_version = excluded.active_version, repo_url = excluded.repo_url
-    """,
+        """
+    if entity == "scenario":
+        sql = """
+        INSERT INTO scenarios (name, active_version, repo_url, installed, last_updated)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(name)
+        DO UPDATE SET active_version = excluded.active_version, repo_url = excluded.repo_url, installed = excluded.installed, last_updated = excluded.last_updated
+        """
+    conn = _connect()
+    cursor = conn.cursor()
+    cursor.execute(
+        sql,
         (name, version, repo_url, installed),
     )
     conn.commit()
@@ -166,10 +204,13 @@ def get_skill(name: str):
     return {"name": row[0], "active_version": row[1], "repo_url": row[2]} if row else None
 
 
-def list_skills():
+def list_entities(entity_type: str = "skill"):
+    sql = "SELECT name, active_version, repo_url, installed FROM skills"
+    if entity_type == "scenario":
+        sql = "SELECT name, active_version, repo_url, installed FROM scenarios"
     conn = _connect()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, active_version, repo_url, installed FROM skills")
+    cursor.execute(sql)
     rows = cursor.fetchall()
     conn.close()
     return [{"name": r[0], "active_version": r[1], "repo_url": r[2], "installed": r[3]} for r in rows]

@@ -7,14 +7,14 @@
 			"options": {
 				"cwd": "${workspaceFolder}"
 			},
-			"command": "${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8777",
+			"command": "${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8777 --reload",
 			"isBackground": true,
 			"problemMatcher": []
 		},
 		{
 			"label": "AdaOS:node2",
 			"type": "shell",
-			"command": "$env:ADAOS_BASE_DIR_SUFFIX='_1';${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8778",
+			"command": "$env:ADAOS_BASE_DIR_SUFFIX='_1';${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8778 --reload",
 			"isBackground": true,
 			"problemMatcher": []
 		},

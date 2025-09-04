@@ -34,7 +34,7 @@ class RoleChangeResponse(BaseModel):
     diagnostics: dict
 
 
-@router.get("/node/status", response_model=NodeStatus, dependencies=[Depends(require_token)])
+@router.get("/status", response_model=NodeStatus, dependencies=[Depends(require_token)])
 async def node_status():
     conf = load_config()
     return NodeStatus(
@@ -46,7 +46,7 @@ async def node_status():
     )
 
 
-@router.post("/node/role", response_model=RoleChangeResponse, dependencies=[Depends(require_token)])
+@router.post("/role", response_model=RoleChangeResponse, dependencies=[Depends(require_token)])
 async def node_change_role(req: Request, payload: RoleChangeRequest):
     """
     Переключение роли узла на лету.

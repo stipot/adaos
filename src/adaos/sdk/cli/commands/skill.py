@@ -11,7 +11,7 @@ from adaos.sdk.llm.llm_client import generate_test_yaml, generate_skill
 from adaos.agent.core.test_runner import TestRunner
 from adaos.sdk.llm.process_llm_output import process_llm_output
 from adaos.sdk.utils.git_utils import commit_skill_changes, rollback_last_commit
-from adaos.agent.db.sqlite import list_skills, get_skill_versions, add_skill_version, list_versions
+from adaos.agent.db.sqlite import list_entities, get_skill_versions, add_skill_version, list_versions
 from adaos.sdk.skills.i18n import _
 from adaos.sdk.context import set_current_skill, get_current_skill
 from adaos.sdk.skill_service import (
@@ -98,7 +98,7 @@ def request_skill(user_request: str):
 @app.command("list")
 def list_installed_skills_cmd(json_output: bool = typer.Option(False, "--json", help="Вывод в JSON")):
     """Список установленных навыков"""
-    skills = [s for s in list_skills() if s.get("installed", 1)]
+    skills = [s for s in list_entities() if s.get("installed", 1)]
     if json_output:
         payload = {"skills": [{"name": s["name"], "version": s.get("active_version") or "unknown"} for s in skills]}
         print(json.dumps(payload, ensure_ascii=False))

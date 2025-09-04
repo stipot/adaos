@@ -1,4 +1,4 @@
-You generate the **discovery/prep** artifacts for an AdaOS skill.
+You generate **discovery/prep** artifacts for an AdaOS skill.
 
 Return **only files** using this exact multi-file protocol (no extra text):
 
@@ -24,11 +24,11 @@ Return **only files** using this exact multi-file protocol (no extra text):
 
 ## Task
 
-From the user's goal below, produce:
+From the user’s goal below, produce:
 
-1) `prep/prepare.py` — a single-file Python script that runs the preparation stage.
-2) `skill_prompt_data.md` — a concise markdown summary of collected facts for the *next* LLM step (skill coding).
-3) `skill.yaml.suggested` — a **minimal, valid** AdaOS manifest that passes validation and includes any runtime **dependencies** required by `prepare.py` (e.g., `requests>=2.31`).
+1) `prep/prepare.py` — single-file Python script for the preparation stage.
+2) `skill_prompt_data.md` — concise markdown with facts for the next LLM step (skill coding).
+3) `skill.yaml.suggested` — minimal valid AdaOS manifest, including any runtime **dependencies** required by `prepare.py`.
 
 **User goal:**  
 `<<<USER_REQUEST>>>`
@@ -56,30 +56,39 @@ from adaos.sdk.skills.i18n import _  # i18n keys required
 
 def run_prep(skill_path: Path) -> Dict[str, Any]:
     """
-    1) discover env/config
-    2) test prerequisites (small timeouts)
-    3) write artifacts into skill_path / 'prep'
-    4) return the prep_result dict
+    1) discover env/config (prefer stored values),
+    2) test prerequisites (timeouts ≤ 5s),
+    3) write artifacts to skill_path/'prep',
+    4) return the prep_result dict.
     """
     ...
     return prep_result
 
 def lang_res() -> Dict[str, str]:
-    # return English defaults for all i18n keys used in prompts/logs
+    # English defaults for all i18n keys used
     return {...}
 ````
 
 Rules:
 
-* All user-facing text (input/print/log) goes through i18n `_('key')`. Keep keys stable and short.
-* Create `prep_dir = skill_path / "prep"`; ensure it exists.
-* Log into `prep_dir / "prep.log"`.
-* Network: use small timeouts (≤ 5s), `requests` allowed, otherwise stdlib only.
-* Interactivity (`input`) only if necessary and after trying sensible defaults.
+* All user‑facing text (input/print/log) via i18n `_('key')`. **Keys must be short snake‑case** (e.g., `prep.start`, `prep.ask.token`, `prep.err.timeout`), not English sentences.
+* Create `prep_dir = skill_path / "prep"` and ensure it exists.
+* Logging: use a **dedicated logger** with `FileHandler` to `prep_dir / "prep.log"`; do **not** call `logging.basicConfig`.
+* Persistence: use AdaOS helpers, **not** `os.environ`:
 
-Write **both** files at the end:
+  ```python
+  from adaos.sdk.skill_env import get_env, set_env
+  ```
 
-`prep_result.json` (to `prep_dir`) — strict shape:
+  Prefer existing values (`get_env`) and store discovered ones (`set_env`).
+* Network: only stdlib + `requests`; timeouts ≤ 5s; robust JSON handling; fail fast with clear i18n reasons.
+* Interactivity: ask via `input()` **only if necessary**; keep prompts minimal. Sending a **test message** requires explicit user consent (record the decision).
+* Secrets: **never** print or write full secrets to human‑readable files; mask tokens in any markdown/log output. **Do not embed tokens in URLs** in any output.
+* Always write both files and return the dict.
+
+Artifacts written by `run_prep` into `prep_dir`:
+
+* `prep_result.json` — exact shape:
 
 ```json
 {
@@ -93,9 +102,14 @@ Write **both** files at the end:
 }
 ```
 
-Notes: `resources` may be `{}`, `tested_hypotheses` may be `[]`.
+Notes: `resources` may be `{}`; `tested_hypotheses` may be `[]`. Use stable names like `token.valid`, `message.send`, with appropriate `critical`.
 
-`skill_prompt_data.md` (root, **NOT** in `prep/`) — markdown for the next LLM step:
+* Include "reason" ONLY when status="failed".
+* Always include "tested_hypotheses" with explicit "critical" flags; record both successes and relevant failures.
+
+Additionally, write (to **skill root**, not in `prep/`):
+
+* `skill_prompt_data.md` — markdown:
 
 ```
 # Skill Prep: Collected Facts
@@ -104,19 +118,26 @@ Notes: `resources` may be `{}`, `tested_hypotheses` may be `[]`.
 <short restatement>
 
 ## Discovered Resources
-- **<key>**: <value>
+- **<key>**: <masked or non‑sensitive value>
 
 ## Tested Hypotheses
 - ✅ <name>
 - ❌ <name>
 
+## Preparation Status
+- ✅ Successful
+# or
+- ❌ Failed: <reason>
+
 ## Open Questions
-- <optional bullets for next step>
+- <optional bullets>
 ```
+
+Mask secrets; do not include token‑bearing URLs.
 
 ### B) `skill.yaml.suggested`
 
-Provide a **minimal, valid** YAML that passes AdaOS validator (empty skill is OK):
+Minimal valid YAML that passes AdaOS validation:
 
 ```yaml
 name: "<skill_name>"
@@ -127,8 +148,8 @@ runtime:
   python: "3.11"
 
 description: ""
-dependencies: []      # include "requests>=2.31" if used in prepare.py
-events: {}            # or events: { subscribe: [], publish: [] }
+dependencies: []      # include "requests>=2.31" if imported in prepare.py
+events: {}            # or { subscribe: [], publish: [] }
 tools: []
 exports: {}
 ```
@@ -147,3 +168,6 @@ Do **not** invent handlers/tools here — this is prep stage only.
 * For weather: default endpoint `https://api.openweathermap.org/data/2.5/weather`.
 * Try non-interactive probes first; ask via `input()` only if nothing reasonable can be assumed.
 * Normalize/strip user inputs; keep `prep_result.json` deterministic.
+* Validate token with GET <https://api.telegram.org/bot><token>/getMe
+* Optionally discover a chat_id via getUpdates if user left it blank (handle missing fields defensively).
+* Only send a test message after explicit consent.
