@@ -1,0 +1,4 @@
+[submodule "src/adaos/integrations/inimatic"]
+	path = src/adaos/integrations/inimatic
+	url = https://github.com/stipot/inimatic.git
+	branch = AdaOS
