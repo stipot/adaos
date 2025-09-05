@@ -152,27 +152,23 @@ Pop-Location
 # .env (если есть пример)
 if (!(Test-Path ".env") -and (Test-Path ".env.example")) { Copy-Item .env.example .env }
 
-# help-текст, который покажем в новом окне
-$help = @"
-✅ Готово. venv активирован в этом окне.
+
+Write-Host @"
+✅ Готово.
 
 Дальше обычно запускают (в отдельных вкладках/окнах):
-  0) Активируйте виртуальное окружение: .\.venv\Scripts\Activate.ps1
-  1) API
+  1) Активируйте виртуальное окружение: .\.venv\Scripts\Activate.ps1
+  2) CLI
+     adaos --help
+  3) API
      adaos api serve --host 127.0.0.1 --port 8777 --reload
-  2) Backend (Inimatic)
+  4) Backend (Inimatic)
      cd src\adaos\integrations\inimatic
      npm run start:api-dev
-  3) Frontend (Inimatic)
+  5) Frontend (Inimatic)
      cd src\adaos\integrations\inimatic
      npm run start
 Подсказки:
  • Список установленных Python: py -0p
  • Сменить версию venv: удалите .venv и перезапустите bootstrap, выбрав другой Python
 "@
-
-# Открываем новое окно PowerShell с активированным venv и help
-Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", ". .\.venv\Scripts\Activate.ps1; Write-Host @'$help'@ -ForegroundColor Green"
-
-Write-Host "▶ Bootstrap завершён. Открыл новое окно PowerShell с активированным venv и памяткой." -ForegroundColor Cyan
-

@@ -9,6 +9,8 @@ git clone -b rev2026 https://github.com/stipot/adaos.git
 cd adaos
 git submodule update --init --recursive # Веб клиент
 ./tools/bootstrap.ps1
+. .\.venv\Scripts\Activate.ps1
+adaos --help
 ```
 
 ## Использование
