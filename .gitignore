@@ -1,5 +1,6 @@
 Sandbox/voskapi/vosk-model-small-ru-0.22/
 .env
+.venv
 __pycache__/
 commands/__pycache__/
 .adaos/
