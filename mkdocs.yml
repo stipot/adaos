@@ -1,0 +1,125 @@
+strict: true
+site_name: AdaOS
+site_description: "документация проекта AdaOS — агентная OS навыков и сценариев"
+site_url: https://github.com/stipot/adaos
+repo_url: https://github.com/stipot/adaos
+repo_name: stipot/adaos
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/adaos_wb.svg
+  favicon: assets/ADAOS_32_light.png
+  language: ru
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - navigation.top
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotate
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/toggle-switch-off-outline
+        name: Switch to dark mode
+      primary: green
+      accent: yellow
+    - scheme: slate
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to light mode
+      primary: green
+      accent: yellow
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/stipot/adaos
+  alternate:
+    - name: English
+      link: /en/
+      lang: en
+    - name: Русский
+      link: /ru/
+      lang: ru
+
+plugins:
+  - search:
+      lang: [ru, en]
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: ru
+          name: Русский
+          default: true
+        - locale: en
+          name: English
+          nav_translations:
+            "Быстрый старт": "Quickstart"
+            "Архитектура": "Architecture"
+            "Руководства": "Guides"
+            "Справочник": "Reference"
+            "Интеграции": "Integrations"
+            "Безопасность": "Security"
+            "Мониторинг": "Monitoring"
+            "ОС-интерфейсы": "OS Interfaces"
+            "Дорожная карта": "Roadmap"
+            "Глоссарий": "Glossary"
+            "FAQ": "FAQ"
+  - git-revision-date-localized:
+      enable_creation_date: true
+      enable_git_follow: false
+      fallback_to_build_date: true
+      type: date
+
+watch:
+  - src/adaos
+markdown_extensions:
+  - admonition
+  - footnotes
+  - attr_list
+  - tables
+  - def_list
+  - pymdownx.details
+  - pymdownx.mark
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.arithmatex:
+      generic: true
+
+nav:
+  - "Главная": index.md
+  - "Быстрый старт": quickstart.md
+  - "Архитектура":
+      - "Обзор": architecture/overview.md
+  - "Руководства":
+      - "Навыки": guides/skills.md
+      - "Сценарии": guides/scenarios.md
+      - "Тестирование": guides/testing.md
+  - "Справочник":
+      - "CLI": reference/cli.md
+      - "Python API": reference/python.md
+  - "Интеграции":
+      - "Inimatic": integrations/inimatic.md
+  - "Мониторинг":
+      - "Наблюдаемость": monitoring/observability.md
+  - "Дорожная карта": roadmap.md
+
+copyright: |
+  &copy; 2025 AdaOS
