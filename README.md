@@ -5,8 +5,15 @@
 ## Установка
 
 ```bash
-git clone https://github.com/stipot/adaos.git
-pip install -e .
+git clone -b rev2026 https://github.com/stipot/adaos.git
+cd adaos
+git submodule update --init --recursive # Веб клиент
+./tools/bootstrap.ps1
+```
+
+## Использование
+
+```bash
 adaos --help
 adaos skill list
 adaos api serve --host 127.0.0.1 --port 8777
