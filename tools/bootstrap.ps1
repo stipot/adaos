@@ -108,19 +108,45 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Node deps для Inimatic
+# Node deps для Inimatic (robust install с fallback)
 Push-Location $subPath
-Write-Host "▶ Устанавливаю фронтовые зависимости (npm/pnpm)..." -ForegroundColor Cyan
+Write-Host "▶ Устанавливаю фронтовые зависимости..." -ForegroundColor Cyan
+
+$used = ""
 if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+    # pnpm предпочтителен, если уже установлен
     pnpm install
+    $used = "pnpm install"
 } else {
-    if (Test-Path "package-lock.json") { npm ci } else { npm install }
+    $hasLock = Test-Path "package-lock.json"
+    if ($hasLock) {
+        # сначала пробуем строго
+        $ci = $true
+        try {
+            npm ci
+            $used = "npm ci"
+        } catch {
+            $ci = $false
+        }
+        if (-not $ci) {
+            Write-Host "⚠ npm ci не сработал (lock рассинхронизирован). Делаю мягкую установку: npm install" -ForegroundColor Yellow
+            npm install
+            $used = "npm install"
+        }
+    } else {
+        npm install
+        $used = "npm install"
+    }
 }
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
-    Write-Host "⛔ Не удалось установить фронтовые зависимости. Проверь вывод выше." -ForegroundColor Red
+    Write-Host "⛔ Установка фронтовых зависимостей завершилась ошибкой." -ForegroundColor Red
+    Write-Host "   Попробуй удалить node_modules и lock, затем повторить:" -ForegroundColor Yellow
+    Write-Host "     cd $subPath" -ForegroundColor Yellow
+    Write-Host "     rmdir /s /q node_modules; del package-lock.json; npm install" -ForegroundColor Yellow
     exit 1
 }
+Write-Host "✓ Зависимости установлены ($used)" -ForegroundColor Green
 Pop-Location
 
 # .env (если есть пример)
