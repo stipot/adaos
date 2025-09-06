@@ -8,6 +8,7 @@ from adaos.domain import SkillId, SkillMeta
 from adaos.ports.paths import PathProvider
 from adaos.ports.git import GitClient
 from adaos.ports.skills import SkillRepository
+from adaos.services.fs.safe_io import remove_tree
 
 CATALOG_FILE = "skills.yaml"
 MANIFESTS = ("skill.yaml", "manifest.yaml", "adaos.skill.yaml")
@@ -106,8 +107,6 @@ class MonoSkillRepository(SkillRepository):
         return _read_manifest(p)
 
     def remove(self, skill_id: str) -> None:
+        self._ensure()
         p = _safe_join(self._root(), skill_id)
-        if p.exists():
-            import shutil
-
-            shutil.rmtree(p)
+        remove_tree(str(p), fs=self.paths.ctx.fs)

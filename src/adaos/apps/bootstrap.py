@@ -14,6 +14,11 @@ from adaos.services.policy.capabilities import InMemoryCapabilities
 from adaos.services.policy.net import NetPolicy
 from adaos.adapters.git.cli_git import CliGitClient
 from adaos.adapters.git.secure_git import SecureGitClient
+from adaos.services.policy.fs import SimpleFSPolicy
+from adaos.adapters.secrets.keyring_vault import KeyringVault
+from adaos.adapters.secrets.file_vault import FileVault
+from adaos.services.secrets.service import SecretsService
+from adaos.services.secrets.crypto import load_or_create_master
 
 
 class _CtxHolder:
@@ -84,14 +89,65 @@ class _CtxHolder:
         git_base = CliGitClient(depth=1)
         git = SecureGitClient(git_base, net)
 
+        # FS policy: разрешённые корни — только внутри BASE_DIR
+        fs = SimpleFSPolicy()
+        fs.allow_root(paths.base())
+        fs.allow_root(paths.skills_dir())
+        fs.allow_root(paths.scenarios_dir())
+        fs.allow_root(paths.state_dir())
+        fs.allow_root(paths.cache_dir())
+        fs.allow_root(paths.logs_dir())
+
         proc = AsyncProcessManager(bus=bus)
         sql = SQLite(paths)
         kv = SQLiteKV(sql, namespace="adaos")
 
-        class _Nop:
-            pass
+        # Secrets: keyring primary; file vault fallback (ключ в keyring)
+        try:
+            secrets_backend = KeyringVault(profile=settings.profile, kv=kv)
+        except Exception:
+            # file vault (ключ получаем/кладём через keyring, но сам keyring может упасть; тогда ищем ENV)
+            def key_get():
+                try:
+                    import keyring
 
-        return AgentContext(settings=settings, paths=paths, bus=bus, proc=proc, caps=caps, devices=_Nop(), kv=kv, sql=sql, secrets=_Nop(), net=net, updates=_Nop(), git=git)
+                    return (
+                        keyring.get_password(f"adaos:master:{settings.profile}", "vault.key").encode("utf-8")
+                        if keyring.get_password(f"adaos:master:{settings.profile}", "vault.key")
+                        else None
+                    )
+                except Exception:
+                    return None
+
+            def key_set(b: bytes):
+                try:
+                    import keyring
+
+                    keyring.set_password(f"adaos:master:{settings.profile}", "vault.key", b.decode("utf-8"))
+                except Exception:
+                    pass
+
+            secrets_backend = FileVault(base_dir=paths.base(), fs=None if False else SimpleFSPolicy(), key_get=key_get, key_set=key_set)  # fs подменим ниже
+
+        secrets = SecretsService(secrets_backend, caps)
+
+        # capabilities
+        caps.grant("core", "net.git", "skills.manage", "scenarios.manage", "secrets.read", "secrets.write")
+
+        # если backend FileVault — дайте ему fs
+        if isinstance(secrets_backend, FileVault):
+            secrets_backend.fs = fs
+
+        ctx = AgentContext(
+            settings=settings, paths=paths, bus=bus, proc=proc, caps=caps, devices=object(), kv=kv, sql=sql, secrets=secrets, net=net, updates=object(), git=git, fs=fs
+        )
+        # TODO Doc Так ты сможешь делать paths.ctx.fs везде, где есть path
+        if hasattr(paths, "ctx") is False:
+            try:
+                paths.ctx = ctx  # чтобы в адаптерах было paths.ctx.fs
+            except Exception:
+                pass
+        return ctx
 
 
 # публичные функции

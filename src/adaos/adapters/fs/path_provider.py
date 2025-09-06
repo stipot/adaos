@@ -6,8 +6,9 @@ from adaos.services.settings import Settings
 
 
 class LocalPathProvider(PathProvider):
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, ctx=None):
         self._s: Final[Settings] = settings
+        self.ctx = ctx
 
     def _mk(self, *parts: str) -> str:
         p = os.path.join(*parts)

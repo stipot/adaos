@@ -8,6 +8,7 @@ from adaos.ports import EventBus, GitClient, Capabilities
 from adaos.ports.paths import PathProvider
 from adaos.ports.scenarios import ScenarioRepository
 from adaos.services.eventbus import emit
+from adaos.services.fs.safe_io import remove_tree
 
 _name_re = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
 
@@ -76,9 +77,5 @@ class ScenarioManager:
         if names:
             self.git.sparse_set(root, names, no_cone=True)
         self.git.pull(root)
-        p = Path(root) / name
-        if p.exists():
-            import shutil
-
-            shutil.rmtree(p, ignore_errors=True)
+        remove_tree(str(Path(root) / name), fs=self.paths.ctx.fs if hasattr(self.paths, "ctx") else get_ctx().fs)
         emit(self.bus, "scenario.removed", {"id": name}, "scenario.mgr")

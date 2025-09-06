@@ -27,6 +27,7 @@ from adaos.apps.cli.commands import monitor, skill, runtime, llm, tests as tests
 from adaos.apps.cli.commands import native
 from adaos.apps.cli.commands import ovos as ovos_cmd
 from adaos.apps.cli.commands import rhasspy as rhasspy_cmd
+from adaos.apps.cli.commands import secret
 
 app = typer.Typer(help=_("cli.help"))
 
@@ -169,6 +170,7 @@ app.add_typer(api.app, name="api")
 app.add_typer(monitor.app, name="monitor")
 app.add_typer(scenario.scenario_app, name="scenario")
 app.add_typer(switch_app, name="switch", help="Переключение профилей интеграций")
+app.add_typer(secret.app, name="secret")
 
 # ---- Фильтрация интеграций по ENV ----
 _tts = _read("ADAOS_TTS", "native")

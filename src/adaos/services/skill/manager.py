@@ -8,6 +8,7 @@ from adaos.ports import EventBus, GitClient, SkillRepository, SkillRegistry
 from adaos.ports.paths import PathProvider
 from adaos.services.eventbus import emit
 from adaos.ports import Capabilities
+from adaos.services.fs.safe_io import remove_tree
 
 _name_re = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
 
@@ -70,9 +71,5 @@ class SkillManager:
         if names:
             self.git.sparse_set(root, names, no_cone=True)
         self.git.pull(root)
-        p = Path(root) / name
-        if p.exists():
-            import shutil
-
-            shutil.rmtree(p, ignore_errors=True)
+        remove_tree(str(Path(root) / name), fs=self.paths.ctx.fs if hasattr(self.paths, "ctx") else get_ctx().fs)  # см. ниже "удобный доступ"
         emit(self.bus, "skill.removed", {"id": name}, "skill.mgr")
