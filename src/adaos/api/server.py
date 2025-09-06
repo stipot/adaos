@@ -7,7 +7,7 @@ import platform, time
 
 from adaos.api.auth import require_token
 from adaos.sdk.env import get_tts_backend
-from adaos.agent.audio.tts.native_tts import NativeTTS
+from adaos.adapters.audio.tts.native_tts import NativeTTS
 
 # наши роутеры
 from adaos.api import tool_bridge

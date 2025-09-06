@@ -12,7 +12,7 @@ import json
 from adaos.sdk.skill_validator import validate_skill
 from adaos.sdk.skills.i18n import _
 from adaos.sdk.context import _agent, set_current_skill, get_current_skill_path, get_current_skill  # новый AgentContext (глобальный)
-from adaos.agent.db.sqlite import (
+from adaos.adapters.db.sqlite import (
     add_or_update_entity,
     update_skill_version,
     list_entities,

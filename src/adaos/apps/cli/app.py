@@ -96,21 +96,20 @@ def main(
     """
     Вызывается перед любыми подкомандами: строит (или пересобирает) контекст и гарантирует готовность окружения.
     """
-    # 1) собрать Settings из источников с приоритетом CLI > ENV > .env
-    settings = Settings.from_sources(
-        cli={
-            "ADAOS_BASE_DIR": base_dir,
-            "ADAOS_PROFILE": profile,
-        }
-    )
+    # 1) читаем базовые настройки (константы/.env/ENV)
+    settings = Settings.from_sources()
 
-    # 2) создать/пересобрать единый контекст процесса
+    # 2) применяем CLI-переопределения только к безопасным полям
+    settings = settings.with_overrides(base_dir=base_dir, profile=profile)
+
+    # 3) создать/пересобрать единый контекст процесса
     if reload:
-        reload_ctx(ADAOS_BASE_DIR=base_dir, ADAOS_PROFILE=profile)
+        # важно: использовать имена аргументов base_dir/profile
+        reload_ctx(base_dir=base_dir, profile=profile)
     else:
         init_ctx(settings)
 
-    # 3) автоподготовка окружения (без BASE_DIR, используем предзагруженные настройки)
+    # 4) автоподготовка окружения
     if ctx.invoked_subcommand != "reset":
         ensure_environment()
 

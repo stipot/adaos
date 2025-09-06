@@ -11,7 +11,7 @@ def say_text(text: str):
 
         AndroidTTS(lang_hint="en-US").say(text)
     except Exception:
-        from adaos.agent.audio.tts.native_tts import NativeTTS
+        from adaos.adapters.audio.tts.native_tts import NativeTTS
 
         NativeTTS(lang_hint="en").say(text)
 

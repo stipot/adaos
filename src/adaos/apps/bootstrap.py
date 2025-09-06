@@ -5,9 +5,10 @@ from threading import RLock
 from adaos.services.settings import Settings
 from adaos.services.agent_context import AgentContext
 from adaos.adapters.fs.path_provider import LocalPathProvider
-
 from adaos.services.eventbus import LocalEventBus
 from adaos.services.logging import setup_logging, attach_event_logger
+from adaos.adapters.git.cli_git import CliGitClient
+from adaos.adapters.db import SQLite, SQLiteKV
 from adaos.services.runtime import AsyncProcessManager
 
 
@@ -41,16 +42,18 @@ class _CtxHolder:
     def _build(settings: Settings) -> AgentContext:
         paths = LocalPathProvider(settings)
         bus = LocalEventBus()
-
         root_logger = setup_logging(paths)
         attach_event_logger(bus, root_logger.getChild("events"))
 
-        proc = AsyncProcessManager(bus=bus)  # <-- новый менеджер процессов
+        proc = AsyncProcessManager(bus=bus)
+        sql = SQLite(paths)
+        kv = SQLiteKV(sql, namespace="adaos")
+        git = CliGitClient(depth=1)
 
         class _Nop:
             pass
 
-        return AgentContext(settings=settings, paths=paths, bus=bus, proc=proc, caps=_Nop(), devices=_Nop(), kv=_Nop(), sql=_Nop(), secrets=_Nop(), net=_Nop(), updates=_Nop())
+        return AgentContext(settings=settings, paths=paths, bus=bus, proc=proc, caps=_Nop(), devices=_Nop(), kv=kv, sql=sql, secrets=_Nop(), net=_Nop(), updates=_Nop(), git=git)
 
 
 # публичные функции

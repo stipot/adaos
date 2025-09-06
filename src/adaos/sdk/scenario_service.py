@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from adaos.sdk.context import _agent
 from adaos.sdk.utils import git_utils as _git
 from adaos.agent.core.scenario_engine.dsl import Prototype
-from adaos.agent.db.sqlite import (
+from adaos.adapters.db.sqlite import (
     add_or_update_entity,
     add_or_update_entity,
     list_entities,

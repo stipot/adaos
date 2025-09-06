@@ -3,10 +3,10 @@ import typer, sys, os
 from typing import Optional
 from pathlib import Path
 
-from adaos.agent.audio.tts.native_tts import NativeTTS
+from adaos.adapters.audio.tts.native_tts import NativeTTS
 
 VoskSTT = None  # ленивый импорт
-from adaos.agent.audio.stt.vosk_stt import VoskSTT
+from adaos.adapters.audio.stt.vosk_stt import VoskSTT
 
 app = typer.Typer(help="Native (audio) commands")
 
@@ -46,7 +46,7 @@ def say(
 
 import typer
 
-from adaos.agent.audio.stt.vosk_stt import VoskSTT
+from adaos.adapters.audio.stt.vosk_stt import VoskSTT
 
 
 @app.command("start")
@@ -70,7 +70,7 @@ def start(
             external = AndroidMicUDP().listen_stream()
     global VoskSTT
     if VoskSTT is None:
-        from adaos.agent.audio.stt.vosk_stt import VoskSTT
+        from adaos.adapters.audio.stt.vosk_stt import VoskSTT
     stt = VoskSTT(model_path=model_path, samplerate=samplerate, device=device, lang=lang)
 
     tts = None
@@ -82,7 +82,7 @@ def start(
             tts = AndroidTTS(lang_hint="en-US" if lang.startswith("en") else "ru-RU")
         except Exception:
             # Десктоп/фоллбек
-            from adaos.agent.audio.tts.native_tts import NativeTTS
+            from adaos.adapters.audio.tts.native_tts import NativeTTS
 
             tts = NativeTTS(lang_hint=lang)
 
