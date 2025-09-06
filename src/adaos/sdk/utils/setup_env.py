@@ -38,3 +38,14 @@ def prepare_environment() -> None:
             url=ctx.settings.skills_monorepo_url,
             branch=ctx.settings.skills_monorepo_branch,
         ).ensure()
+
+    # сценарии
+    if ctx.settings.scenarios_monorepo_url:
+        from adaos.adapters.scenarios.mono_repo import MonoScenarioRepository
+
+        MonoScenarioRepository(
+            paths=ctx.paths,
+            git=ctx.git,
+            url=ctx.settings.scenarios_monorepo_url,
+            branch=ctx.settings.scenarios_monorepo_branch,
+        ).ensure()

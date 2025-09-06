@@ -51,9 +51,25 @@ class _CtxHolder:
 
         # policies
         caps = InMemoryCapabilities()
-        caps.grant("core", "net.git", "skills.manage")
         net = NetPolicy()
 
+        # allow host(s) из монореп
+        def _allow_host(url: str | None):
+            if not url:
+                return
+            from urllib.parse import urlparse
+
+            host = urlparse(url).hostname
+            if not host and "@" in url and ":" in url:
+                host = url.split("@", 1)[1].split(":", 1)[0]
+            if host:
+                net.allow(host)
+
+        _allow_host(settings.skills_monorepo_url)
+        _allow_host(settings.scenarios_monorepo_url)
+
+        # базовые capabilities
+        caps.grant("core", "net.git", "skills.manage", "scenarios.manage")
         # ограничим сеть доменом монорепозитория навыков (если задан)
         if settings.skills_monorepo_url:
             from urllib.parse import urlparse

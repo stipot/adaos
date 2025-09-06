@@ -1,0 +1,84 @@
+from __future__ import annotations
+import re
+from pathlib import Path
+from typing import Optional
+
+from adaos.domain import SkillMeta, SkillRecord
+from adaos.ports import EventBus, GitClient, Capabilities
+from adaos.ports.paths import PathProvider
+from adaos.ports.scenarios import ScenarioRepository
+from adaos.services.eventbus import emit
+
+_name_re = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
+
+
+class ScenarioManager:
+    """
+    Истина — в БД (реестр scenarios). Репозиторий — монорепо со sparse-checkout.
+    """
+
+    def __init__(
+        self, *, repo: ScenarioRepository, registry, git: GitClient, paths: PathProvider, bus: EventBus, caps: Capabilities  # SqliteScenarioRegistry протоколом не ограничиваем
+    ):
+        self.repo, self.reg, self.git, self.paths, self.bus, self.caps = repo, registry, git, paths, bus, caps
+
+    def list_installed(self) -> list[SkillRecord]:
+        self.caps.require("core", "scenarios.manage")
+        return self.reg.list()
+
+    def list_present(self) -> list[SkillMeta]:
+        self.caps.require("core", "scenarios.manage")
+        self.repo.ensure()
+        return self.repo.list()
+
+    def sync(self) -> None:
+        self.caps.require("core", "scenarios.manage", "net.git")
+        self.repo.ensure()
+        root = self.paths.scenarios_dir()
+        names = [r.name for r in self.reg.list()]
+        self.git.sparse_init(root, cone=False)
+        if names:
+            self.git.sparse_set(root, names, no_cone=True)
+        self.git.pull(root)
+        emit(self.bus, "scenario.sync", {"count": len(names)}, "scenario.mgr")
+
+    def install(self, name: str, *, pin: Optional[str] = None) -> SkillMeta:
+        self.caps.require("core", "scenarios.manage", "net.git")
+        name = name.strip()
+        if not _name_re.match(name):
+            raise ValueError("invalid scenario name")
+
+        self.repo.ensure()
+
+        self.reg.register(name, pin=pin)
+        try:
+            root = self.paths.scenarios_dir()
+            names = [r.name for r in self.reg.list()]
+            self.git.sparse_init(root, cone=False)
+            self.git.sparse_set(root, names, no_cone=True)
+            self.git.pull(root)
+            meta = self.repo.get(name)
+            if not meta:
+                raise FileNotFoundError(f"scenario '{name}' not found in monorepo")
+            emit(self.bus, "scenario.installed", {"id": meta.id.value, "pin": pin}, "scenario.mgr")
+            return meta
+        except Exception:
+            self.reg.unregister(name)
+            raise
+
+    def remove(self, name: str) -> None:
+        self.caps.require("core", "scenarios.manage", "net.git")
+        self.repo.ensure()
+        self.reg.unregister(name)
+        root = self.paths.scenarios_dir()
+        names = [r.name for r in self.reg.list()]
+        self.git.sparse_init(root, cone=False)
+        if names:
+            self.git.sparse_set(root, names, no_cone=True)
+        self.git.pull(root)
+        p = Path(root) / name
+        if p.exists():
+            import shutil
+
+            shutil.rmtree(p, ignore_errors=True)
+        emit(self.bus, "scenario.removed", {"id": name}, "scenario.mgr")
