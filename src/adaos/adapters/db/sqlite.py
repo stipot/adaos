@@ -115,3 +115,30 @@ def update_skill_version(
             (name, version, path, status),
         )
         con.commit()
+
+
+def get_skill_versions(name: str) -> List[Dict[str, Any]]:
+    """
+    Вернуть версии навыка из таблицы skill_versions.
+    Формат элементов: {'version': str, 'path': str, 'status': str, 'created_at': str}
+    """
+    sql = get_ctx().sql
+    with sql.connect() as con:
+        cur = con.execute(
+            "SELECT version, path, status, COALESCE(created_at, CURRENT_TIMESTAMP) " "FROM skill_versions WHERE skill_name=? ORDER BY created_at DESC, version DESC",
+            (name,),
+        )
+        rows = cur.fetchall()
+    return [{"version": r[0], "path": r[1], "status": r[2], "created_at": r[3]} for r in rows]
+
+
+def list_versions(name: str) -> Optional[str]:
+    """
+    Совместимый помощник: вернуть active_version навыка из skills.
+    Старый CLI ожидает одиночное значение.
+    """
+    sql = get_ctx().sql
+    with sql.connect() as con:
+        cur = con.execute("SELECT active_version FROM skills WHERE name=?", (name,))
+        row = cur.fetchone()
+    return row[0] if row and row[0] else None
