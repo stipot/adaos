@@ -1,6 +1,8 @@
 import typer, json, time, sys, requests
 from pathlib import Path
 from adaos.sdk.context import get_base_dir
+from adaos.apps.bootstrap import get_ctx
+from adaos.services.eventbus import emit
 
 app = typer.Typer(help="Monitoring tools")
 
@@ -85,3 +87,10 @@ def monitor_sse(
             typer.echo(f"[reconnect] {e}")
             time.sleep(backoff)
             backoff = min(backoff * 2, 30)
+
+
+@app.command("ping")
+def ping():
+    ctx = get_ctx()
+    emit(ctx.bus, "cli.ping", {"ok": True}, "cli")
+    typer.echo("event cli.ping sent")

@@ -154,6 +154,12 @@ def switch_stt(mode: str = typer.Argument(..., help="vosk | rhasspy | ovos | nat
     _restart_self()
 
 
+@app.command("where")
+def where():
+    ctx = get_ctx()
+    print("base_dir:", ctx.settings.base_dir)
+
+
 # -------- подкоманды --------
 
 app.add_typer(skill.app, name="skill", help=_("cli.help_skill"))

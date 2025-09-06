@@ -6,7 +6,9 @@ from adaos.services.settings import Settings
 from adaos.services.agent_context import AgentContext
 from adaos.adapters.fs.path_provider import LocalPathProvider
 
-# пока у нас есть только Settings/PathProvider (PR-2).
+from adaos.services.eventbus import LocalEventBus
+from adaos.services.logging import setup_logging, attach_event_logger
+
 # Остальные порты подставим позже в factory (PR-3..4).
 
 
@@ -39,12 +41,17 @@ class _CtxHolder:
     @staticmethod
     def _build(settings: Settings) -> AgentContext:
         paths = LocalPathProvider(settings)
+        bus = LocalEventBus()
 
-        # временные «пустышки» портов до PR-3..4; держим типы без globals
+        # пока оставим заглушки остальных портов, их закроем в следующих PR
         class _Nop:
             pass
 
-        return AgentContext(settings=settings, paths=paths, bus=_Nop(), proc=_Nop(), caps=_Nop(), devices=_Nop(), kv=_Nop(), sql=_Nop(), secrets=_Nop(), net=_Nop(), updates=_Nop())
+        # настроим структурные логи и подпишем логгер на шину
+        root_logger = setup_logging(paths)
+        attach_event_logger(bus, root_logger.getChild("events"))
+
+        return AgentContext(settings=settings, paths=paths, bus=bus, proc=_Nop(), caps=_Nop(), devices=_Nop(), kv=_Nop(), sql=_Nop(), secrets=_Nop(), net=_Nop(), updates=_Nop())
 
 
 # публичные функции
