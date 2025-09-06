@@ -39,6 +39,7 @@ dependencies = [
   "ovos_config",
   "uvicorn",
   "fastapi",
+  "ipykernel",
 ]
 
 [project.scripts]
