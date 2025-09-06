@@ -49,7 +49,7 @@ choose_python() {
   local i=0
   for line in "${CANDS[@]}"; do
     printf "  [%d] %s\n" "$i" "$line"
-    ((i++))
+    ((i = i + 1))
   done
   # default: первый с версией >=3.11, иначе [0]
   local def_idx=0
