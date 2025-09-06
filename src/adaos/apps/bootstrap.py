@@ -10,6 +10,10 @@ from adaos.services.logging import setup_logging, attach_event_logger
 from adaos.adapters.git.cli_git import CliGitClient
 from adaos.adapters.db import SQLite, SQLiteKV
 from adaos.services.runtime import AsyncProcessManager
+from adaos.services.policy.capabilities import InMemoryCapabilities
+from adaos.services.policy.net import NetPolicy
+from adaos.adapters.git.cli_git import CliGitClient
+from adaos.adapters.git.secure_git import SecureGitClient
 
 
 class _CtxHolder:
@@ -45,15 +49,33 @@ class _CtxHolder:
         root_logger = setup_logging(paths)
         attach_event_logger(bus, root_logger.getChild("events"))
 
+        # policies
+        caps = InMemoryCapabilities()
+        caps.grant("core", "net.git", "skills.manage")
+        net = NetPolicy()
+
+        # ограничим сеть доменом монорепозитория навыков (если задан)
+        if settings.skills_monorepo_url:
+            from urllib.parse import urlparse
+
+            host = urlparse(settings.skills_monorepo_url).hostname
+            if not host and "@" in settings.skills_monorepo_url and ":" in settings.skills_monorepo_url:
+                host = settings.skills_monorepo_url.split("@", 1)[1].split(":", 1)[0]  # ssh git
+            if host:
+                net.allow(host)
+
+        # Git с защитой
+        git_base = CliGitClient(depth=1)
+        git = SecureGitClient(git_base, net)
+
         proc = AsyncProcessManager(bus=bus)
         sql = SQLite(paths)
         kv = SQLiteKV(sql, namespace="adaos")
-        git = CliGitClient(depth=1)
 
         class _Nop:
             pass
 
-        return AgentContext(settings=settings, paths=paths, bus=bus, proc=proc, caps=_Nop(), devices=_Nop(), kv=kv, sql=sql, secrets=_Nop(), net=_Nop(), updates=_Nop(), git=git)
+        return AgentContext(settings=settings, paths=paths, bus=bus, proc=proc, caps=caps, devices=_Nop(), kv=kv, sql=sql, secrets=_Nop(), net=net, updates=_Nop(), git=git)
 
 
 # публичные функции

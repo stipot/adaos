@@ -7,36 +7,27 @@ from adaos.domain import SkillMeta, SkillRecord
 from adaos.ports import EventBus, GitClient, SkillRepository, SkillRegistry
 from adaos.ports.paths import PathProvider
 from adaos.services.eventbus import emit
+from adaos.ports import Capabilities
 
 _name_re = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
 
 
 class SkillManager:
-    """
-    Управляет установленными навыками:
-      - источник истины: SkillRegistry (SQL)
-      - git sparse-checkout: выставляем набор путей = установленным навыкам
-      - list/install/remove/sync работают ТОЛЬКО по реестру
-    """
+    def __init__(self, *, repo: SkillRepository, registry: SkillRegistry, git: GitClient, paths: PathProvider, bus: EventBus, caps: Capabilities):
+        self.repo, self.reg, self.git, self.paths, self.bus, self.caps = repo, registry, git, paths, bus, caps
 
-    def __init__(self, *, repo: SkillRepository, registry: SkillRegistry, git: GitClient, paths: PathProvider, bus: EventBus):
-        self.repo = repo
-        self.reg = registry
-        self.git = git
-        self.paths = paths
-        self.bus = bus
-
-    # ------ read-only ------
     def list_installed(self) -> list[SkillRecord]:
+        self.caps.require("core", "skills.manage")
         return self.reg.list()
 
     def list_present(self) -> list[SkillMeta]:
+        self.caps.require("core", "skills.manage")
         self.repo.ensure()
         return self.repo.list()
 
-    # ------ actions ------
     def sync(self) -> None:
-        self.repo.ensure()  # <-- добавили
+        self.caps.require("core", "skills.manage", "net.git")
+        self.repo.ensure()
         root = self.paths.skills_dir()
         names = [r.name for r in self.reg.list()]
         self.git.sparse_init(root, cone=False)
@@ -46,11 +37,12 @@ class SkillManager:
         emit(self.bus, "skill.sync", {"count": len(names)}, "skill.mgr")
 
     def install(self, name: str, *, pin: Optional[str] = None) -> SkillMeta:
+        self.caps.require("core", "skills.manage", "net.git")
         name = name.strip()
         if not _name_re.match(name):
             raise ValueError("invalid skill name")
 
-        self.repo.ensure()  # <-- добавили
+        self.repo.ensure()
 
         self.reg.register(name, pin=pin)
         try:
@@ -69,7 +61,8 @@ class SkillManager:
             raise
 
     def remove(self, name: str) -> None:
-        self.repo.ensure()  # <-- добавили
+        self.caps.require("core", "skills.manage", "net.git")
+        self.repo.ensure()
         self.reg.unregister(name)
         root = self.paths.skills_dir()
         names = [r.name for r in self.reg.list()]

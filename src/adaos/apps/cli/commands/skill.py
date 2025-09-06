@@ -15,8 +15,8 @@ app = typer.Typer(help="Управление навыками (монорепо�
 def _mgr() -> SkillManager:
     ctx = get_ctx()
     repo = MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch)
-    reg = SqliteSkillRegistry(ctx.sql)  # <-- тут
-    return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus)
+    reg = SqliteSkillRegistry(ctx.sql)
+    return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps)
 
 
 @app.command("list")
