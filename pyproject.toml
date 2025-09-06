@@ -38,6 +38,7 @@ dependencies = [
   "ovos_plugin_manager", # TODO move to optional-dependencies = {  }
   "ovos_config",
   "uvicorn",
+  "fastapi",
 ]
 
 [project.scripts]
