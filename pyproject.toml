@@ -43,7 +43,7 @@ dependencies = [
 ]
 
 [project.scripts]
-adaos = "adaos.sdk.cli.app:app"
+adaos = "adaos.apps.cli.app:app"
 
 [project.urls]
 Homepage = "https://github.com/stipot/adaos"

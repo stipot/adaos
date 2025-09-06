@@ -676,3 +676,45 @@ docker exec -it adaos bash
 python cli.py skill list
 
 ```
+
+/build
+/docs
+/src
+  /adaos
+    /core/                 # чистые функции: планирование, валидаторы, преобразования
+      /scenario_engine
+    /domain/               # dataclass DTO/VO, типы событий, конфиги
+    /ports/                # Protocol/ABC: GitClient, PathProvider, *Repository, Runtime, EventBus
+    /adapters/             # реализации портов (весь I/O)
+      /fs
+      /db                  # sqlite и т.п.
+      /git
+      /audio
+        /stt
+        /tts
+      /ovos
+      /rhasspy
+      /android
+      /inimatic
+    /services/             # объектные «оболочки» поверх core и портов
+      /skill
+      /scenario
+      /runtime
+      /orchestrator
+    /apps/                 # исполняемые приложения (входные точки)
+      /cli                 # Typer
+      /api                 # FastAPI/Flask
+      /launcher
+        /linux
+        /windows
+    /sdk/                  # публичные типы/интерфейсы для внешних навыков/сценариев
+      /llm
+      /locales
+      /skills
+      /utils
+      /abi                 # если это публичные форматы — сюда
+    /templates/
+      /skills
+      /scenarios
+/tests
+/tools

@@ -18,6 +18,6 @@ def tmp_base_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def cli_app():
-    from adaos.sdk.cli.app import app
+    from adaos.app.cli.app import app
 
     return app

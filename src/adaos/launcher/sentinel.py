@@ -2,7 +2,7 @@ import os, sys, time, json, socket, threading, subprocess, signal
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.request import urlopen, Request
 
-ADAOS_CMD = os.environ.get("ADAOS_CMD", sys.executable + " -m adaos.sdk.cli app start")
+ADAOS_CMD = os.environ.get("ADAOS_CMD", sys.executable + " -m adaos.app.cli app start")
 TARGET_HOST = os.environ.get("ADAOS_TARGET_HOST", "127.0.0.1")
 TARGET_PORT = int(os.environ.get("ADAOS_TARGET_PORT", "8788"))  # где слушает ядро
 LISTEN_PORT = int(os.environ.get("ADAOS_GW_PORT", "8777"))  # куда стучатся клиенты
