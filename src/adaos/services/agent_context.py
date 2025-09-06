@@ -1,12 +1,15 @@
 from __future__ import annotations
-from dataclasses import dataclass
-# PR-2 will supply Settings and PathProvider
 from typing import Any
+from dataclasses import dataclass
+from adaos.services.settings import Settings
 from adaos.ports import EventBus, Process, Capabilities, Devices, KV, SQL, Secrets, Net, Updates
+from adaos.ports.paths import PathProvider
+
 
 @dataclass(slots=True)
 class AgentContext:
-    settings: Any
+    settings: Settings
+    paths: PathProvider
     bus: EventBus
     proc: Process
     caps: Capabilities

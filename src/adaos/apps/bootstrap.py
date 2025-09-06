@@ -8,8 +8,7 @@ from adaos.adapters.fs.path_provider import LocalPathProvider
 
 from adaos.services.eventbus import LocalEventBus
 from adaos.services.logging import setup_logging, attach_event_logger
-
-# Остальные порты подставим позже в factory (PR-3..4).
+from adaos.services.runtime import AsyncProcessManager
 
 
 class _CtxHolder:
@@ -43,15 +42,15 @@ class _CtxHolder:
         paths = LocalPathProvider(settings)
         bus = LocalEventBus()
 
-        # пока оставим заглушки остальных портов, их закроем в следующих PR
-        class _Nop:
-            pass
-
-        # настроим структурные логи и подпишем логгер на шину
         root_logger = setup_logging(paths)
         attach_event_logger(bus, root_logger.getChild("events"))
 
-        return AgentContext(settings=settings, paths=paths, bus=bus, proc=_Nop(), caps=_Nop(), devices=_Nop(), kv=_Nop(), sql=_Nop(), secrets=_Nop(), net=_Nop(), updates=_Nop())
+        proc = AsyncProcessManager(bus=bus)  # <-- новый менеджер процессов
+
+        class _Nop:
+            pass
+
+        return AgentContext(settings=settings, paths=paths, bus=bus, proc=proc, caps=_Nop(), devices=_Nop(), kv=_Nop(), sql=_Nop(), secrets=_Nop(), net=_Nop(), updates=_Nop())
 
 
 # публичные функции
