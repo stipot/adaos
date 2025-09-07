@@ -8,26 +8,36 @@ from adaos.services.eventbus import emit
 
 _POSIX = os.name == "posix"
 
-_BASE_ENV_ALLOW = {
-    # posix
-    "PATH",
-    "HOME",
-    "LANG",
-    "LC_ALL",
-    "TMP",
-    "TEMP",
-    "TMPDIR",
-    # windows
-    "Path",
-    "SystemRoot",
-    "USERNAME",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "TEMP",
-    "TMP",
+_ALLOW_KEYS = {
+    # POSIX-общие
+    "path",
+    "home",
+    "lang",
+    "lc_all",
+    "tmp",
+    "temp",
+    "tmpdir",
+    # Windows критичное и базовое
+    "path",
+    "pathext",
+    "systemroot",
+    "windir",  # <-- критично для Winsock/asyncio
+    "comspec",  # cmd.exe
+    "username",
+    "userprofile",
+    "appdata",
+    "localappdata",
+    "temp",
+    "tmp",
+    "programfiles",
+    "programfiles(x86)",
+    "programdata",
+    "public",
+    "number_of_processors",
+    "processor_architecture",
+    "os",
 }
-_PREFIX_ALLOW = ("ADAOS_", "PYTHON")  # разрешённые префиксы при inherit_env
+_PREFIX_ALLOW = ("ADAOS_", "PYTHON")  # разрешённые префиксы при inherit_env (префиксы проверяем без учёта регистра)
 
 
 def _inherit_env_filtered(env: Mapping[str, str] | None, inherit: bool) -> dict[str, str]:
@@ -38,8 +48,15 @@ def _inherit_env_filtered(env: Mapping[str, str] | None, inherit: bool) -> dict[
     for k, v in src.items():
         if not isinstance(k, str) or not isinstance(v, str):
             continue
-        if k in _BASE_ENV_ALLOW or any(k.startswith(p) for p in _PREFIX_ALLOW):
+        kl = k.lower()
+        if kl in _ALLOW_KEYS:
             out[k] = v
+            continue
+        # префиксы проверяем без учёта регистра
+        for pref in _PREFIX_ALLOW:
+            if kl.startswith(pref.lower()):
+                out[k] = v
+                break
     return out
 
 
@@ -95,15 +112,15 @@ class SandboxService(Sandbox):
                 "profile": profile or "default",
                 "limits": {"wall": use_limits.wall_time_sec, "cpu": use_limits.cpu_time_sec, "rss": use_limits.max_rss_mb},
             },
-            actor="sandbox.service",
+            "sandbox.service",
         )
 
         res = self.runner.run(cmd, cwd=cwd, env=base, limits=use_limits, stdin=stdin, text=text)
         duration = time.time() - started_at
 
         if res.timed_out:
-            emit(self.bus, "sandbox.killed", {"cmd": list(cmd), "cwd": cwd, "reason": res.killed_reason, "duration": duration}, actor="sandbox.service")
+            emit(self.bus, "sandbox.killed", {"cmd": list(cmd), "cwd": cwd, "reason": res.killed_reason, "duration": duration}, "sandbox.service")
 
-        emit(self.bus, "sandbox.end", {"cmd": list(cmd), "cwd": cwd, "exit": res.exit_code, "timed_out": res.timed_out, "duration": duration}, actor="sandbox.service")
+        emit(self.bus, "sandbox.end", {"cmd": list(cmd), "cwd": cwd, "exit": res.exit_code, "timed_out": res.timed_out, "duration": duration}, "sandbox.service")
 
         return res

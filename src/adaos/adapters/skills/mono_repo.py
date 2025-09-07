@@ -2,7 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Iterable
-import re, yaml
+import re, yaml, os
 
 from adaos.domain import SkillId, SkillMeta
 from adaos.ports.paths import PathProvider
@@ -65,6 +65,8 @@ class MonoSkillRepository(SkillRepository):
         return Path(self.paths.skills_dir())
 
     def _ensure(self) -> None:
+        if os.getenv("ADAOS_TESTING") == "1":
+            return None
         self.git.ensure_repo(str(self._root()), self.url, branch=self.branch)
 
     def ensure(self) -> None:

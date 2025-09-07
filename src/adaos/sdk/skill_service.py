@@ -1,68 +1,48 @@
+# src/adaos/sdk/skill_service.py
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, List
 from adaos.apps.bootstrap import get_ctx
-from adaos.adapters.db import SqliteSkillRegistry
-from adaos.adapters.skills.mono_repo import MonoSkillRepository
-from adaos.services.skill.manager import SkillManager
 
 
-def _mgr() -> SkillManager:
+# --- Менеджер навыков и реестр ---
+def _mgr():
     ctx = get_ctx()
-    repo = MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch)
-    reg = SqliteSkillRegistry(ctx.sql)
-    return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps, settings=ctx.settings)  # ← добавили
+    # импорт локально, чтобы не было циклов
+    from adaos.services.skill.manager import SkillManager
+    from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
+
+    return SkillManager(paths=ctx.paths, reg=SqliteSkillRegistry(ctx.sql), git=ctx.git, caps=ctx.caps)
 
 
-# ---- базовые операции, используются в CLI ----
+# ---- CRUD / DevOps ----
+def create_skill(name: str, template: str = "demo_skill", register: bool = True, push: bool = False) -> str:
+    from adaos.services.skill.scaffold import create_skill as _create
+
+    return str(_create(name, template, register=register, push=push))
 
 
-def install_skill(skill_name: str) -> str:
-    meta = _mgr().install(skill_name)
-    return f"Installed: {meta.id.value} v{meta.version} @ {meta.path}"
+def install_skill(name: str) -> str:
+    # НИКАКОЙ пост-обработки и доступа к .id — просто проксируем ответ менеджера
+    return _mgr().install(name)
 
 
-def uninstall_skill(skill_name: str) -> str:
-    _mgr().remove(skill_name)
-    return f"Uninstalled: {skill_name}"
+def uninstall_skill(name: str) -> str:
+    return _mgr().uninstall(name)
 
 
-def pull_skill(skill_name: str) -> str:
-    # в mono это то же, что ensure + sparse_set + pull (через install)
-    return install_skill(skill_name)
+def pull_skill(name: str) -> str:
+    return _mgr().pull(name)
 
 
-def update_skill() -> str:
-    # старый код обновлял «текущий» навык; в MVP просто no-op
-    return "Update: not implemented in MVP (deferred)."
+def push_skill(name: str, message: str, signoff: bool = False) -> str:
+    return _mgr().push(name, message, signoff=signoff)
 
 
-def install_skill_dependencies(skill_path) -> bool:
-    # заглушка на MVP: зависимости не устанавливаем
-    return True
+def update_skill(name: str) -> str:
+    return _mgr().update(name)
 
 
-def install_all_skills(limit: Optional[int] = None):
-    # по продукту мы НЕ устанавливаем все публичные навыки — оставим пустой список
+# (опционально) «всё» — можно заглушить в тестах или аккуратно делегировать, если есть реализация:
+def install_all_skills(limit: Optional[int] = None) -> List[str]:
+    # для тестов не используется; если нужно — делегируй в менеджер/репозиторий
     return []
-
-
-# ---- Dev-операции — отложены ----
-
-
-def create_skill(skill_name: str, template: str) -> str:
-    raise NotImplementedError("Skill creation via templates is deferred (PR-later).")
-
-
-def push_skill(skill_name: str, message: str, signoff: bool = False) -> str:
-    return _mgr().push(skill_name, message, signoff=signoff)
-
-
-def update_skill_version(skill_name: str, version: str, path: str, status: str = "available") -> None:
-    # совместимость, если где-то вызывалось
-    from adaos.adapters.db.sqlite import update_skill_version as _upd
-
-    _upd("skills", skill_name, version, path, status)
-
-
-def rollback_last_commit() -> None:
-    raise NotImplementedError("Rollback is deferred (PR-later).")

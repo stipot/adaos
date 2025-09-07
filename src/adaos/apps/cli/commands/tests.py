@@ -1,13 +1,13 @@
-# src/adaos/sdk/cli/commands/tests.py
+# src/adaos/apps/cli/commands/tests.py
 from __future__ import annotations
 import os
 from pathlib import Path
 from typing import List, Optional
 import typer
 
-from adaos.sdk.context import SKILLS_DIR
+from adaos.apps.bootstrap import get_ctx
+from adaos.ports.sandbox import ExecLimits
 from adaos.sdk.skill_service import install_all_skills
-from adaos.sdk.utils.git_utils import _ensure_repo
 
 app = typer.Typer(help="Run AdaOS test suites")
 
@@ -29,19 +29,28 @@ def _ensure_tmp_base_dir() -> Path:
     return p
 
 
-def _ensure_skills_repo():
+def _prepare_skills_repo(no_clone: bool) -> None:
     """
-    Гарантируем, что в SKILLS_DIR есть корректный git-репозиторий монорепо навыков,
-    как в рантайме. Пользуемся тем же _ensure_repo(), который вы уже используете в сервисе.
+    Гарантируем, что {BASE}/skills — корректный git-репозиторий монорепо.
+    Без лишних pull/checkout: только clone при отсутствии .git.
     """
-    # _ensure_repo сам создаст/склонирует репозиторий по MONOREPO_URL в правильное место
-    repo = _ensure_repo()
-    # на всякий возьмём «cone» (быстро) если доступно; не критично, игнорируем ошибки
-    try:
-        repo.git.sparse_checkout("init", "--cone")
-    except Exception:
-        pass
-    return repo
+    if no_clone:
+        return
+    ctx = get_ctx()
+    root = Path(ctx.paths.skills_dir())
+    if not (root / ".git").exists():
+        # ровно один раз: clone (ветка/URL из settings, allow-list в SecureGit)
+        ctx.git.ensure_repo(str(root), ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch)
+        # лёгкий exclude, чтобы не шумели временные файлы
+        try:
+            (root / ".git" / "info").mkdir(parents=True, exist_ok=True)
+            ex = root / ".git" / "info" / "exclude"
+            existing = ex.read_text(encoding="utf-8").splitlines() if ex.exists() else []
+            wanted = {"*.pyc", "__pycache__/", ".venv/", "state/", "cache/", "logs/"}
+            merged = sorted(set(existing).union(wanted))
+            ex.write_text("\n".join(merged) + "\n", encoding="utf-8")
+        except Exception:
+            pass
 
 
 def _collect_test_dirs(root: Path) -> List[str]:
@@ -51,6 +60,34 @@ def _collect_test_dirs(root: Path) -> List[str]:
             if tdir.is_dir() and any(f.name.startswith("test_") and f.suffix == ".py" for f in tdir.rglob("test_*.py")):
                 paths.append(str(tdir))
     return paths
+
+
+def _drive_key(path_str: str) -> str:
+    # На *nix вернётся пусто, на Windows — 'C:' / 'D:' и т.п.
+    import os as _os
+
+    d, _ = _os.path.splitdrive(path_str)
+    return (d or "NO_DRIVE").upper()
+
+
+def _run_one_group(ctx, repo_root: Path, paths: List[str]) -> tuple[int, str, str]:
+    """Запуск одной группы путей (на одном диске) через sandbox."""
+    # базовые аргументы pytest
+    args = ["-q", "--strict-markers", "-o", "markers=asyncio: mark asyncio tests", *paths]  # зарегистрируем 'asyncio'
+    limits = ExecLimits(wall_time_sec=600, cpu_time_sec=None, max_rss_mb=None)
+    res = ctx.sandbox.run(
+        ["python", "-m", "pytest", *args],
+        cwd=str(ctx.paths.base()),  # sandbox: только внутри BASE_DIR
+        profile="tool",
+        inherit_env=True,
+        extra_env={
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONPATH": str(repo_root),  # чтобы импорты из репо находились
+            "ADAOS_REPO_ROOT": str(repo_root),
+        },
+        limits=limits,
+    )
+    return res.exit_code, res.stdout, res.stderr
 
 
 @app.command("run")
@@ -66,8 +103,8 @@ def run_tests(
     """
     Runs pytest over:
       - ./tests                           (SDK/API tests)   — unless --only-skills
-      - ${SKILLS_DIR}/**/tests            (skill tests)      — unless --only-sdk
-    By default, when running skill tests, auto-installs all skills from the monorepo unless --no-install is set.
+      - {BASE}/skills/**/tests            (skill tests)      — unless --only-sdk
+    By default, when running skill tests, auto-installs all skills (in isolated BASE) unless --no-install.
     """
     try:
         import pytest  # noqa
@@ -79,6 +116,7 @@ def run_tests(
         tmpdir = _ensure_tmp_base_dir()
         typer.secho(f"[AdaOS] Using isolated ADAOS_BASE_DIR at: {tmpdir}", fg=typer.colors.BLUE)
 
+    ctx = get_ctx()
     repo_root = Path(".").resolve()
     pytest_paths: List[str] = []
 
@@ -93,33 +131,23 @@ def run_tests(
 
     # --- Skill tests ---
     if not only_sdk:
-        # 1) гарантируем наличие монорепо навыков (как в рантайме)
-        if not no_clone:
-            try:
-                repo = _ensure_skills_repo()
-                typer.secho(f"[AdaOS] Skills monorepo ready at {repo.working_tree_dir}", fg=typer.colors.BLUE)
-            except Exception as e:
-                typer.secho(f"[AdaOS] Failed to prepare skills monorepo: {e}", fg=typer.colors.RED)
-                raise typer.Exit(code=1)
-        # авто-установка навыков перед тестами, если не отключено
+        _prepare_skills_repo(no_clone=no_clone)
         if not no_install:
             try:
                 installed = install_all_skills()
                 if installed:
                     typer.secho(f"[AdaOS] Installed skills: {', '.join(installed)}", fg=typer.colors.BLUE)
             except Exception as e:
-                # не валим прогон — просто предупреждаем
                 typer.secho(f"[AdaOS] Auto-install skipped/failed: {e}", fg=typer.colors.YELLOW)
 
-        skills_root = Path(SKILLS_DIR).resolve()
+        skills_root = Path(ctx.paths.skills_dir()).resolve()
         pytest_paths.extend(_collect_test_dirs(skills_root))
 
-        # если в исходниках тоже есть навыки с тестами — добавим (не обязательно)
+        # при разработке— добавим тесты из исходников, если есть
         src_skills = repo_root / "src" / "adaos" / "skills"
         pytest_paths.extend(_collect_test_dirs(src_skills))
 
     if not pytest_paths:
-        # аккуратный, предметный месседж
         if only_sdk:
             typer.secho("No SDK tests found. Create ./tests with test_*.py", fg=typer.colors.YELLOW)
         elif only_skills:
@@ -128,14 +156,49 @@ def run_tests(
             typer.secho("No test paths found. Tip: add SDK tests in ./tests, or ensure skills with tests are installed.", fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    args = ["-q", "--strict-markers", *pytest_paths]
-    if marker:
-        args.extend(["-m", marker])
-    if extra:
-        args.extend(extra)
+    # ---- группируем пути по диску, чтобы избежать rootdir-коллизий на Windows
+    from collections import defaultdict
 
-    import pytest as _pytest
+    grouped: dict[str, List[str]] = defaultdict(list)
+    for p in pytest_paths:
+        grouped[_drive_key(p)].append(p)
 
-    typer.secho(f"pytest {' '.join(args)}", fg=typer.colors.CYAN)
-    code = _pytest.main(args)
-    raise typer.Exit(code=code)
+    overall_code = 0
+    for dk, paths in grouped.items():
+        # добавим фильтры, если заданы пользователем
+        run_paths = list(paths)
+        args_suffix: List[str] = []
+        if marker:
+            args_suffix += ["-m", marker]
+        if extra:
+            args_suffix += extra
+
+        # склеим: базовые аргументы внутри _run_one_group, а тут только фильтры
+        # (маленький трюк: просто добавим их в конец списка путей — _run_one_group не знает про них,
+        #  поэтому передадим их через PYTEST_ADDOPTS)
+        # Но проще — прокинем через env:
+        import os as _os
+
+        addopts = _os.environ.get("PYTEST_ADDOPTS", "")
+        if args_suffix:
+            addopts = (addopts + " " + " ".join(args_suffix)).strip()
+        # временно выставим переменную для этого запуска
+        prev_addopts = _os.environ.get("PYTEST_ADDOPTS")
+        if addopts:
+            _os.environ["PYTEST_ADDOPTS"] = addopts
+        try:
+            code, out, err = _run_one_group(ctx, repo_root, run_paths)
+            # трактуем пустую группу как успех
+            if code == 5 and "no tests ran" in (out.lower() + err.lower()):
+                code = 0
+        finally:
+            if prev_addopts is None:
+                _os.environ.pop("PYTEST_ADDOPTS", None)
+            else:
+                _os.environ["PYTEST_ADDOPTS"] = prev_addopts
+
+        color = typer.colors.CYAN if code == 0 else typer.colors.RED
+        typer.secho(f"[pytest {dk}] exit={code} sandbox=yes\n--- stdout ---\n{out}\n--- stderr ---\n{err}", fg=color)
+        overall_code = code if overall_code == 0 else overall_code
+
+    raise typer.Exit(code=overall_code)

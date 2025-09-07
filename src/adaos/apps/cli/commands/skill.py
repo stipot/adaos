@@ -9,6 +9,7 @@ from adaos.adapters.skills.mono_repo import MonoSkillRepository
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.sdk.skill_service import push_skill
+from adaos.sdk.skill_service import create_skill as _create_skill
 
 app = typer.Typer(help="Управление навыками (монорепозиторий, реестр в БД)")
 
@@ -99,3 +100,14 @@ def push_command(
         typer.echo("Nothing to push.")
     else:
         typer.echo(f"Pushed {skill_name}: {res}")
+
+
+@app.command("create")
+def create_command(
+    name: str = typer.Argument(..., help="Имя навыка"),
+    template: str = typer.Option("demo_skill", "--template", "-t"),
+    register: bool = typer.Option(True, "--register/--no-register"),
+    push: bool = typer.Option(False, "--push/--no-push"),
+):
+    p = _create_skill(name, template, register=register, push=push)
+    typer.echo(f"Created: {p}")

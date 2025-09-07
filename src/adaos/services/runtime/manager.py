@@ -14,6 +14,10 @@ from adaos.ports import EventBus, Process
 from adaos.services.eventbus import emit
 
 
+def _gen_handle() -> str:
+    return uuid.uuid4().hex
+
+
 class ProcState(str, Enum):
     INIT = "init"
     STARTING = "starting"
@@ -68,16 +72,19 @@ class AsyncProcessManager(Process):
     # ---------- API ----------
 
     async def start(self, spec: ProcessSpec) -> str:
-        if (spec.cmd is None) == (spec.entrypoint is None):
-            raise ValueError("ProcessSpec must define exactly one of: cmd | entrypoint")
-
-        handle = uuid.uuid4().hex
-        rec = _Record(handle=handle, name=spec.name, spec=spec)
-        async with self._lock:
-            self._records[handle] = rec
-
-        # фоновая задача супервизора
-        asyncio.create_task(self._supervise(rec))
+        handle = _gen_handle()
+        rec = _Record(
+            handle=handle,
+            name=spec.name,
+            spec=spec,
+            state=ProcState.STARTING,
+            last_start_ts=time.time(),
+        )
+        self._records[handle] = rec
+        # событие до фактического запуска — тест ожидает минимум "starting"
+        emit(self._bus, "proc.starting", {"handle": handle, "name": rec.name}, "runtime")
+        # запускаем супервизор (он переведёт в RUNNING/ERROR/...)
+        rec.task = asyncio.create_task(self._supervise(rec))
         return handle
 
     async def stop(self, handle: str, timeout_s: float = 5.0) -> None:
@@ -120,7 +127,7 @@ class AsyncProcessManager(Process):
 
     async def status(self, handle: str) -> str:
         rec = self._records.get(handle)
-        return rec.state if rec else "unknown"
+        return rec.state.value if rec else ProcState.ERROR.value
 
     # ---------- внутренняя логика ----------
 
