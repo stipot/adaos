@@ -25,3 +25,9 @@ graph LR
   Runtime --> Skills
   Runtime --> Scenarios
 ```
+
+## Установка
+
+```bash
+pip install -e .[dev]
+```

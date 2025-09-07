@@ -21,4 +21,12 @@
 - sql + kv, secrets (Keyring/FileVault через SecretsService)
 - git (SecureGitClient), sandbox (SandboxService)
 
+### Документирование
+
+```bash
+pip install -r requirements-docs.txt
+mkdocs build --strict
+mkdocs serve
+```
+
 **Принцип:** сервисы получают **только нужные порты**, не «весь контекст».
