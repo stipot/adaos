@@ -42,6 +42,7 @@ dependencies = [
   "ipykernel",
   "keyring>=24.2.0",
   "cryptography>=42.0.0",
+  "psutil>=5.9.0",
 ]
 
 [project.scripts]

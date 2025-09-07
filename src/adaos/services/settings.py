@@ -28,6 +28,9 @@ class Settings:
     profile: str = "default"
     git_author_name: str = "AdaOS Bot"
     git_author_email: str = "bot@adaos.local"
+    default_wall_time_sec: float = 30.0
+    default_cpu_time_sec: float | None = None
+    default_max_rss_mb: int | None = None
 
     # жёсткие (или dev-override через .env)
     skills_monorepo_url: Optional[str] = const.SKILLS_MONOREPO_URL

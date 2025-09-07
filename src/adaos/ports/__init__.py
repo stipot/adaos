@@ -4,6 +4,7 @@ from .skills import SkillRepository
 from .skill_registry import SkillRegistry
 from .policy import Capabilities, Net
 from .scenarios import ScenarioRepository
+from .sandbox import ExecLimits, ExecResult, Sandbox
 
 __all__ = [
     "EventBus",
@@ -21,4 +22,7 @@ __all__ = [
     "Capabilities",
     "Net",
     "ScenarioRepository",
+    "ExecLimits",
+    "ExecResult",
+    "Sandbox",
 ]

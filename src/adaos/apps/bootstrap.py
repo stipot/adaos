@@ -19,6 +19,7 @@ from adaos.adapters.secrets.keyring_vault import KeyringVault
 from adaos.adapters.secrets.file_vault import FileVault
 from adaos.services.secrets.service import SecretsService
 from adaos.services.secrets.crypto import load_or_create_master
+from adaos.services.sandbox.runner import ProcSandbox
 
 
 class _CtxHolder:
@@ -52,6 +53,7 @@ class _CtxHolder:
         paths = LocalPathProvider(settings)
         bus = LocalEventBus()
         root_logger = setup_logging(paths)
+        sandbox = ProcSandbox(fs_base=paths.base())
         attach_event_logger(bus, root_logger.getChild("events"))
 
         # policies
@@ -139,7 +141,20 @@ class _CtxHolder:
             secrets_backend.fs = fs
 
         ctx = AgentContext(
-            settings=settings, paths=paths, bus=bus, proc=proc, caps=caps, devices=object(), kv=kv, sql=sql, secrets=secrets, net=net, updates=object(), git=git, fs=fs
+            settings=settings,
+            paths=paths,
+            bus=bus,
+            proc=proc,
+            caps=caps,
+            devices=object(),
+            kv=kv,
+            sql=sql,
+            secrets=secrets,
+            net=net,
+            updates=object(),
+            git=git,
+            fs=fs,
+            sandbox=sandbox,
         )
         # TODO Doc Так ты сможешь делать paths.ctx.fs везде, где есть path
         if hasattr(paths, "ctx") is False:
