@@ -4,7 +4,7 @@ from __future__ import annotations
 import typer
 from typing import Optional
 
-from adaos.adapters.rhasspy.runner import (
+from adaos.integrations.rhasspy.runner import (
     start_rhasspy,
     stop_rhasspy,
     status_rhasspy,

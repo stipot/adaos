@@ -1,5 +1,20 @@
 # Сценарии
 
+Аналогично Skills:
+
+- `{BASE_DIR}/scenarios` — моно-репо.
+- Таблицы `scenarios` и `scenario_versions`.
+
+CLI:
+
+```bash
+adaos scenario list [--fs]
+adaos scenario install <sid>
+adaos scenario remove <sid>
+adaos scenario sync
+adaos scenario push <sid> -m "message"
+```
+
 ## CLI
 
 Работа со сценариями
@@ -47,15 +62,15 @@ adaos scenario stop-by-activity video:livingroom
 
 ## Модель данных (SQLite)
 
-* Таблица `scenarios`:
+- Таблица `scenarios`:
 
-  * `name` (PK), `active_version`, `repo_url`, `installed`, `last_updated`
-* Таблица `scenario_versions` — как у навыков.
+  - `name` (PK), `active_version`, `repo_url`, `installed`, `last_updated`
+- Таблица `scenario_versions` — как у навыков.
 
 ## Хранилище кода
 
-* Путь: `{BASE_DIR}/scenarios` — **одно git-репо** (моно-репо сценариев).
-* Выборка подпапок через `git sparse-checkout` по БД.
+- Путь: `{BASE_DIR}/scenarios` — **одно git-репо** (моно-репо сценариев).
+- Выборка подпапок через `git sparse-checkout` по БД.
 
 ## Сервис и CLI
 

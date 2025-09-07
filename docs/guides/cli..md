@@ -1,28 +1,35 @@
-## Общая шпаргалка
+# CLI Шпаргалка
 
 ```bash
 adaos --help
 
-# Skills
+# Навыки
 adaos skill list [--fs]
 adaos skill install <name>
 adaos skill remove <name>
 adaos skill sync
+adaos skill push <name> -m "msg"
 adaos skill reconcile-fs-to-db
 
-# Scenarios
+# Сценарии
 adaos scenario list [--fs]
 adaos scenario install <sid>
 adaos scenario remove <sid>
 adaos scenario sync
+adaos scenario push <sid> -m "msg"
 
-# Secrets
+# Секреты
+adaos secret set/get/list/delete/export/import
 adaos secret set <KEY> <VALUE> [--scope profile|global]
 adaos secret get <KEY> [--show] [--scope ...]
 adaos secret list [--scope ...]
 adaos secret delete <KEY> [--scope ...]
 adaos secret export [--show] [--scope ...]
 adaos secret import <file.json> [--scope ...]
+
+# Песочница
+adaos sandbox profiles
+adaos sandbox run "<cmd>" --profile handler --cwd ~/.adaos/skills/<skill> --inherit-env --env DEBUG=1
 ```
 
 ## Поведение по умолчанию

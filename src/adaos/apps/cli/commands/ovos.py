@@ -3,7 +3,7 @@ import typer
 
 # Обновлённый импорт с правильной фабрикой TTS
 try:
-    from adaos.adapters.ovos.tts import OVOSTTSAdapter
+    from adaos.integrations.ovos.tts import OVOSTTSAdapter
 except ImportError as e:
     typer.echo(f"[OVOS Import Error] {e}")
     OVOSTTSAdapter = None
