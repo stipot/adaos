@@ -64,8 +64,9 @@ adaos = [
   "skills_templates/**/*.yaml",
   "skills_templates/**/*.py",
 ]
+
 [project.optional-dependencies]
-dev = ["pytest>=8", "responses>=0.25", "pytest-cov>=5"]
+dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "anyio>=4", "responses>=0.25", "pytest-cov>=5"]
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"

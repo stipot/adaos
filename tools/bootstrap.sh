@@ -142,7 +142,7 @@ fi
 log "Ставлю Python-зависимости (editable)…"
 . .venv/bin/activate
 python -m pip install -U pip >/dev/null
-python -m pip install -e . || fail "Не удалось установить Python-зависимости."
+python -m pip install -e .[dev] || fail "Не удалось установить Python-зависимости."
 
 log "Ставлю фронтовые зависимости Inimatic…"
 pushd "$SUBMODULE_PATH" >/dev/null

@@ -112,7 +112,7 @@ if (!(Test-Path ".venv")) {
 Write-Host "Installing Python deps (editable)..."
 .\.venv\Scripts\python.exe -m pip install -U pip
 if ($LASTEXITCODE -ne 0) { Write-Host "pip upgrade failed." -ForegroundColor Red; exit 1 }
-.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install -e .[dev]
 if ($LASTEXITCODE -ne 0) { Write-Host "pip install -e . failed." -ForegroundColor Red; exit 1 }
 
 # Frontend deps
