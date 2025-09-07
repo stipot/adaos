@@ -20,6 +20,7 @@ from adaos.adapters.secrets.file_vault import FileVault
 from adaos.services.secrets.service import SecretsService
 from adaos.services.secrets.crypto import load_or_create_master
 from adaos.services.sandbox.runner import ProcSandbox
+from adaos.services.sandbox.service import SandboxService
 
 
 class _CtxHolder:
@@ -53,11 +54,12 @@ class _CtxHolder:
         paths = LocalPathProvider(settings)
         bus = LocalEventBus()
         root_logger = setup_logging(paths)
-        sandbox = ProcSandbox(fs_base=paths.base())
-        attach_event_logger(bus, root_logger.getChild("events"))
-
         # policies
         caps = InMemoryCapabilities()
+        sandbox_runner = ProcSandbox(fs_base=paths.base())
+        sandbox = SandboxService(runner=sandbox_runner, caps=caps, bus=bus)
+        attach_event_logger(bus, root_logger.getChild("events"))
+
         net = NetPolicy()
 
         # allow host(s) из монореп
@@ -76,7 +78,7 @@ class _CtxHolder:
         _allow_host(settings.scenarios_monorepo_url)
 
         # базовые capabilities
-        caps.grant("core", "net.git", "git.write", "skills.manage", "scenarios.manage", "secrets.read", "secrets.write")
+        caps.grant("core", "proc.run", "net.git", "git.write", "skills.manage", "scenarios.manage", "secrets.read", "secrets.write")
         # ограничим сеть доменом монорепозитория навыков (если задан)
         if settings.skills_monorepo_url:
             from urllib.parse import urlparse

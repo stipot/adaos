@@ -31,6 +31,19 @@ adaos secret import <file.json> [--scope ...]
 * Для сетевых операций (git) используется `SecureGitClient` и `NetPolicy`.
 * Для файловых операций — `FSPolicy` + безопасные функции записи/удаления.
 
+## Песочница
+
+```bash
+adaos sandbox profiles
+adaos sandbox run "<команда>" \
+  --profile handler \
+  --cwd ~/.adaos/skills/weather_skill \
+  --inherit-env \
+  --env DEBUG=1 --env LOG_LEVEL=info
+adaos sandbox run "<команда>" --profile handler --cwd \~/.adaos/skills/<skill> --inherit-env --env DEBUG=1
+# Явные лимиты перекрывают профиль:
+adaos sandbox run "python -c 'while True: pass'" --cpu 1 --wall 10
+
 ## Временно отложено (deferred)
 
 * Генерация навыков из LLM, шаблоны, `push/rollback`, валидация/prep.

@@ -1,3 +1,5 @@
+# Policy
+
 ## Capabilities
 
 `services/policy/capabilities.py`
@@ -19,6 +21,11 @@
 
   * `ensure_repo(url)` — URL в allow-list;
   * `pull(dir)` — `remote.origin.url` в allow-list.
+
+## Process Sandbox
+
+* Capability `"proc.run"` требуется для запуска внешних процессов через `SandboxService`.
+* Лимиты и события шины контролируются сервисом; запуск вне `BASE_DIR` запрещён (проверка в `ProcSandbox`).
 
 ## FS-sandbox
 
