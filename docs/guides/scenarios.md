@@ -44,3 +44,29 @@ adaos scenario instances
 adaos scenario stop <iid>
 adaos scenario stop-by-activity video:livingroom
 ```
+
+## Модель данных (SQLite)
+
+* Таблица `scenarios`:
+
+  * `name` (PK), `active_version`, `repo_url`, `installed`, `last_updated`
+* Таблица `scenario_versions` — как у навыков.
+
+## Хранилище кода
+
+* Путь: `{BASE_DIR}/scenarios` — **одно git-репо** (моно-репо сценариев).
+* Выборка подпапок через `git sparse-checkout` по БД.
+
+## Сервис и CLI
+
+Сервис: `services/scenario/manager.py` (аналогично `SkillManager`).
+
+CLI:
+
+```bash
+adaos scenario list
+adaos scenario list --fs
+adaos scenario install <sid>
+adaos scenario remove <sid>
+adaos scenario sync
+```
