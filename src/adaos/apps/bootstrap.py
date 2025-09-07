@@ -74,7 +74,7 @@ class _CtxHolder:
         _allow_host(settings.scenarios_monorepo_url)
 
         # базовые capabilities
-        caps.grant("core", "net.git", "skills.manage", "scenarios.manage")
+        caps.grant("core", "net.git", "git.write", "skills.manage", "scenarios.manage", "secrets.read", "secrets.write")
         # ограничим сеть доменом монорепозитория навыков (если задан)
         if settings.skills_monorepo_url:
             from urllib.parse import urlparse

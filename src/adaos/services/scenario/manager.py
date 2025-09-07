@@ -9,6 +9,7 @@ from adaos.ports.paths import PathProvider
 from adaos.ports.scenarios import ScenarioRepository
 from adaos.services.eventbus import emit
 from adaos.services.fs.safe_io import remove_tree
+from adaos.services.git.safe_commit import sanitize_message, check_no_denied
 
 _name_re = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
 
@@ -79,3 +80,23 @@ class ScenarioManager:
         self.git.pull(root)
         remove_tree(str(Path(root) / name), fs=self.paths.ctx.fs if hasattr(self.paths, "ctx") else get_ctx().fs)
         emit(self.bus, "scenario.removed", {"id": name}, "scenario.mgr")
+
+    def push(self, name: str, message: str, *, signoff: bool = False) -> str:
+        self.caps.require("core", "scenarios.manage", "git.write", "net.git")
+        root = self.paths.scenarios_dir()
+        if not (Path(root) / ".git").exists():
+            raise RuntimeError("Scenarios repo is not initialized. Run `adaos scenario sync` once.")
+        sub = name.strip()
+        changed = self.git.changed_files(root, subpath=sub)
+        if not changed:
+            return "nothing-to-push"
+        bad = check_no_denied(changed)
+        if bad:
+            raise PermissionError(f"push denied: sensitive files matched: {', '.join(bad)}")
+        msg = sanitize_message(message)
+        sha = self.git.commit_subpath(
+            root, subpath=sub, message=msg, author_name=self.paths.ctx.settings.git_author_name, author_email=self.paths.ctx.settings.git_author_email, signoff=signoff
+        )
+        if sha != "nothing-to-commit":
+            self.git.push(root)
+        return sha

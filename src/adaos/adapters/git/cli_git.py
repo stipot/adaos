@@ -16,6 +16,18 @@ def _run_git(args: list[str], cwd: Optional[str] = None) -> str:
     return p.stdout.strip()
 
 
+def _append_exclude(dir: str, lines: list[str]) -> None:
+    from pathlib import Path
+
+    p = Path(dir) / ".git" / "info" / "exclude"
+    existing = set()
+    if p.exists():
+        existing = set(p.read_text(encoding="utf-8").splitlines())
+    merged = existing.union(lines)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("\n".join(sorted(merged)) + "\n", encoding="utf-8")
+
+
 class CliGitClient(GitClient):
     def __init__(self, depth: int = 1) -> None:
         self._depth: Final[int] = depth
@@ -43,6 +55,17 @@ class CliGitClient(GitClient):
                 _run_git(["sparse-checkout", "init", "--cone"], cwd=str(d))
             except GitError:
                 pass
+        _append_exclude(
+            dir,
+            [
+                "*.pyc",
+                "__pycache__/",
+                ".venv/",
+                "state/",
+                "cache/",
+                "logs/",
+            ],
+        )
 
     def pull(self, dir: str) -> None:
         _run_git(["pull", "--ff-only"], cwd=dir)
@@ -75,3 +98,34 @@ class CliGitClient(GitClient):
                 info.mkdir(parents=True, exist_ok=True)
                 lines.append(path)
                 sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def changed_files(self, dir: str, subpath: Optional[str] = None) -> list[str]:
+        # untracked (-o) + modified (-m), исключая игнор по .gitignore
+        args = ["ls-files", "-m", "-o", "--exclude-standard"]
+        if subpath:
+            args += ["--", subpath]
+        out = _run_git(args, cwd=dir)
+        files = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        return files
+
+    def _current_branch(self, dir: str) -> str:
+        out = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=dir).strip()
+        return out or "main"
+
+    def commit_subpath(self, dir: str, subpath: str, message: str, author_name: str, author_email: str, signoff: bool = False) -> str:
+        # stage только подпуть
+        _run_git(["add", "--", subpath], cwd=dir)
+        # пустой ли индекс?
+        status = _run_git(["diff", "--cached", "--name-only"], cwd=dir)
+        if not status.strip():
+            return "nothing-to-commit"
+        # автор в -c для изоляции от глобальных конфигов
+        args = ["-c", f"user.name={author_name}", "-c", f"user.email={author_email}", "commit", "-m", message]
+        if signoff:
+            args.append("--signoff")
+        _run_git(args, cwd=dir)
+        return _run_git(["rev-parse", "HEAD"], cwd=dir).strip()
+
+    def push(self, dir: str, remote: str = "origin", branch: Optional[str] = None) -> None:
+        branch = branch or self._current_branch(dir)
+        _run_git(["push", remote, branch], cwd=dir)

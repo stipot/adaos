@@ -10,7 +10,7 @@ def _mgr() -> ScenarioManager:
     ctx = get_ctx()
     repo = MonoScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch)
     reg = SqliteScenarioRegistry(ctx.sql)
-    return ScenarioManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps)
+    return ScenarioManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps, settings=ctx.settings)
 
 
 def list_installed():
@@ -71,4 +71,5 @@ def write_bindings(sid: str, user: str, data):
 
 
 def push_scenario(sid: str, message: Optional[str] = None):
-    raise NotImplementedError("Deferred.")
+    msg = message or f"scenario: update {sid}"
+    return _mgr().push(sid, msg, signoff=False)

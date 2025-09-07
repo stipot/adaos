@@ -8,6 +8,7 @@ from adaos.apps.bootstrap import get_ctx
 from adaos.adapters.skills.mono_repo import MonoSkillRepository
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.db import SqliteSkillRegistry
+from adaos.sdk.skill_service import push_skill
 
 app = typer.Typer(help="Управление навыками (монорепозиторий, реестр в БД)")
 
@@ -81,3 +82,20 @@ def reconcile_fs_to_db():
             mgr.reg.register(name)  # installed=1
             found.append(name)
     typer.echo(f"В реестр добавлено/актуализировано: {', '.join(found) if found else '(ничего)'}")
+
+
+@app.command("push")
+def push_command(
+    skill_name: str = typer.Argument(..., help="Имя навыка (подпапка монорепо)"),
+    message: str = typer.Option(..., "--message", "-m", help="Сообщение коммита"),
+    signoff: bool = typer.Option(False, "--signoff", help="Добавить Signed-off-by"),
+):
+    """
+    Закоммитить изменения ТОЛЬКО внутри подпапки навыка и выполнить git push.
+    Защищён политиками: skills.manage + git.write + net.git.
+    """
+    res = push_skill(skill_name, message, signoff=signoff)
+    if res == "nothing-to-push" or res == "nothing-to-commit":
+        typer.echo("Nothing to push.")
+    else:
+        typer.echo(f"Pushed {skill_name}: {res}")

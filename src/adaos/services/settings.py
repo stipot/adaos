@@ -26,6 +26,8 @@ def _parse_env_file(path: str) -> Dict[str, str]:
 class Settings:
     base_dir: str
     profile: str = "default"
+    git_author_name: str = "AdaOS Bot"
+    git_author_email: str = "bot@adaos.local"
 
     # жёсткие (или dev-override через .env)
     skills_monorepo_url: Optional[str] = const.SKILLS_MONOREPO_URL

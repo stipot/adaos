@@ -10,7 +10,7 @@ def _mgr() -> SkillManager:
     ctx = get_ctx()
     repo = MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch)
     reg = SqliteSkillRegistry(ctx.sql)
-    return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps)
+    return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps, settings=ctx.settings)  # ← добавили
 
 
 # ---- базовые операции, используются в CLI ----
@@ -53,8 +53,8 @@ def create_skill(skill_name: str, template: str) -> str:
     raise NotImplementedError("Skill creation via templates is deferred (PR-later).")
 
 
-def push_skill(skill_name: str, message: str) -> str:
-    raise NotImplementedError("Push to monorepo is deferred (PR-later).")
+def push_skill(skill_name: str, message: str, signoff: bool = False) -> str:
+    return _mgr().push(skill_name, message, signoff=signoff)
 
 
 def update_skill_version(skill_name: str, version: str, path: str, status: str = "available") -> None:
