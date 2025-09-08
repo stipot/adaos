@@ -1,0 +1,42 @@
+digraph AdaOS_Architecture {
+    rankdir=LR;
+    node [shape=box style=filled fillcolor="#f9f9f9" fontname="Arial"];
+
+    subgraph cluster_central {
+        label="Central Infrastructure";
+        style=dashed;
+        CentralOrch [label="AdaOS Orchestrator\n(LLM + API + CI)"];
+        SkillStore [label="Skill Store"];
+        PMHub [label="PMHub"];
+
+        CentralOrch -> SkillStore [label="publish / fetch"];
+        CentralOrch -> PMHub [label="task delegation"];
+    }
+
+    subgraph cluster_local {
+        label="Local Network / Home";
+        style=dotted;
+
+        AgentA [label="Agent A\n(with Local Orchestrator)", fillcolor="#d0f0d0"];
+        AgentB [label="Agent B"];
+        AgentC [label="Agent C\n(candidate for Orchestrator)", fillcolor="#f0f0d0"];
+
+        AgentA -> AgentB [style=dashed, color=green, label="MQTT/WebSocket"];
+        AgentA -> AgentC [style=dashed, color=green, label="sync state"];
+        AgentB -> AgentA [label="context sync / fallback"];
+        AgentC -> AgentA [label="promote to Orchestrator"];
+    }
+
+    AgentA -> CentralOrch [label="LLM requests / sync"];
+    AgentA -> SkillStore [label="download skill v2"];
+    
+    CentralOrch -> AgentB [style=dotted, label="optional"];
+    CentralOrch -> AgentC [style=dotted, label="optional"];
+
+    // Annotations (legend-style)
+    OrchestratorNote [shape=note, label="Central Orchestrator:\n• LLM skill generation\n• CI + signing\n• Accounts and roles", width=2, fontname="Arial"];
+    AgentANote [shape=note, label="Agent A as Local Orchestrator:\n• Memory + Secrets\n• Scenario coordination\n• Agent delegation\n• Sync with Central", width=2, fontname="Arial"];
+
+    CentralOrch -> OrchestratorNote [arrowhead=none style=dotted];
+    AgentA -> AgentANote [arrowhead=none style=dotted];
+}

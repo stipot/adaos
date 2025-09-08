@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://github.com/stipot/adaos/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/404/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/404/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/404/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/dataflow/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/dataflow/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/dataflow/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/nervouse_system/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/nervouse_system/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/nervouse_system/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/overview/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/overview/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/overview/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/quickstart/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/quickstart/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/roadmap/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/roadmap/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/roadmap/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/architecture/ARCHITECTURE/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/architecture/ARCHITECTURE/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/architecture/ARCHITECTURE/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/architecture/ecurity/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/architecture/ecurity/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/architecture/ecurity/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/architecture/overview/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/architecture/overview/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/architecture/overview/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/guides/cli./</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/cli./"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/cli./"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/guides/scenarios/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/scenarios/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/scenarios/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/guides/skills/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/skills/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/skills/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/guides/testing/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/testing/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/testing/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/integrations/inimatic/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/integrations/inimatic/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/integrations/inimatic/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/monitoring/observability/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/monitoring/observability/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/monitoring/observability/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/reference/cli/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/cli/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/cli/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/reference/config/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/config/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/config/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/reference/policy/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/policy/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/policy/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/reference/python/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/python/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/python/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/reference/sandbox/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/sandbox/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/sandbox/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/reference/secrets/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/secrets/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/secrets/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/404/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/404/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/404/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/dataflow/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/dataflow/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/dataflow/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/nervouse_system/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/nervouse_system/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/nervouse_system/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/overview/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/overview/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/overview/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/quickstart/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/quickstart/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/roadmap/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/roadmap/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/roadmap/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/architecture/ARCHITECTURE/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/architecture/ARCHITECTURE/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/architecture/ARCHITECTURE/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/architecture/ecurity/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/architecture/ecurity/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/architecture/ecurity/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/architecture/overview/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/architecture/overview/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/architecture/overview/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/glossary/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/glossary/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/guides/cli./</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/cli./"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/cli./"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/guides/scenarios/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/scenarios/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/scenarios/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/guides/skills/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/skills/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/skills/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/guides/testing/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/guides/testing/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/guides/testing/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/integrations/inimatic/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/integrations/inimatic/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/integrations/inimatic/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/monitoring/observability/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/monitoring/observability/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/monitoring/observability/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/reference/cli/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/cli/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/cli/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/reference/config/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/config/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/config/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/reference/policy/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/policy/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/policy/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/reference/python/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/python/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/python/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/reference/sandbox/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/sandbox/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/sandbox/"/>
+    </url>
+    <url>
+        <loc>https://github.com/stipot/adaos/en/reference/secrets/</loc>
+        <lastmod>2025-09-08</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://github.com/stipot/adaos/en/reference/secrets/"/>
+        <xhtml:link rel="alternate" hreflang="ru" href="https://github.com/stipot/adaos/reference/secrets/"/>
+    </url>
+</urlset>

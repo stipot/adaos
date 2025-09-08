@@ -1,0 +1,20 @@
+@startuml Local_AdaOS_MVP
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Container(user, "Пользователь", "Голос или текст", "Формулирует запросы")
+Container(llm, "LLM Client", "OpenAI / litellm", "Генерация тестов и навыков по запросу")
+Container(testrunner, "Test Runner", "PyYAML + pytest", "Прогоняет тесты BDD для навыков")
+Container(git, "Git Repo", "GitPython", "Версионирование навыков")
+Container(sqlite, "Skill DB", "SQLite + SQLAlchemy", "Метаданные навыков и версий")
+Container(runtime, "Skill Runtime", "importlib + watchdog", "Запуск навыков и проверка прав")
+Container(logs, "Логирование", "logging + rich", "Хранение логов и ошибок")
+
+Rel(user, llm, "Говорит/пишет запрос")
+Rel(llm, testrunner, "Создает тест")
+Rel(testrunner, runtime, "Проверяет в песочнице")
+Rel(testrunner, git, "Сохраняет успешный навык")
+Rel(testrunner, sqlite, "Записывает метаданные")
+Rel(runtime, sqlite, "Читает активные версии навыков")
+Rel(runtime, logs, "Пишет логи работы и ошибок")
+
+@enduml
