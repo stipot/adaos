@@ -1,56 +1,44 @@
-import os
-import zipfile
-import urllib.request
-import shutil
+# src/adaos/sdk/utils/setup_env.py
+from __future__ import annotations
 from pathlib import Path
-import sys
-from adaos.agent.db.sqlite import init_db
-from adaos.sdk.utils.git_utils import init_git_repo, _ensure_repo
-from adaos.sdk.context import BASE_DIR, DB_PATH
-
-MODELS_DIR = f"{BASE_DIR}/models"
-VOSK_MODEL_NAME = "vosk-model-small-ru-0.22"
-VOSK_MODEL_URL = f"https://alphacephei.com/vosk/models/{VOSK_MODEL_NAME}.zip"
+import os
+from adaos.apps.bootstrap import get_ctx
+from adaos.adapters.db import SqliteSkillRegistry
+from adaos.adapters.skills.mono_repo import MonoSkillRepository
+from adaos.adapters.scenarios.mono_repo import MonoScenarioRepository
 
 
-def download_vosk_model():
+def prepare_environment() -> None:
+    """
+    Минимальная подготовка окружения для первого запуска:
+      - создаёт каталоги (skills, scenarios, state, cache, logs)
+      - инициализирует схему БД (skills/skill_versions и т.д.)
+      - при наличии URL монорепо навыков — клонирует репозиторий (без установки навыков)
+    """
+    ctx = get_ctx()
+
+    # каталоги
+    dirs = [
+        ctx.paths.skills_dir(),
+        ctx.paths.scenarios_dir(),
+        ctx.paths.state_dir(),
+        ctx.paths.cache_dir(),
+        ctx.paths.logs_dir(),
+    ]
+    for d in dirs:
+        Path(d).mkdir(parents=True, exist_ok=True)
+
+    # схема БД
+    _ = SqliteSkillRegistry(ctx.sql)  # создаст таблицы, если их нет
+
     if os.getenv("ADAOS_TESTING") == "1":
-        return  # В CI не скачиваем модели
-    model_path = Path(MODELS_DIR) / VOSK_MODEL_NAME
-    if model_path.exists():
-        print(f"[AdaOS] Модель Vosk уже установлена: {model_path}")
-        return model_path
+        skills_root.mkdir(parents=True, exist_ok=True)
+        # никаких ensure() монорепо в тестах
+    else:
+        skills_root = Path(ctx.paths.skills_dir())
+        if ctx.settings.skills_monorepo_url and not (skills_root / ".git").exists() and os.getenv("ADAOS_TESTING") != "1":
+            MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch).ensure()
 
-    Path(MODELS_DIR).mkdir(parents=True, exist_ok=True)
-    zip_path = Path(MODELS_DIR) / f"{VOSK_MODEL_NAME}.zip"
-    print("[AdaOS] Downloading Vosk model...")
-    urllib.request.urlretrieve(VOSK_MODEL_URL, zip_path)
-
-    print(f"[AdaOS] Unzipping {zip_path}")
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(Path(MODELS_DIR))
-    zip_path.unlink()
-    return model_path
-
-
-def prepare_environment():
-    if os.getenv("ADAOS_TESTING") == "1":
-        # В CI ничего не подготавливаем (репо/модели), только выходим
-        return
-    env_sample = Path(__file__).parent.parent / ".env.sample"
-    env_file = Path(BASE_DIR) / ".env"
-
-    if not env_file.exists() and env_sample.exists():
-        shutil.copy(env_sample, env_file)
-        print(f"[AdaOS] Created .env file at {env_file}")
-
-    # БД
-    init_db()
-
-    # Git репозиторий навыков
-    _ensure_repo()
-
-    # Модель wake-word
-    download_vosk_model()
-
-    print(f"[AdaOS] Окружение подготовлено в {BASE_DIR}")
+        scenarios_root = Path(ctx.paths.scenarios_dir())
+        if ctx.settings.scenarios_monorepo_url and not (scenarios_root / ".git").exists():
+            MonoScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch).ensure()

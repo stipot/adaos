@@ -1,0 +1,102 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "AdaOS:node1",
+			"type": "shell",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"command": "${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8777 --reload",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "AdaOS:node2",
+			"type": "shell",
+			"command": "$env:ADAOS_BASE_DIR_SUFFIX='_1';${workspaceFolder}\\.venv\\Scripts\\adaos.exe api serve --host 127.0.0.1 --port 8778 --reload",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "redis:docker",
+			"type": "shell",
+			"command": "docker run --rm -p 6379:6379 --name inimatic-redis redis:7-alpine",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "redis:native",
+			"type": "shell",
+			"command": "redis-server --port 6379",
+			"isBackground": true,
+			"problemMatcher": {
+				"owner": "redis",
+				"pattern": [
+					{
+						"regexp": "."
+					}
+				],
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*",
+					"endsPattern": "Ready to accept connections"
+				}
+			}
+		},
+		{
+			"label": "backend:ts-node",
+			"type": "shell",
+			"options": {
+				"cwd": "${workspaceFolder}/src/adaos/integrations/inimatic"
+			},
+			"command": "npm",
+			"args": ["run", "start:api-dev"],
+			"isBackground": true,
+			"problemMatcher": {
+				"owner": "node",
+				"pattern": [
+					{
+						"regexp": "."
+					}
+				],
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "Started on http://",
+					"endsPattern": "Started on http://"
+				}
+			},
+			"env": {
+				"PORT": "3030",
+				"HOST": "0.0.0.0",
+				"ADAOS_BASE": "http://127.0.0.1:8777",
+				"ADAOS_TOKEN": "dev-local-token",
+				"REDIS_URL": "redis://127.0.0.1:6379"
+			},
+			"dependsOn": ["redis:docker"]
+		},
+		{
+			"label": "frontend:serve",
+			"type": "shell",
+			"options": {
+				"cwd": "${workspaceFolder}/src/adaos/integrations/inimatic"
+			},
+			"command": "npm",
+			"args": ["run", "start"],
+			"isBackground": true,
+			"problemMatcher": {
+				"owner": "ng",
+				"pattern": [
+					{
+						"regexp": "."
+					}
+				],
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*(✔|Compiled|Initial Chunk Files).*",
+					"endsPattern": ".*(✔|Compiled successfully|Compiled successfully\\.).*"
+				}
+			}
+		}
+	]
+}

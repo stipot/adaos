@@ -1,0 +1,9 @@
+# tests/smoke/test_kv_sql.py
+from adaos.apps.bootstrap import init_ctx
+
+
+def test_kv(tmp_path, monkeypatch):
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path / "base"))
+    ctx = init_ctx()
+    ctx.kv.set("foo", {"a": 1})
+    assert ctx.kv.get("foo") == {"a": 1}

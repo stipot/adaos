@@ -1,0 +1,28 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "adaos.latent.v1",
+	"title": "Latent Stream Packet",
+	"type": "object",
+	"required": ["schema", "cb_ref", "qid", "seq"],
+	"properties": {
+		"schema": { "const": "adaos.latent.v1" },
+		"cb_ref": { "type": "string" },
+		"adapter": { "type": "string", "description": "adapter name@semver" },
+		"qid": { "type": "string", "description": "domain/topic identifier" },
+		"qos": { "type": "object", "additionalProperties": true },
+		"since": { "type": "string" },
+		"count": { "type": "integer" },
+		"seq": {
+			"oneOf": [
+				{ "type": "array", "items": { "type": "integer", "minimum": 0 } },
+				{
+					"type": "string",
+					"description": "binary payload (base64) for packed codes"
+				}
+			]
+		},
+		"residual": { "type": "object", "additionalProperties": true },
+		"rid": { "type": "string" }
+	},
+	"additionalProperties": false
+}

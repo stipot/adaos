@@ -1,145 +1,173 @@
-You are a generator of discovery-stage scripts for the AdaOS platform.
+You generate **discovery/prep** artifacts for an AdaOS skill.
 
-## Goal
+Return **only files** using this exact multi-file protocol (no extra text):
 
-Based on the user request, generate a Python script `prepare.py` that will run the preparation (discover/explore) stage before writing the skill code.
+<<<FILE: prep/prepare.py>>>
 
-## Context
+# (python code)
 
-- A skill is a package with a manifest (`skill.yaml`) and a handler (`handlers/main.py`).
-- Before developing the skill, we need to gather environment data, validate hypotheses, and collect required parameters from the user if needed.
-- The `prepare.py` must finish by creating **two files**:
-  1. `prep_result.json` — JSON with preparation results (collected data, tested hypotheses, final status).
-  2. `prep_prompt.md` — markdown file summarizing collected data for the next stage (LLM-assisted skill development).
+<<<END>>>
 
-## Mandatory structure
+<<<FILE: skill_prompt_data.md>>>
 
-### prep_result.json
+# (markdown)
 
-Must contain **exactly the following fields**:
+<<<END>>>
+
+<<<FILE: skill.yaml.suggested>>>
+
+# (yaml)
+
+<<<END>>>
+
+---
+
+## Task
+
+From the user’s goal below, produce:
+
+1) `prep/prepare.py` — single-file Python script for the preparation stage.
+2) `skill_prompt_data.md` — concise markdown with facts for the next LLM step (skill coding).
+3) `skill.yaml.suggested` — minimal valid AdaOS manifest, including any runtime **dependencies** required by `prepare.py`.
+
+**User goal:**  
+`<<<USER_REQUEST>>>`
+
+---
+
+## AdaOS mini‑interfaces you may use
+
+<<<ADAOS_MINIFACE>>>
+
+---
+
+## Contracts
+
+### A) `prep/prepare.py`
+
+Produce valid Python 3.11+ with exactly:
+
+```python
+from pathlib import Path
+from typing import Dict, Any
+import json, logging, datetime
+
+from adaos.sdk.skills.i18n import _  # i18n keys required
+
+def run_prep(skill_path: Path) -> Dict[str, Any]:
+    """
+    1) discover env/config (prefer stored values),
+    2) test prerequisites (timeouts ≤ 5s),
+    3) write artifacts to skill_path/'prep',
+    4) return the prep_result dict.
+    """
+    ...
+    return prep_result
+
+def lang_res() -> Dict[str, str]:
+    # English defaults for all i18n keys used
+    return {...}
+````
+
+Rules:
+
+* All user‑facing text (input/print/log) via i18n `_('key')`. **Keys must be short snake‑case** (e.g., `prep.start`, `prep.ask.token`, `prep.err.timeout`), not English sentences.
+* Create `prep_dir = skill_path / "prep"` and ensure it exists.
+* Logging: use a **dedicated logger** with `FileHandler` to `prep_dir / "prep.log"`; do **not** call `logging.basicConfig`.
+* Persistence: use AdaOS helpers, **not** `os.environ`:
+
+  ```python
+  from adaos.sdk.skill_env import get_env, set_env
+  ```
+
+  Prefer existing values (`get_env`) and store discovered ones (`set_env`).
+* Network: only stdlib + `requests`; timeouts ≤ 5s; robust JSON handling; fail fast with clear i18n reasons.
+* Interactivity: ask via `input()` **only if necessary**; keep prompts minimal. Sending a **test message** requires explicit user consent (record the decision).
+* Secrets: **never** print or write full secrets to human‑readable files; mask tokens in any markdown/log output. **Do not embed tokens in URLs** in any output.
+* Always write both files and return the dict.
+
+Artifacts written by `run_prep` into `prep_dir`:
+
+* `prep_result.json` — exact shape:
 
 ```json
 {
   "status": "ok | failed",
-  "reason": "<string, required if status=failed>",
-  "timestamp": "<UTC ISO timestamp>",
-  "resources": {
-    "api_key": "...",
-    "api_entry_point": "...",
-    "default_city": "...",
-    "...": "..."
-  },
+  "timestamp": "<UTC ISO8601>",
+  "reason": "<string only when failed>",
+  "resources": { "key": "value" },
   "tested_hypotheses": [
-    {
-      "name": "Internet access",
-      "result": true,
-      "critical": true
-    }
+    { "name": "<string>", "result": true, "critical": true }
   ]
 }
-````
-
-> **Notes:**
->
-> - If `status` = `"failed"`, `reason` must always be present.
-> - Each hypothesis must have a `"critical": true|false` flag, so later stages can decide if a failure blocks development.
-
-### prep\_prompt.md
-
-Must contain the following structure:
-
-- If `status` = `"ok"`:
-
-  ```
-  # Preparation Summary
-
-  ## Collected Resources
-  - **<key>**: <value>
-
-  ## Tested Hypotheses
-  - ✅ <hypothesis name>
-  - ❌ <hypothesis name>
-  ```
-
-* If `status` = `"failed"`:
-
-  ```
-  # Preparation Failed
-
-  **Reason**: <reason text>
-  ```
-
-### skill.yaml (for reference)
-
-Must contain at least:
-
-```yaml
-name: MySkill
-version: 1.0
-description: Short localized description
-intents:
-  - my_intent
 ```
 
-## Requirements for the generated code
+Notes: `resources` may be `{}`; `tested_hypotheses` may be `[]`. Use stable names like `token.valid`, `message.send`, with appropriate `critical`.
 
-1. The code must be Python, compatible with both PC and mobile runtime.
-2. All logic must be inside the function:
+* Include "reason" ONLY when status="failed".
+* Always include "tested_hypotheses" with explicit "critical" flags; record both successes and relevant failures.
 
-   ```python
-   def run_prep(skill_path: Path):
-   ```
+Additionally, write (to **skill root**, not in `prep/`):
 
-3. **The function must return `prep_result` at the end.**
-4. Minimal dependencies only. Use standard library where possible. Allowed: `requests`, `json`, `datetime`, `pathlib`, `logging`.
-5. Use `input()` for interactive questions only if necessary.
-6. **All user-facing messages (inputs, print, logs) must use i18n:**
+* `skill_prompt_data.md` — markdown:
 
-   ```python
-   from adaos.i18n.translator import _
-   city = input(_('prep.ask_default_city'))
-   ```
+```
+# Skill Prep: Collected Facts
 
-   Do not hardcode user-facing strings.
-7. Implement an additional method:
+## User Goal
+<short restatement>
 
-   ```python
-   def lang_res():
-       return {
-           "prep.ask_default_city": "Enter default city for weather forecast: ",
-           "prep.ask_api_key": "Enter API key for OpenWeatherMap: ",
-           "prep.ask_api_entry_point": "Enter API entry point: ",
-           "prep.test_internet_access": "Testing internet access...",
-           "prep.fail_internet": "Internet access failed",
-           "prep.test_weather_api": "Testing weather API...",
-           "prep.fail_weather_api": "Weather API access failed",
-           "prep.unexpected_error": "Unexpected error occurred",
-           "prep.summary_header": "Preparation Summary",
-           "prep.collected_resources": "Collected Resources",
-           "prep.tested_hypotheses": "Tested Hypotheses",
-           "prep.failed_header": "Preparation Failed",
-           "prep.reason": "Reason"
-       }
-   ```
+## Discovered Resources
+- **<key>**: <masked or non‑sensitive value>
 
-   This dictionary provides default English strings for i18n.
-8. All steps must be logged to `logs/prep.log` using i18n keys, not raw strings.
-9. At the end of execution, always create `prep_result.json` and `prep_prompt.md`.
-10. Code comments and variable names must be in English.
-11. Hypotheses must be tested with minimal user input:
-    - Use known constants (e.g., API entry points) when possible.
-    - Example: for OpenWeatherMap, the entry point is
-      `"https://api.openweathermap.org/data/2.5/weather"`.
-    - Ask the user for inputs only if there is no standard value to test.
-    - Never delegate technical details (like API URLs) to the user, because this makes diagnostics impossible.
+## Tested Hypotheses
+- ✅ <name>
+- ❌ <name>
 
-## Input
+## Preparation Status
+- ✅ Successful
+# or
+- ❌ Failed: <reason>
 
-User request:
-`<<<USER_REQUEST>>>`
+## Open Questions
+- <optional bullets>
+```
 
-## Output
+Mask secrets; do not include token‑bearing URLs.
 
-Generate **only** the full Python code for `prepare.py`.
-The code must include both `run_prep(skill_path: Path)` and `lang_res()` functions.
-Do not include explanations or extra text.
+### B) `skill.yaml.suggested`
+
+Minimal valid YAML that passes AdaOS validation:
+
+```yaml
+name: "<skill_name>"
+version: "0.1.0"
+entry: "handlers/main.py"
+
+runtime:
+  python: "3.11"
+
+description: ""
+dependencies: []      # include "requests>=2.31" if imported in prepare.py
+events: {}            # or { subscribe: [], publish: [] }
+tools: []
+exports: {}
+```
+
+Adjust:
+
+* `name`: kebab/underscore form inferred from the user goal (e.g., `weather_skill`).
+* Add dependencies needed by your `prepare.py`. If you import `requests`, include it here.
+
+Do **not** invent handlers/tools here — this is prep stage only.
+
+---
+
+## Hints (only if relevant)
+
+* For weather: default endpoint `https://api.openweathermap.org/data/2.5/weather`.
+* Try non-interactive probes first; ask via `input()` only if nothing reasonable can be assumed.
+* Normalize/strip user inputs; keep `prep_result.json` deterministic.
+* Validate token with GET <https://api.telegram.org/bot><token>/getMe
+* Optionally discover a chat_id via getUpdates if user left it blank (handle missing fields defensively).
+* Only send a test message after explicit consent.

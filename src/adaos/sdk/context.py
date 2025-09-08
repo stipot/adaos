@@ -48,8 +48,8 @@ class AgentContext:
     def __init__(self, env: EnvironmentContext):
         self.env = env
         self.base_dir = env.get_base_dir()
-        print("get_base_dir", env.get_base_dir())
         self.skills_dir = self.base_dir / "skills"
+        self.scenarios_dir = self.base_dir / "scenarios"
         self.templates_dir = self.env.package_dir / "skills_templates"
         self.db_path = self.base_dir / "skill_db.sqlite"
         self.locales_dir = self.env.package_dir / "sdk/locales"
@@ -57,6 +57,7 @@ class AgentContext:
         self._current_skill: SkillContext | None = None
 
         self.monorepo_url = os.getenv("SKILLS_REPO_URL", "https://github.com/stipot/adaoskills.git")
+        self.monorepo_scens_url = os.getenv("ADAOS_SCENS_REPO_URL", "https://github.com/stipot/adaosscens.git")
         self.default_lang = os.getenv("ADAOS_DEFAULT_LANG", "en")
 
     def get_skill_context(self, skill_name: str) -> "SkillContext":

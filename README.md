@@ -5,8 +5,27 @@
 ## Установка
 
 ```bash
-git clone https://github.com/stipot/adaos.git
-pip install -e .
+git clone -b rev2026 https://github.com/stipot/adaos.git
+cd adaos
+git submodule update --init --recursive # Веб клиент
+
+# mac/linux:
+bash tools/bootstrap.sh
+# windows (PowerShell):
+./tools/bootstrap.ps1
+. .\.venv\Scripts\Activate.ps1
+
+# запустить API и Web:
+make dev        # или: just dev / npm run dev
+# API: http://127.0.0.1:8777
+# Web (Inimatic): http://127.0.0.1:810
+
+adaos --help
+```
+
+## Использование
+
+```bash
 adaos --help
 adaos skill list
 adaos api serve --host 127.0.0.1 --port 8777
@@ -657,3 +676,45 @@ docker exec -it adaos bash
 python cli.py skill list
 
 ```
+
+/build
+/docs
+/src
+  /adaos
+    /core/                 # чистые функции: планирование, валидаторы, преобразования
+      /scenario_engine
+    /domain/               # dataclass DTO/VO, типы событий, конфиги
+    /ports/                # Protocol/ABC: GitClient, PathProvider, *Repository, Runtime, EventBus
+    /adapters/             # реализации портов (весь I/O)
+      /fs
+      /db                  # sqlite и т.п.
+      /git
+      /audio
+        /stt
+        /tts
+      /ovos
+      /rhasspy
+      /android
+      /inimatic
+    /services/             # объектные «оболочки» поверх core и портов
+      /skill
+      /scenario
+      /runtime
+      /orchestrator
+    /apps/                 # исполняемые приложения (входные точки)
+      /cli                 # Typer
+      /api                 # FastAPI/Flask
+      /launcher
+        /linux
+        /windows
+    /sdk/                  # публичные типы/интерфейсы для внешних навыков/сценариев
+      /llm
+      /locales
+      /skills
+      /utils
+      /abi                 # если это публичные форматы — сюда
+    /templates/
+      /skills
+      /scenarios
+/tests
+/tools

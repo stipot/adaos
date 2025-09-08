@@ -119,6 +119,7 @@
 		"УГСН",
 		"Финализация"
 	],
+	"python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
 	"python.analysis.typeCheckingMode": "off",
 	"cSpell.language": "en,ru",
 	"editor.formatOnSave": true,

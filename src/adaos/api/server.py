@@ -1,12 +1,13 @@
 # src/adaos/api/server.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import platform, time
 
 from adaos.api.auth import require_token
 from adaos.sdk.env import get_tts_backend
-from adaos.agent.audio.tts.native_tts import NativeTTS
+from adaos.adapters.audio.tts.native_tts import NativeTTS
 
 # наши роутеры
 from adaos.api import tool_bridge
@@ -15,6 +16,7 @@ from adaos.api import observe_api
 from adaos.api import node_api
 from adaos.agent.core.lifecycle import run_boot_sequence, shutdown, is_ready
 from adaos.agent.core.observe import start_observer, stop_observer, attach_http_trace_headers
+from adaos.api import scenarios
 
 app: FastAPI  # объявим ниже
 
@@ -43,9 +45,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AdaOS API", version="0.1.0", lifespan=lifespan)
 app.include_router(tool_bridge.router, prefix="/api")
 app.include_router(subnet_api.router, prefix="/api")
-app.include_router(node_api.router, prefix="/api")
-app.include_router(observe_api.router, prefix="/api")
-
+app.include_router(node_api.router, prefix="/api/node")
+app.include_router(observe_api.router, prefix="/api/observe")
+app.include_router(scenarios.router, prefix="/api/scenarios")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200", "http://127.0.0.1:4200", "*"],  # под dev и/или произвольный origin
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-AdaOS-Token"],
+    allow_credentials=False,  # токен идёт в заголовке, куки не нужны
+)
 
 # --- базовые эндпоинты (для проверки, что всё живо) ---
 

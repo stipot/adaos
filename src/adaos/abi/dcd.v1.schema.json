@@ -1,0 +1,55 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "adaos.dcd.v1",
+	"title": "Device Capability Descriptor",
+	"type": "object",
+	"required": ["adaos", "device", "base_ref"],
+	"properties": {
+		"adaos": { "const": "dcd.v1" },
+		"device": {
+			"type": "object",
+			"required": ["id", "class"],
+			"properties": {
+				"id": { "type": "string" },
+				"class": { "type": "string" },
+				"fw": { "type": "string" },
+				"labels": { "type": "array", "items": { "type": "string" } }
+			},
+			"additionalProperties": true
+		},
+		"base_ref": { "type": "string" },
+		"base_hash": { "type": "string" },
+		"patch": {
+			"type": "object",
+			"description": "JSON Merge Patch or patch-ops array"
+		},
+		"features": { "type": "array", "items": { "type": "string" } },
+		"masks_supported": { "type": "array", "items": { "type": "string" } },
+		"links": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["rel", "href"],
+				"properties": {
+					"rel": { "type": "string" },
+					"href": { "type": "string" }
+				},
+				"additionalProperties": false
+			}
+		},
+		"latent": {
+			"type": "object",
+			"properties": {
+				"cb_refs": { "type": "array", "items": { "type": "string" } },
+				"lrpc": { "type": "boolean" }
+			},
+			"additionalProperties": true
+		},
+		"latent_profile": {
+			"type": "object",
+			"description": "Per-domain adapter and codebooks",
+			"additionalProperties": true
+		}
+	},
+	"additionalProperties": true
+}
