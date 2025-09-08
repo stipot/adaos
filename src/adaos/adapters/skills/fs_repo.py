@@ -107,7 +107,7 @@ class FsSkillRepository(SkillRepository):
             meta = SkillMeta(id=SkillId(name), name=name, version="0.0.0", path=str(dest.resolve()))
         return meta
 
-    def remove(self, skill_id: str) -> None:
+    def uninstall(self, skill_id: str) -> None:
         meta = self.get(skill_id)
         if not meta:
             raise FileNotFoundError(f"skill '{skill_id}' not found")

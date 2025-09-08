@@ -6,7 +6,7 @@ adaos --help
 # Навыки
 adaos skill list [--fs]
 adaos skill install <name>
-adaos skill remove <name>
+adaos skill uninstall <name>
 adaos skill sync
 adaos skill push <name> -m "msg"
 adaos skill reconcile-fs-to-db
@@ -14,7 +14,7 @@ adaos skill reconcile-fs-to-db
 # Сценарии
 adaos scenario list [--fs]
 adaos scenario install <sid>
-adaos scenario remove <sid>
+adaos scenario uninstall <sid>
 adaos scenario sync
 adaos scenario push <sid> -m "msg"
 

@@ -1,7 +1,7 @@
 # src/adaos/apps/cli/app.py
 from __future__ import annotations
 
-import os
+import os, traceback
 import sys
 import shutil
 from pathlib import Path
@@ -32,7 +32,18 @@ from adaos.apps.cli.commands import sandbox as sandbox_cmd
 
 app = typer.Typer(help=_("cli.help"))
 
+
 # -------- вспомогательные --------
+def _run_safe(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if os.getenv("ADAOS_CLI_DEBUG") == "1":
+                traceback.print_exc()
+            raise
+
+    return wrapper
 
 
 def _read(name: str, default: str = "") -> str:
@@ -88,6 +99,7 @@ def ensure_environment():
 # -------- корневой callback (composition root) --------
 
 
+@_run_safe
 @app.callback()
 def main(
     ctx: typer.Context,

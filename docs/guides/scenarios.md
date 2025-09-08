@@ -10,7 +10,7 @@ CLI:
 ```bash
 adaos scenario list [--fs]
 adaos scenario install <sid>
-adaos scenario remove <sid>
+adaos scenario uninstall <sid>
 adaos scenario sync
 adaos scenario push <sid> -m "message"
 ```
@@ -82,6 +82,6 @@ CLI:
 adaos scenario list
 adaos scenario list --fs
 adaos scenario install <sid>
-adaos scenario remove <sid>
+adaos scenario uninstall <sid>
 adaos scenario sync
 ```

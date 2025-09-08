@@ -80,7 +80,7 @@ class MonoScenarioRepository(ScenarioRepository):
         # Если папка не подтянута — вернём заглушку после синка
         return _read_manifest(p) if p.exists() else SkillMeta(id=SkillId(name), name=name, version="0.0.0", path=str(p))
 
-    def remove(self, scenario_id: str) -> None:
+    def uninstall(self, scenario_id: str) -> None:
         self._ensure()
         p = _safe_join(self._root(), scenario_id)
         if p.exists():

@@ -20,6 +20,6 @@ class SkillService:
         emit(self.bus, "skill.installed", {"id": meta.id.value, "version": meta.version, "path": meta.path}, "skill.svc")
         return meta
 
-    def remove(self, skill_id: str) -> None:
-        self.repo.remove(skill_id)
-        emit(self.bus, "skill.removed", {"id": skill_id}, "skill.svc")
+    def uninstall(self, skill_id: str) -> None:
+        self.repo.uninstall(skill_id)
+        emit(self.bus, "skill.uninstalled", {"id": skill_id}, "skill.svc")

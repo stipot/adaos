@@ -108,7 +108,7 @@ class MonoSkillRepository(SkillRepository):
             raise FileNotFoundError(f"skill '{name}' not present after sync")
         return _read_manifest(p)
 
-    def remove(self, skill_id: str) -> None:
+    def uninstall(self, skill_id: str) -> None:
         self._ensure()
         p = _safe_join(self._root(), skill_id)
         remove_tree(str(p), fs=self.paths.ctx.fs)

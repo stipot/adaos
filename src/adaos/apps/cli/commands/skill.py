@@ -1,7 +1,8 @@
 from __future__ import annotations
 import typer
+import json
 from typing import Optional
-import os
+import os, traceback
 from pathlib import Path
 
 from adaos.apps.bootstrap import get_ctx
@@ -9,18 +10,43 @@ from adaos.adapters.skills.mono_repo import MonoSkillRepository
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.sdk.skill_service import push_skill
-from adaos.sdk.skill_service import create_skill as _create_skill
+from adaos.sdk.skill_service import create_skill, install_skill, uninstall_skill, list_installed_skills
 
 app = typer.Typer(help="Управление навыками (монорепозиторий, реестр в БД)")
+
+
+def _run_safe(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if os.getenv("ADAOS_CLI_DEBUG") == "1":
+                traceback.print_exc()
+            raise
+
+    return wrapper
+
+
+def _debug_wrap(fn):
+    def _w(*a, **kw):
+        try:
+            return fn(*a, **kw)
+        except Exception:
+            if os.getenv("ADAOS_CLI_DEBUG") == "1":
+                traceback.print_exc()
+            raise
+
+    return _w
 
 
 def _mgr() -> SkillManager:
     ctx = get_ctx()
     repo = MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch)
     reg = SqliteSkillRegistry(ctx.sql)
-    return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps)
+    return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=getattr(ctx, "bus", None), caps=ctx.caps)
 
 
+@_run_safe
 @app.command("list")
 def list_skills(show_fs: bool = typer.Option(False, "--fs", help="Показать фактическое наличие на диске")):
     mgr = _mgr()
@@ -41,6 +67,7 @@ def list_skills(show_fs: bool = typer.Option(False, "--fs", help="Показат
             typer.echo(f"⚠ На диске лишние (нет в реестре): {', '.join(sorted(extra))}")
 
 
+@_run_safe
 @app.command("sync")
 def sync():
     """Применяет sparse-set к набору из реестра и делает pull."""
@@ -49,20 +76,15 @@ def sync():
     typer.echo("Синхронизация завершена.")
 
 
-@app.command("install")
-def install(name: str = typer.Argument(..., help="Имя навыка (подпапка монорепо)"), pin: Optional[str] = typer.Option(None, "--pin", help="Закрепить на коммите/теге (опц.)")):
+@_run_safe
+@app.command("uninstall")
+def uninstall(name: str):
     mgr = _mgr()
-    meta = mgr.install(name, pin=pin)
-    typer.echo(f"Установлен: {meta.id.value} v{meta.version} @ {meta.path}")
-
-
-@app.command("remove")
-def remove(name: str):
-    mgr = _mgr()
-    mgr.remove(name)
+    mgr.uninstall(name)
     typer.echo(f"Удалён: {name}")
 
 
+@_run_safe
 @app.command("reconcile-fs-to-db")
 def reconcile_fs_to_db():
     """Обходит {skills_dir} и проставляет installed=1 для найденных папок (кроме .git).
@@ -85,6 +107,7 @@ def reconcile_fs_to_db():
     typer.echo(f"В реестр добавлено/актуализировано: {', '.join(found) if found else '(ничего)'}")
 
 
+@_run_safe
 @app.command("push")
 def push_command(
     skill_name: str = typer.Argument(..., help="Имя навыка (подпапка монорепо)"),
@@ -102,12 +125,32 @@ def push_command(
         typer.echo(f"Pushed {skill_name}: {res}")
 
 
+@_run_safe
 @app.command("create")
-def create_command(
-    name: str = typer.Argument(..., help="Имя навыка"),
-    template: str = typer.Option("demo_skill", "--template", "-t"),
-    register: bool = typer.Option(True, "--register/--no-register"),
-    push: bool = typer.Option(False, "--push/--no-push"),
-):
-    p = _create_skill(name, template, register=register, push=push)
+def cmd_create(name: str, template: str = typer.Option("demo_skill", "--template", "-t")):
+    p = create_skill(name, template=template)
     typer.echo(f"Created: {p}")
+
+
+@_run_safe
+@app.command("install")
+def cmd_install(name: str):
+    msg = install_skill(name)
+    typer.echo(msg)
+
+
+@_run_safe
+@app.command("list")
+def cmd_list(json_output: bool = typer.Option(False, "--json", help="Вывод списка в JSON")):
+    items = list_installed_skills()
+    if json_output:
+        payload = {"skills": items}  # формат: [{name, version}]
+        typer.echo(json.dumps(payload, ensure_ascii=False))
+        return
+
+    if not items:
+        typer.echo("No installed skills")
+        return
+
+    for it in items:
+        typer.echo(f"- {it['name']} (version: {it['version']})")

@@ -19,8 +19,30 @@ _name_re = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
 
 
 class SkillManager:
-    def __init__(self, *, repo: SkillRepository, registry: SkillRegistry, git: GitClient, paths: PathProvider, bus: EventBus, caps: Capabilities, settings: Settings | None = None):
-        self.repo, self.reg, self.git, self.paths, self.bus, self.caps = repo, registry, git, paths, bus, caps
+    def __init__(
+        self,
+        *,
+        git: GitClient,
+        paths: PathProvider,
+        caps: Capabilities,
+        settings: Settings | None = None,
+        registry: SkillRegistry = None,
+        reg=None,
+        repo: SkillRepository | None = None,
+        bus: EventBus | None = None,
+    ):
+        if registry is None and reg is not None:
+            registry = reg
+        if registry is None:
+            raise ValueError("SkillManager: registry is required")
+        self.repo, self.reg, self.git, self.paths, self.bus, self.caps = (
+            repo,
+            registry,
+            git,
+            paths,
+            bus,
+            caps,
+        )
         self.settings = settings
 
     def list_installed(self) -> list[SkillRecord]:
@@ -50,26 +72,35 @@ class SkillManager:
         if not _name_re.match(name):
             raise ValueError("invalid skill name")
 
-        rec = self.reg.register(name, pin=pin)
+        rec = self.reg.register(name, pin=pin)  # вернуть запись, но НЕ читать .id
 
         root = Path(self.paths.skills_dir())
         test_mode = os.getenv("ADAOS_TESTING") == "1"
-        # >>> РАННИЙ выход: test-mode ИЛИ нет .git — НИКАКИХ git/sparse/clone <<<
         if test_mode or not (root / ".git").exists():
             return f"installed: {name} (registry-only{' test-mode' if test_mode else ''})"
 
-        # --- обычный путь с git ---
+        # обычный путь: sparse + pull
         names = [r.name for r in self.reg.list()]
         self.git.sparse_init(str(root), cone=False)
         self.git.sparse_set(str(root), names, no_cone=True)
         self.git.pull(str(root))
         return f"installed: {name}"
 
-    def remove(self, name: str) -> None:
+    def uninstall(self, name: str) -> None:
         self.caps.require("core", "skills.manage", "net.git")
-        self.repo.ensure()
+        name = name.strip()
+        if not _name_re.match(name):
+            raise ValueError("invalid skill name")
+        # если записи нет — считаем idempotent
+        rec = self.reg.get(name)
+        if not rec:
+            return f"uninstalled: {name} (not found)"
         self.reg.unregister(name)
         root = self.paths.skills_dir()
+        test_mode = os.getenv("ADAOS_TESTING") == "1"
+        # в тестах/без .git — только реестр, без git операций
+        if test_mode or not (root / ".git").exists():
+            return f"uninstalled: {name} (registry-only{' test-mode' if test_mode else ''})"
         names = [r.name for r in self.reg.list()]
         ensure_clean(self.git, root, names)
         self.git.sparse_init(root, cone=False)
@@ -77,7 +108,7 @@ class SkillManager:
             self.git.sparse_set(root, names, no_cone=True)
         self.git.pull(root)
         remove_tree(str(Path(root) / name), fs=self.paths.ctx.fs if hasattr(self.paths, "ctx") else get_ctx().fs)
-        emit(self.bus, "skill.removed", {"id": name}, "skill.mgr")
+        emit(self.bus, "skill.uninstalled", {"id": name}, "skill.mgr")
 
     def push(self, name: str, message: str, *, signoff: bool = False) -> str:
         self.caps.require("core", "skills.manage", "git.write", "net.git")

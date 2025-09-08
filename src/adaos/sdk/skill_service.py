@@ -4,17 +4,65 @@ from typing import Optional, List
 from adaos.apps.bootstrap import get_ctx
 
 
-# --- Менеджер навыков и реестр ---
 def _mgr():
     ctx = get_ctx()
-    # импорт локально, чтобы не было циклов
     from adaos.services.skill.manager import SkillManager
     from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
+    from adaos.adapters.skills.mono_repo import MonoSkillRepository
 
-    return SkillManager(paths=ctx.paths, reg=SqliteSkillRegistry(ctx.sql), git=ctx.git, caps=ctx.caps)
+    return SkillManager(
+        paths=ctx.paths,
+        git=ctx.git,
+        caps=ctx.caps,
+        registry=SqliteSkillRegistry(ctx.sql),
+        repo=MonoSkillRepository(
+            paths=ctx.paths,
+            git=ctx.git,
+            url=ctx.settings.skills_monorepo_url,
+            branch=ctx.settings.skills_monorepo_branch,
+        ),
+        bus=getattr(ctx, "bus", None),  # если в контексте нет bus (тесты)
+    )
 
 
-# ---- CRUD / DevOps ----
+def list_installed_skills() -> List[Dict[str, str]]:
+    """
+    Возвращает [{name, version}] только для installed==True.
+    Без походов в git. Работает и в тестовом режиме.
+    """
+    ctx = get_ctx()
+    from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
+
+    reg = SqliteSkillRegistry(ctx.sql)
+    items = []
+    for r in reg.list():
+        if getattr(r, "installed", False):
+            items.append(
+                {
+                    "name": r.name,
+                    "version": r.active_version or "unknown",
+                }
+            )
+    return items
+
+
+def list_all_skills() -> List[Dict[str, str]]:
+    """Пригодится на будущее: полный список из реестра."""
+    ctx = get_ctx()
+    from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
+
+    reg = SqliteSkillRegistry(ctx.sql)
+    return [
+        {
+            "name": r.name,
+            "version": r.active_version or "unknown",
+            "installed": bool(getattr(r, "installed", False)),
+        }
+        for r in reg.list()
+    ]
+
+
+# Создание из шаблона (локально). push=False по умолчанию.
 def create_skill(name: str, template: str = "demo_skill", register: bool = True, push: bool = False) -> str:
     from adaos.services.skill.scaffold import create_skill as _create
 
@@ -22,7 +70,6 @@ def create_skill(name: str, template: str = "demo_skill", register: bool = True,
 
 
 def install_skill(name: str) -> str:
-    # НИКАКОЙ пост-обработки и доступа к .id — просто проксируем ответ менеджера
     return _mgr().install(name)
 
 
@@ -42,7 +89,6 @@ def update_skill(name: str) -> str:
     return _mgr().update(name)
 
 
-# (опционально) «всё» — можно заглушить в тестах или аккуратно делегировать, если есть реализация:
+# Не обязательно для тестов; оставим «пустышкой» либо делегируй, если реализовано.
 def install_all_skills(limit: Optional[int] = None) -> List[str]:
-    # для тестов не используется; если нужно — делегируй в менеджер/репозиторий
     return []
