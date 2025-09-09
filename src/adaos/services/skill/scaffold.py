@@ -1,13 +1,23 @@
+# src/adaos/services/skill/scaffold.py
 from __future__ import annotations
-import re, shutil
+
+import re
+import shutil
 from pathlib import Path
+from typing import Optional
+
 from adaos.apps.bootstrap import get_ctx
-from adaos.services.fs.safe_io import ensure_dir  # если удобно, иначе target.parent.mkdir(...)
+from adaos.services.eventbus import emit
+
+# git/FS helpers
+from adaos.services.git.safe_commit import sanitize_message, check_no_denied
+from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
 
 _name_re = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
 
 def _safe_subdir(root: Path, name: str) -> Path:
+    """Защита от path traversal: target всегда внутри root."""
     p = (root / name).resolve()
     root = root.resolve()
     try:
@@ -17,59 +27,114 @@ def _safe_subdir(root: Path, name: str) -> Path:
     return p
 
 
-def create_skill(name: str, template: str = "demo_skill", *, register: bool = True, push: bool = False) -> Path:
+def _resolve_template_dir(template: str) -> Path:
+    """
+    Находит директорию шаблона навыка:
+    1) как пакетный ресурс (adaos.skills_templates/<template>)
+    2) рядом с исходниками (…/src/adaos/skills_templates/<template>)
+    3) на случай запуска из корня репо (cwd/src/adaos/skills_templates/<template>)
+    """
+    # 1) пакетный ресурс
+    try:
+        import importlib.resources as ir
+        import adaos.skills_templates as st_pkg
+
+        res = ir.files(st_pkg) / template
+        with ir.as_file(res) as fp:
+            p = Path(fp)
+            if p.exists():
+                return p
+    except Exception:
+        pass
+
+    # 2) отталкиваемся от текущего файла
+    here = Path(__file__).resolve()
+    candidates = []
+    # …/services/skill/scaffold.py -> …/src/adaos/skills_templates/<template>
+    if len(here.parents) >= 3:
+        candidates.append(here.parents[2] / "skills_templates" / template)
+    if len(here.parents) >= 4:
+        candidates.append(here.parents[3] / "src" / "adaos" / "skills_templates" / template)
+    # 3) корень репозитория (если запускаем из него)
+    candidates.append(Path.cwd() / "src" / "adaos" / "skills_templates" / template)
+
+    for c in candidates:
+        if c and c.exists():
+            return c
+
+    raise FileNotFoundError(f"template '{template}' not found; tried package resource and: " + ", ".join(str(c) for c in candidates if c))
+
+
+def create(
+    name: str,
+    template: str = "demo_skill",
+    *,
+    register: bool = True,
+    push: bool = False,
+    version: str = "0.1.0",
+) -> Path:
+    """
+    Создаёт новый навык из локального шаблона и (опционально) регистрирует его в БД.
+    Если push=True — коммитит поддерево навыка в монорепо и пушит.
+    """
     if not _name_re.match(name):
         raise ValueError("invalid skill name")
 
     ctx = get_ctx()
     skills_root = Path(ctx.paths.skills_dir())
-    repo_ready = (skills_root / ".git").exists()
-
     target = _safe_subdir(skills_root, name)
+
     if target.exists():
         raise FileExistsError(f"skill '{name}' already exists at {target}")
 
-    # путь: src/adaos/skills_templates/<template>
-    tpl_root = Path(__file__).resolve().parents[2] / "skills_templates" / template
-    if not tpl_root.exists():
-        raise FileNotFoundError(f"template '{template}' not found at {tpl_root}")
+    # найдём директорию шаблона устойчиво
+    tpl_root = _resolve_template_dir(template)
 
-    ensure_dir(str(target), ctx.fs)  # или: target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(tpl_root, target, dirs_exist_ok=True)
+    # скопируем шаблон
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(tpl_root, target)  # читаемо и атомарно: падает, если target уже есть
 
+    # гарантируем meta
     meta = target / "skill.yaml"
     if not meta.exists():
-        meta.write_text(f"name: {name}\nversion: 0.1.0\n", encoding="utf-8")
+        meta.write_text(f"name: {name}\nversion: {version}\n", encoding="utf-8")
 
+    # регистрация в локальном реестре (идемпотентно)
     if register:
         try:
-            from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
-
-            reg = SqliteSkillRegistry(ctx.sql)
+            reg = SqliteSkillRegistry(sql=ctx.sql)
             if not reg.get(name):
-                reg.register(name, pin=None)
+                reg.register(name, pin=None, active_version=None, repo_url=None)
         except Exception:
-            # если в тестовом окружении реестр ещё не поднят — не валим create
+            # тест/ранняя стадия — не валим создание навыка из-за реестра
             pass
 
-    if push:
-        if not repo_ready:
-            raise RuntimeError("Cannot push: skills repo is not initialized. Run `adaos skill sync` once.")
-        from adaos.services.git.safe_commit import sanitize_message, check_no_denied
+    emit(ctx.bus, "skill.created", {"name": name, "template": template}, "skill.scaffold")
 
+    # optional push в монорепо (только если repo инициализирован)
+    if push:
+        if not (skills_root / ".git").exists():
+            raise RuntimeError("Cannot push: skills repo is not initialized. Run `adaos skill sync` once.")
         changed = ctx.git.changed_files(str(skills_root), subpath=name)
         bad = check_no_denied(changed)
         if bad:
             raise PermissionError(f"push denied: sensitive files matched: {', '.join(bad)}")
+        msg = sanitize_message(f"feat(skill): init {name} from template {template}")
         sha = ctx.git.commit_subpath(
             str(skills_root),
             subpath=name,
-            message=sanitize_message(f"feat(skill): init {name} from template {template}"),
+            message=msg,
             author_name=ctx.settings.git_author_name,
             author_email=ctx.settings.git_author_email,
             signoff=False,
         )
         if sha != "nothing-to-commit":
             ctx.git.push(str(skills_root))
+        emit(ctx.bus, "skill.pushed", {"name": name, "sha": sha}, "skill.scaffold")
 
     return target
+
+
+# совместимость со старым API
+def create_skill(name: str, template: str = "demo_skill", *, register: bool = True, push: bool = False) -> Path:
+    return create(name, template, register=register, push=push)

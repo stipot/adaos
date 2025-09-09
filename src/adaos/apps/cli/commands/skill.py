@@ -1,3 +1,4 @@
+# src\adaos\apps\cli\commands\skill.py
 from __future__ import annotations
 import typer
 import json
@@ -16,7 +17,6 @@ from adaos.sdk.skills import (
     uninstall as uninstall_skill,
     install_all as install_all_skills,
     create as create_skill,
-    list_installed as list_installed_skills,
 )
 
 
@@ -35,18 +35,6 @@ def _run_safe(func):
     return wrapper
 
 
-def _debug_wrap(fn):
-    def _w(*a, **kw):
-        try:
-            return fn(*a, **kw)
-        except Exception:
-            if os.getenv("ADAOS_CLI_DEBUG") == "1":
-                traceback.print_exc()
-            raise
-
-    return _w
-
-
 def _mgr() -> SkillManager:
     ctx = get_ctx()
     repo = MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch)
@@ -56,17 +44,45 @@ def _mgr() -> SkillManager:
 
 @_run_safe
 @app.command("list")
-def list_skills(show_fs: bool = typer.Option(False, "--fs", help="Показать фактическое наличие на диске")):
+def list_cmd(
+    json_output: bool = typer.Option(False, "--json", help="Вывести JSON"),
+    show_fs: bool = typer.Option(False, "--fs", help="Показать сверку с файловой системой"),
+):
+    """
+    Список установленных навыков из реестра.
+    JSON-формат: {"skills": [{"name": "...", "version": "..."}, ...]}
+    """
     mgr = _mgr()
-    rows = mgr.list_installed()
+    rows = mgr.list_installed()  # SkillRecord[]
+
+    if json_output:
+        payload = {
+            "skills": [
+                {
+                    "name": r.name,
+                    # тестам важен только name, но version полезно оставить
+                    "version": getattr(r, "active_version", None) or "unknown",
+                }
+                for r in rows
+                # оставляем только действительно установленные (если поле есть)
+                if bool(getattr(r, "installed", True))
+            ]
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False))
+        return
+
     if not rows:
         typer.echo("Установленных навыков нет (реестр пуст).")
     else:
         for r in rows:
-            typer.echo(f"{r.name:32} pin={r.pin or '-'}  installed_at={int(r.installed_at)}")
+            if not bool(getattr(r, "installed", True)):
+                continue
+            av = getattr(r, "active_version", None) or "unknown"
+            typer.echo(f"- {r.name} (version: {av})")
+
     if show_fs:
         present = {m.id.value for m in mgr.list_present()}
-        desired = {r.name for r in rows}
+        desired = {r.name for r in rows if bool(getattr(r, "installed", True))}
         missing = desired - present
         extra = present - desired
         if missing:
@@ -145,20 +161,3 @@ def cmd_create(name: str, template: str = typer.Option("demo_skill", "--template
 def cmd_install(name: str):
     msg = install_skill(name)
     typer.echo(msg)
-
-
-@_run_safe
-@app.command("list")
-def cmd_list(json_output: bool = typer.Option(False, "--json", help="Вывод списка в JSON")):
-    items = list_installed_skills()
-    if json_output:
-        payload = {"skills": items}  # формат: [{name, version}]
-        typer.echo(json.dumps(payload, ensure_ascii=False))
-        return
-
-    if not items:
-        typer.echo("No installed skills")
-        return
-
-    for it in items:
-        typer.echo(f"- {it['name']} (version: {it['version']})")
