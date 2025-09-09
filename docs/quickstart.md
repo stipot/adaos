@@ -5,6 +5,9 @@ git clone -b rev2026 https://github.com/stipot/adaos.git
 cd adaos
 git submodule update --init --recursive
 
+# install dev core (optional)
+pip install -e .[dev]
+
 # mac/linux:
 bash tools/bootstrap.sh
 # windows (PowerShell):
