@@ -1,3 +1,4 @@
+# \src\adaos\services\skill\service.py
 from __future__ import annotations
 from typing import Optional
 from adaos.domain import SkillMeta
