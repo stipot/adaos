@@ -1,6 +1,6 @@
 # src/adaos/sdk/skill_service.py
 from __future__ import annotations
-from typing import Optional, List
+from typing import Optional, List, Dict
 from adaos.apps.bootstrap import get_ctx
 
 

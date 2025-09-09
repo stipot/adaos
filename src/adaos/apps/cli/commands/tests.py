@@ -7,7 +7,15 @@ import typer
 from adaos.services.sandbox.bootstrap import ensure_dev_venv
 from adaos.apps.bootstrap import get_ctx
 from adaos.ports.sandbox import ExecLimits
-from adaos.sdk.skill_service import install_all_skills
+from adaos.sdk.skills import (
+    push as push_skill,
+    pull as pull_skill,
+    install as install_skill,
+    uninstall as uninstall_skill,
+    install_all as install_all_skills,
+    create as create_skill,
+    list_installed as list_installed_skills,
+)
 
 app = typer.Typer(help="Run AdaOS test suites")
 
