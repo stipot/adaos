@@ -12,6 +12,7 @@ from adaos.adapters.db import SqliteSkillRegistry
 from adaos.sdk.skill_service import push_skill
 from adaos.sdk.skill_service import create_skill, install_skill, uninstall_skill, list_installed_skills
 
+
 app = typer.Typer(help="Управление навыками (монорепозиторий, реестр в БД)")
 
 
