@@ -39,7 +39,7 @@ def run_pytest(
                  None — автодетект: True, если target внутри BASE_DIR.
     """
     ctx = get_ctx()
-    base = Path(ctx.paths.base())
+    base = Path(ctx.paths.base)
     # разумный выбор директории по умолчанию:
     if target:
         tpath = Path(target)

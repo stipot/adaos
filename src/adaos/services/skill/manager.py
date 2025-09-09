@@ -74,7 +74,7 @@ class SkillManager:
 
         rec = self.reg.register(name, pin=pin)  # вернуть запись, но НЕ читать .id
 
-        root = Path(self.paths.skills_dir())
+        root = self.paths.skills_dir()
         test_mode = os.getenv("ADAOS_TESTING") == "1"
         if test_mode or not (root / ".git").exists():
             return f"installed: {name} (registry-only{' test-mode' if test_mode else ''})"
@@ -112,8 +112,8 @@ class SkillManager:
 
     def push(self, name: str, message: str, *, signoff: bool = False) -> str:
         self.caps.require("core", "skills.manage", "git.write", "net.git")
-        root = Path(ctx.paths.skills_dir())
-        if not (Path(root) / ".git").exists():
+        root = self.paths.skills_dir()
+        if not (root / ".git").exists():
             raise RuntimeError("Skills repo is not initialized. Run `adaos skill sync` once.")
 
         sub = name.strip()

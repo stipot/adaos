@@ -45,7 +45,7 @@ def _read_manifest(p: Path) -> SkillMeta:
 def _read_catalog(paths: PathProvider) -> list[str]:
     # ищем skills.yaml рядом с base или внутри монорепо (первое найденное)
     candidates = [
-        Path(paths.base()) / CATALOG_FILE,
+        Path(paths.base) / CATALOG_FILE,
         Path(paths.skills_dir()).parent / CATALOG_FILE,
         Path(paths.skills_dir()) / CATALOG_FILE,
     ]

@@ -1,3 +1,4 @@
+# \src\adaos\services\policy\fs.py
 from __future__ import annotations
 from pathlib import Path
 
@@ -32,9 +33,24 @@ class SimpleFSPolicy:
     def require_write(self, path: str) -> None:
         self._check(path)
 
-    def is_allowed(self, path: str) -> bool:
-        try:
-            self._check(path)
-            return True
-        except PermissionError:
-            return False
+    def allow_root(self, root: str | Path) -> None:
+        p = Path(root).resolve()
+        if p not in self._roots:
+            self._roots.append(p)
+
+    def is_allowed(self, path: str | Path) -> bool:
+        p = Path(path).resolve()
+        return any(str(p).startswith(str(root) + Path.sep) or p == root for root in self._roots)
+
+    def join_checked(self, root: str | Path, rel: str) -> Path:
+        p = (Path(root) / rel).resolve()
+        if not self.is_allowed(p):
+            raise PermissionError(f"FS policy: path outside allowed roots: {p}")
+        return p
+
+    def remove_tree(self, path: str | Path) -> None:
+        p = Path(path).resolve()
+        if not self.is_allowed(p):
+            raise PermissionError(f"FS policy: path outside allowed roots: {p}")
+        if p.exists():
+            shutil.rmtree(p)

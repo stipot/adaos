@@ -1,10 +1,11 @@
+# src\adaos\apps\bootstrap.py
 from __future__ import annotations
 from typing import Optional
 from threading import RLock
 
 from adaos.services.settings import Settings
 from adaos.services.agent_context import AgentContext
-from adaos.adapters.fs.path_provider import LocalPathProvider
+from adaos.adapters.fs.path_provider import PathProvider
 from adaos.services.eventbus import LocalEventBus
 from adaos.services.logging import setup_logging, attach_event_logger
 from adaos.adapters.git.cli_git import CliGitClient
@@ -51,12 +52,16 @@ class _CtxHolder:
 
     @staticmethod
     def _build(settings: Settings) -> AgentContext:
-        paths = LocalPathProvider(settings)
+        paths = PathProvider(settings)
+        paths.ensure_tree()
+        fs = SimpleFSPolicy()
+        for root in (paths.base_dir(), paths.skills_dir(), paths.scenarios_dir(), paths.logs_dir(), paths.cache_dir(), paths.state_dir(), paths.tmp_dir()):
+            fs.allow_root(root)
         bus = LocalEventBus()
         root_logger = setup_logging(paths)
         # policies
         caps = InMemoryCapabilities()
-        sandbox_runner = ProcSandbox(fs_base=paths.base())
+        sandbox_runner = ProcSandbox(fs_base=paths.base)
         sandbox = SandboxService(runner=sandbox_runner, caps=caps, bus=bus)
         attach_event_logger(bus, root_logger.getChild("events"))
 
@@ -93,15 +98,6 @@ class _CtxHolder:
         git_base = CliGitClient(depth=1)
         git = SecureGitClient(git_base, net)
 
-        # FS policy: разрешённые корни — только внутри BASE_DIR
-        fs = SimpleFSPolicy()
-        fs.allow_root(paths.base())
-        fs.allow_root(paths.skills_dir())
-        fs.allow_root(paths.scenarios_dir())
-        fs.allow_root(paths.state_dir())
-        fs.allow_root(paths.cache_dir())
-        fs.allow_root(paths.logs_dir())
-
         proc = AsyncProcessManager(bus=bus)
         sql = SQLite(paths)
         kv = SQLiteKV(sql, namespace="adaos")
@@ -131,7 +127,7 @@ class _CtxHolder:
                 except Exception:
                     pass
 
-            secrets_backend = FileVault(base_dir=paths.base(), fs=None if False else SimpleFSPolicy(), key_get=key_get, key_set=key_set)  # fs подменим ниже
+            secrets_backend = FileVault(base_dir=paths.base, fs=None if False else SimpleFSPolicy(), key_get=key_get, key_set=key_set)  # fs подменим ниже
 
         secrets = SecretsService(secrets_backend, caps)
 

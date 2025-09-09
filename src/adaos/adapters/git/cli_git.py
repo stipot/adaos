@@ -2,14 +2,19 @@
 from __future__ import annotations
 import subprocess, os
 from pathlib import Path
-from typing import Optional, Final, Sequence
+from typing import Optional, Final, Sequence, Union
 from adaos.ports.git import GitClient
 
 
 class GitError(RuntimeError): ...
 
 
-def _run_git(args: list[str], cwd: Optional[str] = None) -> str:
+StrOrPath = Union[str, Path]
+
+
+def _run_git(args: list[str], cwd: Optional[StrOrPath] = None) -> str:
+    if cwd is not None:
+        cwd = str(Path(cwd))  # единая точка приведения к str
     p = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     if p.returncode != 0:
         raise GitError(f"git {' '.join(args)} failed: {p.stderr.strip()}")
@@ -32,7 +37,19 @@ class CliGitClient(GitClient):
     def __init__(self, depth: int = 1) -> None:
         self._depth: Final[int] = depth
 
-    def ensure_repo(self, dir: str, url: str, branch: Optional[str] = None) -> None:
+    def sparse_init(self, dir: StrOrPath, cone: bool = False) -> None:
+        args = ["sparse-checkout", "init"]
+        if cone:
+            args.append("--cone")
+        _run_git(args, cwd=dir)
+
+    def sparse_set(self, dir: StrOrPath, paths: Sequence[str], no_cone: bool = True) -> None:
+        args = ["sparse-checkout", "set", *paths]
+        if no_cone:
+            args.append("--no-cone")
+        _run_git(args, cwd=dir)
+
+    def ensure_repo(self, dir: StrOrPath, url: str, branch: Optional[str] = None) -> None:
         d = Path(dir)
         d.mkdir(parents=True, exist_ok=True)
         git_dir = d / ".git"
@@ -67,26 +84,26 @@ class CliGitClient(GitClient):
             ],
         )
 
-    def pull(self, dir: str) -> None:
+    def pull(self, dir: StrOrPath) -> None:
         _run_git(["pull", "--ff-only"], cwd=dir)
 
-    def current_commit(self, dir: str) -> str:
+    def current_commit(self, dir: StrOrPath) -> str:
         return _run_git(["rev-parse", "HEAD"], cwd=dir)
 
     # --- sparse ---
-    def sparse_init(self, dir: str, cone: bool = True) -> None:
+    def sparse_init(self, dir: StrOrPath, cone: bool = True) -> None:
         args = ["sparse-checkout", "init"]
         if cone:
             args.append("--cone")
         _run_git(args, cwd=dir)
 
-    def sparse_set(self, dir: str, paths: Sequence[str], no_cone: bool = True) -> None:
+    def sparse_set(self, dir: StrOrPath, paths: Sequence[str], no_cone: bool = True) -> None:
         args = ["sparse-checkout", "set"]
         if no_cone:
             args.append("--no-cone")
         _run_git([*args, *paths], cwd=dir)
 
-    def sparse_add(self, dir: str, path: str) -> None:
+    def sparse_add(self, dir: StrOrPath, path: str) -> None:
         try:
             _run_git(["sparse-checkout", "add", path], cwd=dir)
         except GitError:
@@ -99,7 +116,7 @@ class CliGitClient(GitClient):
                 lines.append(path)
                 sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    def changed_files(self, dir: str, subpath: Optional[str] = None) -> list[str]:
+    def changed_files(self, dir: StrOrPath, subpath: Optional[str] = None) -> list[str]:
         # untracked (-o) + modified (-m), исключая игнор по .gitignore
         args = ["ls-files", "-m", "-o", "--exclude-standard"]
         if subpath:
@@ -108,11 +125,11 @@ class CliGitClient(GitClient):
         files = [ln.strip() for ln in out.splitlines() if ln.strip()]
         return files
 
-    def _current_branch(self, dir: str) -> str:
+    def _current_branch(self, dir: StrOrPath) -> str:
         out = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=dir).strip()
         return out or "main"
 
-    def commit_subpath(self, dir: str, subpath: str, message: str, author_name: str, author_email: str, signoff: bool = False) -> str:
+    def commit_subpath(self, dir: StrOrPath, subpath: str, message: str, author_name: str, author_email: str, signoff: bool = False) -> str:
         # stage только подпуть
         _run_git(["add", "--", subpath], cwd=dir)
         # пустой ли индекс?
@@ -126,6 +143,6 @@ class CliGitClient(GitClient):
         _run_git(args, cwd=dir)
         return _run_git(["rev-parse", "HEAD"], cwd=dir).strip()
 
-    def push(self, dir: str, remote: str = "origin", branch: Optional[str] = None) -> None:
+    def push(self, dir: StrOrPath, remote: str = "origin", branch: Optional[str] = None) -> None:
         branch = branch or self._current_branch(dir)
         _run_git(["push", remote, branch], cwd=dir)
