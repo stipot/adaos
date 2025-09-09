@@ -1,7 +1,7 @@
 # src/adaos/services/skill/scaffold.py
 from __future__ import annotations
 
-import re
+import re, os
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -81,7 +81,7 @@ def create(
         raise ValueError("invalid skill name")
 
     ctx = get_ctx()
-    skills_root = Path(ctx.paths.skills_dir())
+    skills_root = ctx.paths.skills_dir()
     target = _safe_subdir(skills_root, name)
 
     if target.exists():
@@ -111,15 +111,27 @@ def create(
 
     emit(ctx.bus, "skill.created", {"name": name, "template": template}, "skill.scaffold")
 
-    # optional push в монорепо (только если repo инициализирован)
-    if push:
-        if not (skills_root / ".git").exists():
-            raise RuntimeError("Cannot push: skills repo is not initialized. Run `adaos skill sync` once.")
-        changed = ctx.git.changed_files(str(skills_root), subpath=name)
-        bad = check_no_denied(changed)
-        if bad:
-            raise PermissionError(f"push denied: sensitive files matched: {', '.join(bad)}")
-        msg = sanitize_message(f"feat(skill): init {name} from template {template}")
+    # 2) Если есть репозиторий и это не тесты — включим новый subpath в sparse-checkout
+    repo_ready = (skills_root / ".git").exists()
+    is_testing = os.getenv("ADAOS_TESTING") == "1"
+    if repo_ready and not is_testing:
+        try:
+            # собираем целевой набор путей из реестра (и точно включаем текущий)
+            names = [r.name for r in reg.list()]
+            if name not in names:
+                names.append(name)
+
+            # пересобираем sparse-набор и подтягиваем индекс
+            ctx.git.sparse_init(str(skills_root), cone=False)
+            ctx.git.sparse_set(str(skills_root), names, no_cone=True)
+            # pull не обязателен для локального коммита, но вреда не будет:
+            # ctx.git.pull(str(skills_root))
+        except Exception as e:
+            emit(ctx.bus, "skill.warn", {"name": name, "warn": f"sparse_set_failed: {e!r}"}, "skill.scaffold")
+
+    # 3) Коммитим только подпапку навыка (если просили)
+    if push and repo_ready and not is_testing:
+        msg = f"feat(skill): init {name} from template {template}"
         sha = ctx.git.commit_subpath(
             str(skills_root),
             subpath=name,
@@ -128,7 +140,7 @@ def create(
             author_email=ctx.settings.git_author_email,
             signoff=False,
         )
-        if sha != "nothing-to-commit":
+        if sha != "nothing-to-commit" and push:
             ctx.git.push(str(skills_root))
         emit(ctx.bus, "skill.pushed", {"name": name, "sha": sha}, "skill.scaffold")
 

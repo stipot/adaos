@@ -34,7 +34,7 @@ def _mgr() -> SkillManager:
 # ---------- high-level SDK API ----------
 
 
-def create(name: str, template: str = "demo_skill", *, register: bool = True, push: bool = False) -> str:
+def create(name: str, template: str = "demo_skill", *, register: bool = True, push: bool = True) -> str:
     """Создать навык из шаблона (вся логика resolve — внутри services.skill.scaffold)."""
     p = _scaffold_create(name, template=template, register=register, push=push)
     return str(p)
