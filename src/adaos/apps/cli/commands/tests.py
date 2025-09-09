@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 import typer
-
+from adaos.services.sandbox.bootstrap import ensure_dev_venv
 from adaos.apps.bootstrap import get_ctx
 from adaos.ports.sandbox import ExecLimits
 from adaos.sdk.skill_service import install_all_skills
@@ -70,24 +70,178 @@ def _drive_key(path_str: str) -> str:
     return (d or "NO_DRIVE").upper()
 
 
-def _run_one_group(ctx, repo_root: Path, paths: List[str]) -> tuple[int, str, str]:
-    """Запуск одной группы путей (на одном диске) через sandbox."""
-    # базовые аргументы pytest
-    args = ["-q", "--strict-markers", "-o", "markers=asyncio: mark asyncio tests", *paths]  # зарегистрируем 'asyncio'
-    limits = ExecLimits(wall_time_sec=600, cpu_time_sec=None, max_rss_mb=None)
-    res = ctx.sandbox.run(
-        ["python", "-m", "pytest", *args],
-        cwd=str(ctx.paths.base()),  # sandbox: только внутри BASE_DIR
-        profile="tool",
-        inherit_env=True,
-        extra_env={
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONPATH": str(repo_root),  # чтобы импорты из репо находились
-            "ADAOS_REPO_ROOT": str(repo_root),
-        },
-        limits=limits,
-    )
-    return res.exit_code, res.stdout, res.stderr
+def _run_one_group(
+    ctx=None,  # ← опционально: AgentContext
+    *,
+    base_dir: Path,
+    venv_python: str,
+    paths: list[str],
+    addopts: str = "",
+) -> tuple[int, str, str]:
+    """
+    Запускает pytest внутри песочницы.
+    - регистрирует маркер asyncio через `-o markers=...`
+    - пользовательские фильтры передаются через PYTEST_ADDOPTS (addopts)
+    - если передан ctx — добавляем полезные переменные окружения
+    """
+    if not paths:
+        return 5, "no tests ran (empty path group)", ""
+
+    pytest_args = [
+        "-q",
+        "--strict-markers",
+        "-o",
+        "markers=asyncio: mark asyncio tests",
+        *paths,
+    ]
+
+    extra_env = {"PYTHONUNBUFFERED": "1"}
+    # доп. окружение из контекста — безопасно и опционально
+    try:
+        if ctx is not None:
+            extra_env.update(
+                {
+                    "ADAOS_LANG": getattr(ctx.settings, "lang", None) or os.environ.get("ADAOS_LANG", "en"),
+                    "ADAOS_PROFILE": getattr(ctx.settings, "profile", None) or os.environ.get("ADAOS_PROFILE", "default"),
+                }
+            )
+    except Exception:
+        pass
+
+    if addopts:
+        extra_env["PYTEST_ADDOPTS"] = addopts
+
+    return _sandbox_run([venv_python, "-m", "pytest", *pytest_args], cwd=base_dir, extra_env=extra_env)
+
+
+def _mk_sandbox(base_dir: Path, profile: str = "tool"):
+    """
+    Создаём ProcSandbox, совместимую с разными сигнатурами конструктора:
+    - ProcSandbox(fs_base=...)
+    - ProcSandbox(base_dir=...) / ProcSandbox(base=...)
+    - ProcSandbox(<positional>)
+    Дополнительно прокидываем profile, если он поддерживается.
+    """
+    from adaos.services.sandbox.runner import ProcSandbox
+    import inspect
+
+    bd = Path(base_dir)
+    sig = inspect.signature(ProcSandbox)
+    params = sig.parameters
+
+    # Подготовим kwargs по поддерживаемым именам
+    kwargs = {}
+    if "fs_base" in params:
+        kwargs["fs_base"] = bd
+    elif "base_dir" in params:
+        kwargs["base_dir"] = bd
+    elif "base" in params:
+        kwargs["base"] = bd
+
+    if "profile" in params:
+        kwargs.setdefault("profile", profile)
+
+    # 1) Попытка вызвать с подобранными kwargs
+    try:
+        if kwargs:
+            return ProcSandbox(**kwargs)
+    except TypeError:
+        pass
+
+    # 2) Попытка позиционным первым аргументом (если допустимо)
+    try:
+        # есть ли хотя бы один позиционный параметр без значения по умолчанию?
+        positional_ok = any(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) and p.default is p.empty for p in params.values())
+        if positional_ok:
+            return ProcSandbox(bd)
+    except TypeError:
+        pass
+
+    # 3) Последняя попытка: без аргументов + ручная установка базы
+    try:
+        sb = ProcSandbox()
+    except TypeError as e:
+        raise TypeError(f"ProcSandbox ctor incompatible; expected one of fs_base/base_dir/base/positional. Original: {e}") from e
+
+    # Пробуем сеттеры/атрибуты
+    for attr in ("set_fs_base", "set_base"):
+        if hasattr(sb, attr):
+            try:
+                getattr(sb, attr)(bd)
+                return sb
+            except Exception:
+                pass
+    for attr in ("fs_base", "base_dir", "base", "_base"):
+        if hasattr(sb, attr):
+            try:
+                setattr(sb, attr, bd)
+                return sb
+            except Exception:
+                pass
+
+    return sb  # как есть (но это вряд ли)
+
+
+def _sandbox_run(cmd: list[str], *, cwd: Path, profile: str = "tool", extra_env: dict | None = None):
+    """
+    Универсальный запуск внутри песочницы:
+    - авто-определяет сигнатуру ProcSandbox.run(...) и прокидывает только поддерживаемые kwargs
+    - если inherit_env не поддерживается, сам мерджит окружение
+    - нормализует результат к (exit_code, stdout, stderr)
+    """
+    import os
+    import inspect
+    from adaos.services.sandbox.runner import ProcSandbox
+
+    sb = _mk_sandbox(cwd, profile=profile)
+
+    # пытаемся импортировать ExecLimits, но делаем это опционально
+    ExecLimits = None
+    try:
+        from adaos.services.sandbox.runner import ExecLimits as _ExecLimits
+
+        ExecLimits = _ExecLimits
+    except Exception:
+        pass
+
+    run_sig = inspect.signature(sb.run)
+    params = run_sig.parameters
+
+    kwargs = {}
+    # базовые
+    if "cwd" in params:
+        kwargs["cwd"] = str(cwd)
+    if "limits" in params and ExecLimits is not None:
+        kwargs["limits"] = ExecLimits(wall_time_sec=600)
+
+    # окружение
+    if "env" in params:
+        if "inherit_env" in params:
+            # sandbox сам унаследует env, мы дадим только дельту
+            kwargs["env"] = extra_env or {}
+            kwargs["inherit_env"] = True
+        else:
+            # нет inherit_env — склеиваем сами c системным окружением
+            merged = dict(os.environ)
+            if extra_env:
+                merged.update({k: v for k, v in extra_env.items() if isinstance(k, str) and isinstance(v, str)})
+            kwargs["env"] = merged
+
+    # текстовый режим вывода
+    if "text" in params:
+        kwargs["text"] = True
+
+    # запускаем
+    res = sb.run(cmd=cmd, **kwargs)
+
+    # нормализуем результат
+    if isinstance(res, tuple) and len(res) >= 3:
+        code, out, err = res[0], res[1], res[2]
+    else:
+        code = getattr(res, "exit", getattr(res, "returncode", 0))
+        out = getattr(res, "stdout", "")
+        err = getattr(res, "stderr", "")
+    return code, (out or ""), (err or "")
 
 
 @app.command("run")
@@ -98,29 +252,44 @@ def run_tests(
     use_real_base: bool = typer.Option(False, help="Do NOT isolate ADAOS_BASE_DIR."),
     no_install: bool = typer.Option(False, help="Do not auto-install skills before running tests."),
     no_clone: bool = typer.Option(False, help="Do not clone/init skills monorepo (expect it to exist)."),
+    bootstrap: bool = typer.Option(True, help="Bootstrap dev dependencies in sandbox venv once."),
     extra: Optional[List[str]] = typer.Argument(None),
 ):
-    """
-    Runs pytest over:
-      - ./tests                           (SDK/API tests)   — unless --only-skills
-      - {BASE}/skills/**/tests            (skill tests)      — unless --only-sdk
-    By default, when running skill tests, auto-installs all skills (in isolated BASE) unless --no-install.
-    """
-    try:
-        import pytest  # noqa
-    except Exception:
-        typer.secho("pytest is not installed. Install dev deps: pip install -e .[dev]", fg=typer.colors.RED)
-        raise typer.Exit(code=2)
-
+    # 0) изоляция BASE
     if not use_real_base:
         tmpdir = _ensure_tmp_base_dir()
         typer.secho(f"[AdaOS] Using isolated ADAOS_BASE_DIR at: {tmpdir}", fg=typer.colors.BLUE)
 
+    # ctx уже читает настройки с учётом только что установленного ADAOS_BASE_DIR
     ctx = get_ctx()
+    base_dir = Path(os.environ["ADAOS_BASE_DIR"])
     repo_root = Path(".").resolve()
     pytest_paths: List[str] = []
 
-    # --- SDK/API tests ---
+    # 1) Подготовка dev venv (однократно), затем используем его python
+    if bootstrap:
+        try:
+            venv_python = str(
+                ensure_dev_venv(
+                    base_dir=base_dir,
+                    repo_root=repo_root,
+                    run=lambda c, cwd, env=None: _sandbox_run(c, cwd=cwd, extra_env=env),
+                    env={"PYTHONUNBUFFERED": "1"},
+                )
+            )
+            typer.secho(f"[AdaOS] Dev venv ready: {venv_python}", fg=typer.colors.BLUE)
+        except Exception as e:
+            typer.secho(f"[AdaOS] Bootstrap failed: {e}", fg=typer.colors.RED)
+            raise typer.Exit(code=2)
+    else:
+        venv_python = "python"
+        # деликатно проверим наличие pytest
+        code, _, _ = _sandbox_run([venv_python, "-c", "import pytest"], cwd=base_dir)
+        if code != 0:
+            typer.secho("pytest is not installed. Tip: use --bootstrap or install dev deps: pip install -e .[dev]", fg=typer.colors.RED)
+            raise typer.Exit(code=2)
+
+    # 2) Подбор путей
     if not only_skills:
         sdk_tests = repo_root / "tests"
         if sdk_tests.exists():
@@ -129,7 +298,6 @@ def run_tests(
             typer.secho("No SDK tests found in ./tests", fg=typer.colors.YELLOW)
             raise typer.Exit(code=1)
 
-    # --- Skill tests ---
     if not only_sdk:
         _prepare_skills_repo(no_clone=no_clone)
         if not no_install:
@@ -143,7 +311,7 @@ def run_tests(
         skills_root = Path(ctx.paths.skills_dir()).resolve()
         pytest_paths.extend(_collect_test_dirs(skills_root))
 
-        # при разработке— добавим тесты из исходников, если есть
+        # при разработке — добавим тесты из исходников, если есть
         src_skills = repo_root / "src" / "adaos" / "skills"
         pytest_paths.extend(_collect_test_dirs(src_skills))
 
@@ -156,46 +324,33 @@ def run_tests(
             typer.secho("No test paths found. Tip: add SDK tests in ./tests, or ensure skills with tests are installed.", fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    # ---- группируем пути по диску, чтобы избежать rootdir-коллизий на Windows
+    # 3) Группировка по диску (Windows rootdir guard)
     from collections import defaultdict
 
     grouped: dict[str, List[str]] = defaultdict(list)
     for p in pytest_paths:
         grouped[_drive_key(p)].append(p)
 
+    # 4) Формирование addopts (на всю группу единые)
+    addopts_parts: List[str] = []
+    if marker:
+        addopts_parts += ["-m", marker]
+    if extra:
+        addopts_parts += extra
+    addopts_str = " ".join(addopts_parts).strip()
+
+    # 5) Прогон по группам (каждую — через venv_python)
     overall_code = 0
     for dk, paths in grouped.items():
-        # добавим фильтры, если заданы пользователем
-        run_paths = list(paths)
-        args_suffix: List[str] = []
-        if marker:
-            args_suffix += ["-m", marker]
-        if extra:
-            args_suffix += extra
-
-        # склеим: базовые аргументы внутри _run_one_group, а тут только фильтры
-        # (маленький трюк: просто добавим их в конец списка путей — _run_one_group не знает про них,
-        #  поэтому передадим их через PYTEST_ADDOPTS)
-        # Но проще — прокинем через env:
-        import os as _os
-
-        addopts = _os.environ.get("PYTEST_ADDOPTS", "")
-        if args_suffix:
-            addopts = (addopts + " " + " ".join(args_suffix)).strip()
-        # временно выставим переменную для этого запуска
-        prev_addopts = _os.environ.get("PYTEST_ADDOPTS")
-        if addopts:
-            _os.environ["PYTEST_ADDOPTS"] = addopts
-        try:
-            code, out, err = _run_one_group(ctx, repo_root, run_paths)
-            # трактуем пустую группу как успех
-            if code == 5 and "no tests ran" in (out.lower() + err.lower()):
-                code = 0
-        finally:
-            if prev_addopts is None:
-                _os.environ.pop("PYTEST_ADDOPTS", None)
-            else:
-                _os.environ["PYTEST_ADDOPTS"] = prev_addopts
+        code, out, err = _run_one_group(
+            base_dir=base_dir,
+            venv_python=venv_python,
+            paths=paths,
+            addopts=addopts_str,
+        )
+        # трактуем пустую группу как успех
+        if code == 5 and "no tests ran" in (out.lower() + err.lower()):
+            code = 0
 
         color = typer.colors.CYAN if code == 0 else typer.colors.RED
         typer.secho(f"[pytest {dk}] exit={code} sandbox=yes\n--- stdout ---\n{out}\n--- stderr ---\n{err}", fg=color)
