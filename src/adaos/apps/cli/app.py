@@ -88,7 +88,7 @@ def ensure_environment():
     base_dir = Path(ctx.settings.base_dir)
 
     # для совместимости со старым кодом, который читает env напрямую
-    os.environ["ADAOS_BASE_DIR"] = ctx.settings.base_dir
+    os.environ["ADAOS_BASE_DIR"] = str(ctx.settings.base_dir)
     os.environ["ADAOS_PROFILE"] = ctx.settings.profile
 
     if not base_dir.exists():

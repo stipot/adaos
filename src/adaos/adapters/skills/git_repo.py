@@ -164,9 +164,9 @@ class GitSkillRepository(SkillRepository):
             name = ref.strip()
             if not _NAME_RE.match(name):
                 raise ValueError("invalid skill name")
-            catalog = set(_read_catalog(self.paths))
+            """ catalog = set(_read_catalog(self.paths))
             if catalog and name not in catalog:
-                raise ValueError(f"skill '{name}' not found in catalog")
+                raise ValueError(f"skill '{name}' not found in catalog") """
             # sparse checkout только нужного подкаталога
             self.git.sparse_init(str(root), cone=False)
             self.git.sparse_add(str(root), name)
@@ -183,10 +183,7 @@ class GitSkillRepository(SkillRepository):
         name = dest_name or _repo_basename_from_url(ref)
         dest = root / name
         self.git.ensure_repo(str(dest), ref, branch=branch)
-        meta = _read_manifest(dest)
-        return meta
-
-    # --- uninstall
+        return _read_manifest(dest)
 
     def uninstall(self, skill_id: str) -> None:
         self.ensure()

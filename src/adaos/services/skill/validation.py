@@ -3,7 +3,7 @@ from __future__ import annotations
 import os, sys, json, subprocess, importlib.util
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 import copy
 
 import yaml
@@ -13,6 +13,8 @@ from adaos.sdk.context import get_current_skill, set_current_skill
 from adaos.sdk.decorators import resolve_tool, _SUBSCRIPTIONS  # реестр подписок из декораторов
 from adaos.sdk.skill_env import get_env
 from adaos.sdk.skill_memory import get as mem_get  # пригодится позже
+from adaos.services.agent_context import AgentContext
+from adaos.apps.bootstrap import get_ctx
 
 SCHEMA_PATH = Path(__file__).with_name("skill_schema.json")
 
@@ -180,22 +182,27 @@ print(json.dumps({{"ok": True, "tools": exports, "subs": subs}}))
     return issues
 
 
-def validate_skill(skill_name: str | None = None, install_mode: bool = False, probe_tools: bool = False) -> ValidationReport:
-    # определяем каталог навыка
-    if skill_name:
-        if not set_current_skill(skill_name):
+@dataclass(slots=True)
+class SkillValidationService:
+    ctx: AgentContext
+
+    def validate(self, skill_name: Optional[str] = None, *, strict: bool = False, install_mode: Optional[bool] = False, probe_tools: bool = False) -> ValidationReport:
+        ctx = get_ctx()
+        # определяем каталог навыка
+        if skill_name:
+            if not set_current_skill(skill_name):
+                return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
+        current = get_current_skill()
+        if current is None or current.path is None:
             return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
-    current = get_current_skill()
-    if current is None or current.path is None:
-        return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
-    skill_dir = current.path
+        skill_dir = current.path
 
-    issues: List[Issue] = []
-    issues += _static_checks(skill_dir, install_mode)
-    # если есть критические на статике — дальше нет смысла
-    if any(i.level == "error" for i in issues):
-        return ValidationReport(False, issues)
+        issues: List[Issue] = []
+        issues += _static_checks(skill_dir, install_mode)
+        # если есть критические на статике — дальше нет смысла
+        if any(i.level == "error" for i in issues):
+            return ValidationReport(False, issues)
 
-    issues += _dynamic_checks(current.name, skill_dir, install_mode, probe_tools)
-    ok = not any(i.level == "error" for i in issues)
-    return ValidationReport(ok, issues)
+        issues += _dynamic_checks(current.name, skill_dir, install_mode, probe_tools)
+        ok = not any(i.level == "error" for i in issues)
+        return ValidationReport(ok, issues)

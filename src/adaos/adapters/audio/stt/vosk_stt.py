@@ -6,7 +6,7 @@ from typing import Generator, Optional
 import typer
 from typing import Generator, Optional, Iterable
 import vosk
-from adaos.sdk.context import ADAOS_VOSK_MODEL
+from adaos.apps.bootstrap import get_ctx
 
 sd = None
 _sd_error = None
@@ -24,6 +24,8 @@ class VoskSTT:
     def __init__(
         self, model_path: Optional[str] = None, samplerate: int = 16000, device: Optional[int | str] = None, lang: str = "en", external_stream: Optional[Iterable[bytes]] = None
     ):
+
+        ADAOS_VOSK_MODEL = str(get_ctx().paths.base / "models" / "vosk" / "en-us")  # TODO move to constants
         # Инициализация модели
         if model_path:
             model_dir = Path(model_path)

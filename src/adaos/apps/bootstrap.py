@@ -164,6 +164,7 @@ class _CtxHolder:
 
 # публичные функции
 def get_ctx() -> AgentContext:
+    """Get  AgentContext pointer"""
     return _CtxHolder.get()
 
 

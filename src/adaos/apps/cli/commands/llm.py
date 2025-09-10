@@ -2,6 +2,7 @@ import typer
 from pathlib import Path
 from adaos.sdk.skills.i18n import _
 from adaos.sdk.context import SKILLS_DIR, PACKAGE_DIR
+from adaos.apps.bootstrap import get_ctx
 
 app = typer.Typer(help=_("cli.llm.help"))
 
@@ -11,6 +12,7 @@ def build_prep(skill_name: str, user_request: str):
     """
     Build prep prompt for a skill based on user request and save it in <skills>/<skill_name>/prep/prep_prompt.md
     """
+    ctx = get_ctx()
     base_prompt_path = Path(f"{PACKAGE_DIR}/sdk/llm/prompts/prep_request.md")
     if not base_prompt_path.exists():
         typer.echo(f"[red]{_('cli.llm.prep.template_missing')}[/red]")
@@ -27,7 +29,7 @@ def build_prep(skill_name: str, user_request: str):
     )
 
     # Путь к файлу навыка
-    out_dir = Path(SKILLS_DIR) / skill_name / "prep"
+    out_dir = ctx.paths.skills_dir / skill_name / "prep"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "prep_prompt.md"
     out_path.write_text(prompt, encoding="utf-8")

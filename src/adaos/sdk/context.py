@@ -4,6 +4,7 @@ from adaos.sdk.skills.i18n import _
 import os
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
+from adaos.apps.bootstrap import get_ctx
 
 load_dotenv(find_dotenv())
 
@@ -46,6 +47,7 @@ class EnvironmentContext:
 
 class AgentContext:
     def __init__(self, env: EnvironmentContext):
+        self.ctx = get_ctx()
         self.env = env
         self.base_dir = env.get_base_dir()
         self.skills_dir = self.base_dir / "skills"
@@ -64,6 +66,7 @@ class AgentContext:
         return SkillContext(skill_name, self.skills_dir / skill_name)
 
     def set_current_skill(self, skill_name: str):
+        print(str(self.skills_dir / skill_name))
         if not (self.skills_dir / skill_name).exists():
             return False
         else:
@@ -141,6 +144,7 @@ current_skill_name: str = ""
 
 def set_current_skill(skill_name: str):
     # f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
+    print("point_1", True if _agent.set_current_skill(skill_name) else False)
     return True if _agent.set_current_skill(skill_name) else False
 
 
