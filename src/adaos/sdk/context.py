@@ -144,7 +144,6 @@ current_skill_name: str = ""
 
 def set_current_skill(skill_name: str):
     # f"[red]{_('skill.not_found', skill_name=skill_name)}[/red]"
-    print("point_1", True if _agent.set_current_skill(skill_name) else False)
     return True if _agent.set_current_skill(skill_name) else False
 
 
