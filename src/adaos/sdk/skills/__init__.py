@@ -4,7 +4,7 @@ from typing import Optional, List
 
 from adaos.apps.bootstrap import get_ctx
 from adaos.services.skill.manager import SkillManager
-from adaos.adapters.skills.mono_repo import MonoSkillRepository
+from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
 
 # делегат в scaffold для create()
@@ -13,12 +13,7 @@ from adaos.services.skill.scaffold import create as _scaffold_create
 
 def _mgr() -> SkillManager:
     ctx = get_ctx()
-    repo = MonoSkillRepository(
-        paths=ctx.paths,
-        git=ctx.git,
-        url=ctx.settings.skills_monorepo_url,
-        branch=ctx.settings.skills_monorepo_branch,
-    )
+    repo = GitSkillRepository(paths=ctx.paths, git=ctx.git, monorepo_url=ctx.settings.skills_monorepo_url, monorepo_branch=ctx.settings.skills_monorepo_branch)
     reg = SqliteSkillRegistry(sql=ctx.sql)
     return SkillManager(
         git=ctx.git,

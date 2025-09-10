@@ -27,22 +27,15 @@ class SkillManager:
         caps: Capabilities,
         settings: Settings | None = None,
         registry: SkillRegistry = None,
-        reg=None,
         repo: SkillRepository | None = None,
         bus: EventBus | None = None,
     ):
-        if registry is None and reg is not None:
-            registry = reg
-        if registry is None:
-            raise ValueError("SkillManager: registry is required")
-        self.repo, self.reg, self.git, self.paths, self.bus, self.caps = (
-            repo,
-            registry,
-            git,
-            paths,
-            bus,
-            caps,
-        )
+        self.repo: SkillRepository | None = repo
+        self.reg = registry
+        self.git = git
+        self.paths = paths
+        self.bus = bus
+        self.caps = caps
         self.settings = settings
 
     def list_installed(self) -> list[SkillRecord]:
@@ -72,18 +65,21 @@ class SkillManager:
         if not _name_re.match(name):
             raise ValueError("invalid skill name")
 
-        rec = self.reg.register(name, pin=pin)  # вернуть запись, но НЕ читать .id
-
+        # 1) регистрируем (идемпотентно)
+        self.reg.register(name, pin=pin)
+        # 2) в тестах/без .git — только реестр
         root = self.paths.skills_dir()
         test_mode = os.getenv("ADAOS_TESTING") == "1"
-        if test_mode or not (root / ".git").exists():
+        if test_mode:
             return f"installed: {name} (registry-only{' test-mode' if test_mode else ''})"
+        # 3) mono-only установка через репозиторий (sparse-add + pull)
+        _ = self.repo.install(name, branch=None)
 
         # обычный путь: sparse + pull
-        names = [r.name for r in self.reg.list()]
+        """ names = [r.name for r in self.reg.list()]
         self.git.sparse_init(str(root), cone=False)
         self.git.sparse_set(str(root), names, no_cone=True)
-        self.git.pull(str(root))
+        self.git.pull(str(root)) """
         return f"installed: {name}"
 
     def uninstall(self, name: str) -> None:

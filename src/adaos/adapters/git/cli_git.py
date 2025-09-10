@@ -1,4 +1,4 @@
-# src/adaos/adapters/git/cli_git.py  (расширение)
+# src\adaos\adapters\git\cli_git.py
 from __future__ import annotations
 import subprocess, os
 from pathlib import Path
@@ -70,7 +70,7 @@ class CliGitClient(GitClient):
             # сразу включим sparse cone по умолчанию (можно переинициализировать на no-cone)
             try:
                 _run_git(["sparse-checkout", "init", "--cone"], cwd=str(d))
-            except GitError:
+            except Exception as e:
                 pass
         _append_exclude(
             dir,

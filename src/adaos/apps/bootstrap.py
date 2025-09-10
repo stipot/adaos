@@ -13,7 +13,6 @@ from adaos.adapters.db import SQLite, SQLiteKV
 from adaos.services.runtime import AsyncProcessManager
 from adaos.services.policy.capabilities import InMemoryCapabilities
 from adaos.services.policy.net import NetPolicy
-from adaos.adapters.git.cli_git import CliGitClient
 from adaos.adapters.git.secure_git import SecureGitClient
 from adaos.services.policy.fs import SimpleFSPolicy
 from adaos.adapters.secrets.keyring_vault import KeyringVault

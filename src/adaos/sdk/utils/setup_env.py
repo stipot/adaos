@@ -4,7 +4,7 @@ from pathlib import Path
 import os
 from adaos.apps.bootstrap import get_ctx
 from adaos.adapters.db import SqliteSkillRegistry
-from adaos.adapters.skills.mono_repo import MonoSkillRepository
+from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.scenarios.mono_repo import MonoScenarioRepository
 
 
@@ -37,7 +37,7 @@ def prepare_environment() -> None:
     else:
         skills_root = Path(ctx.paths.skills_dir())
         if ctx.settings.skills_monorepo_url and not (skills_root / ".git").exists() and os.getenv("ADAOS_TESTING") != "1":
-            MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch).ensure()
+            GitSkillRepository(paths=ctx.paths, git=ctx.git, monorepo_url=ctx.settings.skills_monorepo_url, monorepo_branch=ctx.settings.skills_monorepo_branch).ensure()
 
         scenarios_root = Path(ctx.paths.scenarios_dir())
         if ctx.settings.scenarios_monorepo_url and not (scenarios_root / ".git").exists():
