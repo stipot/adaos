@@ -29,6 +29,12 @@ class PathProvider:
     def locales_dir(self) -> Path:  # TODO Move to global context&
         return (self.package_dir / "locales").resolve()
 
+    def skill_templates_dir(self) -> Path:
+        return (self.package_dir / "skills_templates").resolve()
+
+    def scenario_templates_dir(self) -> Path:
+        return (self.package_dir / "scenario_templates").resolve()
+
     def base_dir(self) -> Path:
         return self.base
 
@@ -37,12 +43,6 @@ class PathProvider:
 
     def scenarios_dir(self) -> Path:
         return (self.base / "scenarios").resolve()
-
-    def skill_templates_dir(self) -> Path:
-        return (self.base / "skills_templates").resolve()
-
-    def scenario_templates_dir(self) -> Path:
-        return (self.base / "scenario_templates").resolve()
 
     def models_dir(self) -> Path:
         return (self.base / "models").resolve()
