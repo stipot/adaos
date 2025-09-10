@@ -55,8 +55,8 @@ class AgentContext:
             repo = GitScenarioRepository(
                 paths=self.paths,
                 git=self.git,
-                monorepo_url=self.settings.scenarios_monorepo_url or None,
-                monorepo_branch=self.settings.scenarios_monorepo_branch or None,
+                url=self.settings.scenarios_monorepo_url or None,
+                branch=self.settings.scenarios_monorepo_branch or None,
             )
             object.__setattr__(self, "_scenarios_repo", repo)
         return repo
