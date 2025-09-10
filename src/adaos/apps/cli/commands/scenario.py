@@ -4,7 +4,7 @@ from typing import Optional
 from pathlib import Path
 
 from adaos.apps.bootstrap import get_ctx
-from adaos.adapters.scenarios.mono_repo import MonoScenarioRepository
+from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 from adaos.adapters.db import SqliteScenarioRegistry
 from adaos.services.scenario.manager import ScenarioManager
 
@@ -13,10 +13,7 @@ scenario_app = typer.Typer(help="Управление сценариями (мо
 
 def _mgr() -> ScenarioManager:
     ctx = get_ctx()
-    url = ctx.settings.scenarios_monorepo_url
-    if not url:
-        raise typer.BadParameter("Не задан SCENARIOS_MONOREPO_URL (см. adaos/config/const.py).")
-    repo = MonoScenarioRepository(paths=ctx.paths, git=ctx.git, url=url, branch=ctx.settings.scenarios_monorepo_branch)
+    repo = GitScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch)
     reg = SqliteScenarioRegistry(ctx.sql)
     return ScenarioManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps)
 

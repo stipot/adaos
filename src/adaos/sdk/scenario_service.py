@@ -2,13 +2,13 @@ from __future__ import annotations
 from typing import Optional
 from adaos.apps.bootstrap import get_ctx
 from adaos.adapters.db import SqliteScenarioRegistry
-from adaos.adapters.scenarios.mono_repo import MonoScenarioRepository
+from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 from adaos.services.scenario.manager import ScenarioManager
 
 
 def _mgr() -> ScenarioManager:
     ctx = get_ctx()
-    repo = MonoScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch)
+    repo = GitScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch)
     reg = SqliteScenarioRegistry(ctx.sql)
     return ScenarioManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps, settings=ctx.settings)
 

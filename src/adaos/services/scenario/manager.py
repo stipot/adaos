@@ -25,10 +25,12 @@ class ScenarioManager:
         self.repo, self.reg, self.git, self.paths, self.bus, self.caps = repo, registry, git, paths, bus, caps
 
     def list_installed(self) -> list[SkillRecord]:
+        print("list_installed")
         self.caps.require("core", "scenarios.manage")
         return self.reg.list()
 
     def list_present(self) -> list[SkillMeta]:
+        print("list_present")
         self.caps.require("core", "scenarios.manage")
         self.repo.ensure()
         return self.repo.list()

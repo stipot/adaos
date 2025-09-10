@@ -6,7 +6,7 @@ cd adaos
 git submodule update --init --recursive
 
 # install dev core (optional)
-pip install -e .[dev]
+pip install -e ".[dev]"
 
 # mac/linux:
 bash tools/bootstrap.sh

@@ -5,7 +5,7 @@ import os
 from adaos.apps.bootstrap import get_ctx
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.adapters.skills.git_repo import GitSkillRepository
-from adaos.adapters.scenarios.mono_repo import MonoScenarioRepository
+from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 
 
 def prepare_environment() -> None:
@@ -41,4 +41,4 @@ def prepare_environment() -> None:
 
         scenarios_root = Path(ctx.paths.scenarios_dir())
         if ctx.settings.scenarios_monorepo_url and not (scenarios_root / ".git").exists():
-            MonoScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch).ensure()
+            GitScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch).ensure()
