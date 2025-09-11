@@ -1,5 +1,5 @@
 # tests/smoke/test_eventbus_logging.py
-from adaos.apps.bootstrap import init_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.services.eventbus import emit
 
 

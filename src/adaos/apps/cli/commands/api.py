@@ -1,6 +1,8 @@
+# src\adaos\apps\cli\commands\api.py
 import typer
 import uvicorn
 import os
+from adaos.apps.cli.i18n import _
 
 app = typer.Typer(help="HTTP API для AdaOS")
 

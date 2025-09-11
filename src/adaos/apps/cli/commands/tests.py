@@ -4,8 +4,9 @@ import os
 from pathlib import Path
 from typing import List, Optional
 import typer
+from adaos.apps.cli.i18n import _
 from adaos.services.sandbox.bootstrap import ensure_dev_venv
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.ports.sandbox import ExecLimits
 from adaos.sdk.skills import (
     push as push_skill,

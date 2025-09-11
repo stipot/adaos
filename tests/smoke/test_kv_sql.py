@@ -1,5 +1,5 @@
 # tests/smoke/test_kv_sql.py
-from adaos.apps.bootstrap import init_ctx
+from adaos.services.agent_context import get_ctx
 
 
 def test_kv(tmp_path, monkeypatch):

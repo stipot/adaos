@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Optional, List
 
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry

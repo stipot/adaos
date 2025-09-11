@@ -7,7 +7,7 @@ from typing import Any, Dict
 from adaos.api.auth import require_token
 from adaos.sdk.decorators import resolve_tool
 from adaos.agent.core.observe import attach_http_trace_headers
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.services.agent_context import AgentContext
 
 

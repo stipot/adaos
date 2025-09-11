@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Optional
 
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.services.skill.context import SkillContextService
 from adaos.ports.skill_context import CurrentSkill
 

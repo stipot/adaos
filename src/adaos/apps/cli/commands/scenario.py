@@ -3,7 +3,8 @@ import typer
 from typing import Optional
 from pathlib import Path
 
-from adaos.apps.bootstrap import get_ctx
+from adaos.apps.cli.i18n import _
+from adaos.services.agent_context import get_ctx
 from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 from adaos.adapters.db import SqliteScenarioRegistry
 from adaos.services.scenario.manager import ScenarioManager

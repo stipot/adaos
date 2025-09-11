@@ -13,7 +13,7 @@ from adaos.services.fs.safe_io import remove_tree
 from adaos.services.git.safe_commit import sanitize_message, check_no_denied
 from adaos.services.git.workspace_guard import ensure_clean
 from adaos.services.settings import Settings
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.services.skill.validation import SkillValidationService
 from adaos.services.agent_context import AgentContext
 

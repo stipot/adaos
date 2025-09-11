@@ -1,0 +1,48 @@
+{
+	"cli.help": "AdaOS CLI – управление навыками, тестами и Runtime",
+	"cli.no_env_creating": "[AdaOS] Окружение не найдено. Запускаю установку...",
+	"cli.no_skills": "[AdaOS] Пока что список навыков пуст (MVP).",
+	"cli.env_deleted": "[AdaOS] Окружение удалено. Будет пересоздано при следующем запуске.",
+	"cli.no_env": "[AdaOS] Окружение не найдено.",
+	"cli.help_db": "Подготовка БД",
+	"cli.help_skill": "Работа с навыками",
+	"cli.help_test": "Работа с тестами",
+	"cli.help_runtime": "Управление Runtime",
+	"cli.help_llm": "CLI взаимодействие с LLM",
+	"cli.llm.help": "Утилиты генерации промптов для LLM",
+	"cli.llm.prep.template_missing": "Шаблон промпта для prep не найден",
+	"cli.llm.prep.saved": "Промпт prep для навыка '{skill_name}' сохранён в {out_path}",
+	"cli.llm.skill.template_missing": "Шаблон промпта для skill не найден",
+	"cli.llm.skill.prep_missing": "prep_result.json не найден для навыка '{skill_name}'",
+	"cli.llm.skill.saved": "Промпт skill для навыка '{skill_name}' сохранён в {out_path}",
+	"cli.template.help": "Шаблон навыка",
+	"cli.commit_message.help": "Комментарий к коммиту",
+	"skill.active_version": "активная версия",
+	"setup.start": "Запускаю подготовку окружения...",
+	"setup.complete": "Окружение готово в {path}",
+	"skill.list.empty": "Нет установленных навыков.",
+	"repo.clone": "Клонируем monorepo",
+	"repo.rebuild_index": "Пересобираем index в формате v2",
+
+	"skill.exists": "Навык {skill_name} уже существует",
+	"skill.not_found": "Навык {skill_name} не найден в monorepo",
+	"template.not_found": "Шаблон {template_name} не найден",
+
+	"skill.create": "Создаём навык {skill_name} из шаблона {template_name}",
+	"skill.commit_message": "Создан новый навык {skill_name} из шаблона {template_name}",
+	"skill.created": "Навык {skill_name} создан и добавлен в monorepo",
+
+	"skill.push_message": "Обновление навыка",
+	"skill.pushed": "{skill_name} отправлен в monorepo",
+	"skill.no_changes": "Нет изменений для коммита",
+	"skill.no_changes_push": "Нет изменений для отправки",
+
+	"skill.pulled": "{skill_name} загружен (v{version})",
+	"skill.updated": "{skill_name} обновлён (v{version})",
+	"skill.uninstalled": "Навык {skill_name} удалён у пользователя",
+
+	"skill.prep.not_found": "У навыка {skill_name} нет сценария подготовки",
+	"skill.prep.success": "Навык {skill_name} готов к разработке",
+	"skill.prep.failed": "Навык не готов: {reason}",
+	"skill.prep.missing_func": "В сценарии подготовки {skill_name} нет функции run_prep"
+}

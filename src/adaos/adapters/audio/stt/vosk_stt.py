@@ -6,7 +6,7 @@ from typing import Generator, Optional
 import typer
 from typing import Generator, Optional, Iterable
 import vosk
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 
 sd = None
 _sd_error = None

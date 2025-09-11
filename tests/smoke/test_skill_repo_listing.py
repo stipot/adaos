@@ -1,6 +1,6 @@
 # tests/smoke/test_skill_repo_listing.py
 from pathlib import Path
-from adaos.apps.bootstrap import init_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.domain import SkillId
 from adaos.services.skill.service import SkillService

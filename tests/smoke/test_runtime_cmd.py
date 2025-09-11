@@ -1,6 +1,6 @@
 # tests/smoke/test_runtime_cmd.py
 import sys, shutil, asyncio, pytest
-from adaos.apps.bootstrap import init_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.domain import ProcessSpec
 
 pytestmark = pytest.mark.asyncio

@@ -1,5 +1,6 @@
 # src\adaos\sdk\cli\commands\ovos.py
 import typer
+from adaos.apps.cli.i18n import _
 
 # Обновлённый импорт с правильной фабрикой TTS
 try:

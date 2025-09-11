@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 
 
 def _memory_path() -> Path:

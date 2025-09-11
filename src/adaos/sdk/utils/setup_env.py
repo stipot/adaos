@@ -2,7 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 import os
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.scenarios.git_repo import GitScenarioRepository

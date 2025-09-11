@@ -1,7 +1,7 @@
 import typer
 from pathlib import Path
-from adaos.sdk.skills.i18n import _
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
+from adaos.apps.cli.i18n import _
 
 app = typer.Typer(help=_("cli.llm.help"))
 

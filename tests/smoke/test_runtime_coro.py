@@ -1,7 +1,7 @@
 # tests/smoke/test_runtime_coro.py
 import asyncio
 import pytest
-from adaos.apps.bootstrap import init_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.domain import ProcessSpec
 
 

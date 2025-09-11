@@ -12,7 +12,7 @@ from adaos.sdk.decorators import resolve_tool, _SUBSCRIPTIONS  # реестр п
 from adaos.sdk.skill_env import get_env
 from adaos.sdk.skill_memory import get as mem_get  # пригодится позже
 from adaos.services.agent_context import AgentContext
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 
 SCHEMA_PATH = Path(__file__).with_name("skill_schema.json")
 

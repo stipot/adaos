@@ -13,12 +13,13 @@ import typer
 # загружаем .env один раз (для переменных вроде ADAOS_TTS/ADAOS_STT)
 load_dotenv(find_dotenv())
 
-from adaos.sdk.skills.i18n import _
 from adaos.sdk.utils.setup_env import prepare_environment
 
 # контекст и настройки (PR-2)
 from adaos.services.settings import Settings
 from adaos.apps.bootstrap import init_ctx, get_ctx, reload_ctx
+from adaos.apps.cli.i18n import _
+from adaos.services.agent_context import get_ctx
 
 # общие подкоманды
 from adaos.apps.cli.commands import monitor, skill, runtime, llm, tests as tests_cmd, api, scenario
@@ -32,8 +33,9 @@ from adaos.apps.cli.commands import sandbox as sandbox_cmd
 
 app = typer.Typer(help=_("cli.help"))
 
-
 # -------- вспомогательные --------
+
+
 def _run_safe(func):
     def wrapper(*args, **kwargs):
         try:
@@ -83,7 +85,6 @@ def ensure_environment():
     """Проверяем, инициализировано ли окружение; вызывается после сборки контекста."""
     if os.getenv("ADAOS_TESTING") == "1":
         return  # В CI/юнит-тестах окружение не готовим и ничего не скачиваем
-
     ctx = get_ctx()
     base_dir = Path(ctx.settings.base_dir)
 
@@ -134,7 +135,7 @@ def main(
 @app.command("reset")
 def reset():
     """Сброс окружения AdaOS (удаляет base_dir)."""
-    base_dir = Path(get_ctx().settings.base_dir)
+    base_dir = get_ctx().paths.base
     if base_dir.exists():
         shutil.rmtree(base_dir)
         typer.echo(_("cli.env_deleted"))

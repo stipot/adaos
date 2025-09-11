@@ -1,7 +1,8 @@
 import typer, json, time, sys, requests
 from pathlib import Path
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.services.eventbus import emit
+from adaos.apps.cli.i18n import _
 
 app = typer.Typer(help="Monitoring tools")
 

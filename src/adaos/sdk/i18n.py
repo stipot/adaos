@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Optional, Any, Dict
 
-from adaos.apps.bootstrap import get_ctx  # твой способ получить AgentContext
+from adaos.services.agent_context import get_ctx
 from adaos.services.i18n.service import I18nService, DEFAULT_LANG
 from adaos.sdk.context import get_current_skill
 

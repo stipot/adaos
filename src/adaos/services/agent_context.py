@@ -1,7 +1,7 @@
 # src/adaos/services/agent_context.py
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from adaos.services.settings import Settings
 from adaos.ports import EventBus, Process, Capabilities, Devices, KV, SQL, Secrets, Net, Updates, GitClient
@@ -13,6 +13,42 @@ from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 from adaos.ports.skill_context import SkillContextPort
 from adaos.adapters.sdk.inproc_skill_context import InprocSkillContext
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+_CTX: ContextVar[Optional[AgentContext]] = ContextVar("adaos_agent_ctx", default=None)
+
+
+def set_ctx(ctx: AgentContext) -> None:
+    """Устанавливает текущий AgentContext (делает доступным через get_ctx)."""
+    _CTX.set(ctx)
+
+
+def get_ctx() -> AgentContext:
+    """Возвращает текущий AgentContext или бросает ошибку, если не инициализирован."""
+    ctx = _CTX.get()
+    if ctx is None:
+        raise RuntimeError("AgentContext is not initialized. Call set_ctx(...) during app bootstrap.")
+    return ctx
+
+
+def clear_ctx() -> None:
+    """Очищает текущий контекст (для тестов/завершения)."""
+    _CTX.set(None)
+
+
+@contextmanager
+def use_ctx(ctx: AgentContext):
+    """Временная подмена контекста (удобно в тестах)."""
+    token = _CTX.set(ctx)
+    try:
+        yield
+    finally:
+        _CTX.reset(token)
+
+
+if TYPE_CHECKING:
+    from adaos.services.i18n.service import I18nService
 
 
 @dataclass(slots=True)
@@ -31,6 +67,7 @@ class AgentContext:
     git: GitClient
     fs: FSPolicy
     sandbox: Sandbox
+    _i18n: Optional[I18nService] = field(default=None, init=False, repr=False)
 
     # приватные кэши под slots
     _skills_repo: Optional[GitSkillRepository] = field(default=None, init=False, repr=False)
@@ -79,3 +116,11 @@ class AgentContext:
     def reload_repos(self) -> None:
         object.__setattr__(self, "_skills_repo", None)
         object.__setattr__(self, "_scenarios_repo", None)
+
+    @property
+    def i18n(self) -> I18nService:
+        svc = self._i18n
+        if svc is None:
+            svc = I18nService(self)
+            object.__setattr__(self, "_i18n", svc)
+        return svc
