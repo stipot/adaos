@@ -75,7 +75,6 @@ async def node_change_role(req: Request, payload: RoleChangeRequest):
     app = req.app
 
     conf = await switch_role(app, new_role, hub_url=payload.hub_url, subnet_id=sub_id)
-    conf = await switch_role(app, new_role, hub_url=payload.hub_url, subnet_id=sub_id)
     diags = {
         "requested_role": new_role,
         "hub_url": payload.hub_url,

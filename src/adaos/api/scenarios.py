@@ -1,211 +1,101 @@
 from __future__ import annotations
-from fastapi import APIRouter, HTTPException
+from typing import Any, Dict, Optional
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Any, Dict, Optional, List
 
-from adaos.sdk.scenario_service import (
-    list_installed,
-    read_prototype,
-    write_prototype,
-    create_scenario,
-    install_from_repo,
-    update_from_repo,
-    delete_scenario,
-    read_impl,
-    write_impl,
-    read_bindings,
-    write_bindings,
-    read_meta,
-    pull_scenario,
-    install_scenario,
-    uninstall_scenario,
-    push_scenario,
-)
-from adaos.agent.core.scenario_engine.store import (
-    load_prototype,
-    load_impl as _load_impl,
-    apply_rewrite,
-)
-from adaos.agent.core.scenario_engine.dsl import ImplementationRewrite, validate_rewrite
-from adaos.agent.core.scenario_engine.runtime import run_scenario, stop_instance, MANAGER, stop_by_activity
+from adaos.api.auth import require_token
+from adaos.services.agent_context import get_ctx, AgentContext
+from adaos.services.scenario.manager import ScenarioManager
+from adaos.adapters.db import SqliteScenarioRegistry
 
-router = APIRouter(tags=["scenarios"])
 
-# ---- DevOps: install/create/delete/list ----
+router = APIRouter(tags=["scenarios"], dependencies=[Depends(require_token)])
+
+
+# --- DI: получаем менеджер так же, как в CLI ---------------------------------
+def _get_manager(ctx: AgentContext = Depends(get_ctx)) -> ScenarioManager:
+    repo = ctx.scenarios_repo
+    reg = SqliteScenarioRegistry(ctx.sql)
+    return ScenarioManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps)
+
+
+# --- helpers -----------------------------------------------------------------
+def _to_mapping(obj: Any) -> Dict[str, Any]:
+    # sqlite3.Row, NamedTuple, dataclass, simple objects — мягкая нормализация
+    try:
+        return dict(obj)
+    except Exception:
+        pass
+    try:
+        return obj._asdict()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    d: Dict[str, Any] = {}
+    for k in ("name", "pin", "last_updated", "id", "path", "version"):
+        if hasattr(obj, k):
+            v = getattr(obj, k)
+            # id может быть сложным типом
+            if k == "id":
+                if hasattr(v, "value"):
+                    v = getattr(v, "value")
+                else:
+                    v = str(v)
+            d[k] = v
+    return d or {"repr": repr(obj)}
+
+
+def _meta_id(meta: Any) -> str:
+    mid = getattr(meta, "id", None)
+    if mid is None:
+        return str(meta)
+    return getattr(mid, "value", str(mid))
+
+
+# --- API (тонкий фасад CLI) --------------------------------------------------
+class InstallReq(BaseModel):
+    name: str
+    pin: Optional[str] = None
 
 
 @router.get("/list")
-async def list_scenarios():
-    return {"items": list_installed()}
+async def list_scenarios(fs: bool = False, mgr: ScenarioManager = Depends(_get_manager)):
+    rows = mgr.list_installed()
+    items = [_to_mapping(r) for r in (rows or [])]
+    result: Dict[str, Any] = {"items": items}
+    if fs:
+        present = {_meta_id(m) for m in mgr.list_present()}
+        desired = {(i.get("name") or i.get("id") or i.get("repr")) for i in items}
+        missing = sorted(desired - present)
+        extra = sorted(present - desired)
+        result["fs"] = {
+            "present": sorted(present),
+            "missing": missing,
+            "extra": extra,
+        }
+    return result
 
 
-class CreateReq(BaseModel):
-    id: str
-    template: Optional[str] = "template"
-
-
-@router.post("/create")
-async def create(body: CreateReq):
-    p = create_scenario(body.id, body.template or "template")
-    return {"ok": True, "path": str(p)}
-
-
-class InstallRepoReq(BaseModel):
-    repo: str
-    sid: Optional[str] = None
-    ref: Optional[str] = None
-    subpath: Optional[str] = None
-
-
-class PushReq(BaseModel):
-    message: Optional[str] = None
-
-
-@router.post("/install_repo")
-async def install_repo(body: InstallRepoReq):
-    p = install_from_repo(body.repo, sid=body.sid, ref=body.ref, subpath=body.subpath)
-    return {"ok": True, "path": str(p)}
-
-
-@router.delete("/{sid}")
-async def remove(sid: str):
-    ok = delete_scenario(sid)
-    if not ok:
-        raise HTTPException(404, "not found")
+@router.post("/sync")
+async def sync(mgr: ScenarioManager = Depends(_get_manager)):
+    mgr.sync()
     return {"ok": True}
 
 
-# meta (источник git)
-@router.get("/meta/{sid}")
-async def get_meta(sid: str):
-    return read_meta(sid)
+@router.post("/install")
+async def install(body: InstallReq, mgr: ScenarioManager = Depends(_get_manager)):
+    meta = mgr.install(body.name, pin=body.pin)
+    # приведём к компактному виду как в CLI-эхо
+    return {
+        "ok": True,
+        "scenario": {
+            "id": _meta_id(meta),
+            "version": getattr(meta, "version", None),
+            "path": str(getattr(meta, "path", "")),
+        },
+    }
 
 
-class UpdateRepoReq(BaseModel):
-    ref: Optional[str] = None  # можно переключиться на ветку/тег
-
-
-@router.post("/update_repo/{sid}")
-async def update_repo(sid: str, body: UpdateRepoReq):
-    p = update_from_repo(sid, ref=body.ref)
-    return {"ok": True, "path": str(p)}
-
-
-# ---- Prototype / Implementation / Bindings ----
-
-
-@router.get("/{sid}")
-async def get_proto(sid: str):
-    return read_prototype(sid)
-
-
-class ProtoUpdateReq(BaseModel):
-    data: Dict[str, Any]
-
-
-@router.put("/{sid}")
-async def update_proto(sid: str, body: ProtoUpdateReq):
-    p = write_prototype(sid, body.data)
-    return {"ok": True, "path": str(p)}
-
-
-@router.get("/impl/{user}/{sid}")
-async def get_impl(user: str, sid: str):
-    return read_impl(sid, user)
-
-
-@router.patch("/impl/{user}/{sid}")
-async def patch_impl(user: str, sid: str, patch: ImplementationRewrite):
-    proto = load_prototype(sid)
-    validate_rewrite(proto, patch)
-    p = write_impl(sid, user, patch.dict(by_alias=True))
-    return {"ok": True, "path": str(p)}
-
-
-@router.get("/bindings/{user}/{sid}")
-async def get_bindings(user: str, sid: str):
-    return read_bindings(sid, user)
-
-
-@router.post("/bindings/{user}/{sid}")
-async def set_bindings(user: str, sid: str, data: Dict[str, Any]):
-    p = write_bindings(sid, user, data)
-    return {"ok": True, "path": str(p)}
-
-
-# ---- Effective / Run / Instances ----
-
-
-@router.get("/{sid}/effective/{user}")
-async def effective(sid: str, user: str):
-    proto = load_prototype(sid)
-    imp = _load_impl(sid, user)
-    eff = apply_rewrite(proto, imp)
-    return eff.dict(by_alias=True)
-
-
-class RunReq(BaseModel):
-    user: str
-    ioOverride: Optional[Dict[str, Any]] = None
-
-
-@router.post("/{sid}/run")
-async def run(sid: str, body: RunReq):
-    iid = await run_scenario(sid, body.user, body.ioOverride)
-    return {"ok": True, "iid": iid}
-
-
-@router.get("/instances")
-async def instances():
-    return {"items": MANAGER.list()}
-
-
-@router.post("/instances/{iid}/stop")
-async def stop(iid: str):
-    ok = await stop_instance(iid)
-    if not ok:
-        raise HTTPException(404, "instance not found")
+@router.delete("/{name}")
+async def remove(name: str, mgr: ScenarioManager = Depends(_get_manager)):
+    mgr.remove(name)
     return {"ok": True}
-
-
-class StopByActivityReq(BaseModel):
-    activity: str
-
-
-@router.post("/instances/stopByActivity")
-async def stop_by_act(body: StopByActivityReq):
-    await stop_by_activity(body.activity)
-    return {"ok": True}
-
-
-@router.post("/pull/{sid}")
-async def pull_scenario_ep(sid: str):
-    """
-    Подтянуть/обновить сценарий из монорепозитория (sparse-checkout + git pull + валидация).
-    """
-    msg = pull_scenario(sid)
-    return {"ok": True, "message": msg}
-
-
-@router.post("/install/{sid}")
-async def install_scenario_ep(sid: str):
-    """
-    Установить сценарий (алиас pull): отметит installed=1 и синхронизирует sparse-checkout.
-    """
-    msg = install_scenario(sid)
-    return {"ok": True, "message": msg}
-
-
-@router.post("/uninstall/{sid}")
-async def uninstall_scenario_ep(sid: str):
-    """
-    Деинсталляция сценария: installed=0 и пересборка sparse-checkout.
-    """
-    msg = uninstall_scenario(sid)
-    return {"ok": True, "message": msg}
-
-
-@router.post("/push/{sid}")
-async def push_scenario_ep(sid: str, body: PushReq):
-    msg = push_scenario(sid, body.message)
-    return {"ok": True, "message": msg}

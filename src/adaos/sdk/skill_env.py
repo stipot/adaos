@@ -4,7 +4,7 @@ from adaos.services.agent_context import get_ctx
 
 
 def _env_path() -> Path:
-    return get_ctx().paths.skills_dir / ".skill_env.json"
+    return get_ctx().paths.skills_dir() / ".skill_env.json"
 
 
 def get_env(key: str, default=None):

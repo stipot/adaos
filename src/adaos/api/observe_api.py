@@ -12,7 +12,7 @@ from adaos.agent.core.node_config import load_config
 from adaos.agent.core.observe import _log_path, BROADCAST, pass_filters  # локальный writer совместим с форматом
 import adaos.sdk.bus as bus
 
-router = APIRouter()
+router = APIRouter(tags=["observe"], dependencies=[Depends(require_token)])
 
 
 class IngestBatch(BaseModel):
@@ -116,9 +116,12 @@ async def _sse_iter(topic_prefix: str | None, node_id: str | None, since: float 
         return
 
 
-@router.get("/stream")
+@router.get("/stream", dependencies=[Depends(require_token)])
 async def observe_stream(
-    topic_prefix: str | None = None, node_id: str | None = None, since: float | None = None, replay_lines: int | None = None, dependencies=[Depends(require_token)]
+    topic_prefix: str | None = None,
+    node_id: str | None = None,
+    since: float | None = None,
+    replay_lines: int | None = None,
 ):
     """
     SSE‑стрим событий: text/event-stream.

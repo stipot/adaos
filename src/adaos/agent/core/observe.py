@@ -6,9 +6,40 @@ from typing import Any, Dict, List, Optional, AsyncIterator
 import requests
 
 from adaos.agent.core.node_config import load_config
-from adaos.sdk.context import get_base_dir
 from adaos.sdk import bus as bus_module  # будем мягко оборачивать emit
+import os
 
+try:
+    # get_ctx может быть недоступен/неинициализирован на момент импорта
+    from adaos.services.agent_context import get_ctx  # type: ignore
+except Exception:  # noqa: BLE001
+    get_ctx = None  # type: ignore
+
+
+def _default_base_dir() -> Path:
+    env = os.environ.get("ADAOS_BASE_DIR")
+    if env:
+        return Path(env).expanduser()
+    if os.name == "nt":
+        # %LOCALAPPDATA%\AdaOS по умолчанию
+        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return root / "AdaOS"
+    return Path.home() / ".adaos"
+
+
+def _resolve_base_dir() -> Path:
+    # 1) пробуем контекст, если он уже инициализирован
+    if get_ctx:
+        try:
+            return Path(get_ctx().paths.base)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    # 2) безопасный фолбэк
+    return _default_base_dir()
+
+
+# важно: BASE_DIR теперь не зависит от ранней инициализации контекста
+BASE_DIR = _resolve_base_dir()
 # --- настройки ротации ---
 _MAX_BYTES = 5 * 1024 * 1024  # 5MB на файл
 _KEEP = 3  # events.log, .1.gz, .2.gz, .3.gz
@@ -48,7 +79,7 @@ BROADCAST = EventBroadcaster()
 
 
 def _log_path() -> Path:
-    p = Path(get_base_dir()) / "logs"
+    p = BASE_DIR / "logs"
     p.mkdir(parents=True, exist_ok=True)
     return p / "events.log"
 

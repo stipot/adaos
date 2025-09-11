@@ -18,7 +18,7 @@ from adaos.agent.core.subnet_registry import (
 
 import adaos.sdk.bus as bus
 
-router = APIRouter()
+router = APIRouter(tags=["subnet"])
 
 
 # ---------- Models ----------

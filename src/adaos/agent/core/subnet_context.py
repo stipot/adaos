@@ -2,12 +2,43 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 import json, time, requests
+import os
 
 from adaos.agent.core.node_config import load_config
 
-from adaos.sdk.context import get_base_dir
+try:
+    # get_ctx может быть недоступен/неинициализирован на момент импорта
+    from adaos.services.agent_context import get_ctx  # type: ignore
+except Exception:  # noqa: BLE001
+    get_ctx = None  # type: ignore
 
-_CTX_PATH = Path(f"{get_base_dir()}/subnet_ctx.json")
+
+def _default_base_dir() -> Path:
+    env = os.environ.get("ADAOS_BASE_DIR")
+    if env:
+        return Path(env).expanduser()
+    if os.name == "nt":
+        # %LOCALAPPDATA%\AdaOS по умолчанию
+        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return root / "AdaOS"
+    return Path.home() / ".adaos"
+
+
+def _resolve_base_dir() -> Path:
+    # 1) пробуем контекст, если он уже инициализирован
+    if get_ctx:
+        try:
+            return Path(get_ctx().paths.base)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    # 2) безопасный фолбэк
+    return _default_base_dir()
+
+
+# важно: BASE_DIR теперь не зависит от ранней инициализации контекста
+BASE_DIR = _resolve_base_dir()
+
+_CTX_PATH = BASE_DIR / "subnet_ctx.json"
 
 
 class SubnetContext:

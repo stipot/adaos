@@ -1,7 +1,8 @@
 # src/adaos/api/server.py
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+
 from pydantic import BaseModel, Field
 import platform, time
 
@@ -9,50 +10,79 @@ from adaos.api.auth import require_token
 from adaos.sdk.env import get_tts_backend
 from adaos.adapters.audio.tts.native_tts import NativeTTS
 
-# наши роутеры
-from adaos.api import tool_bridge
-from adaos.api import subnet_api
-from adaos.api import observe_api
-from adaos.api import node_api
-from adaos.agent.core.lifecycle import run_boot_sequence, shutdown, is_ready
-from adaos.agent.core.observe import start_observer, stop_observer, attach_http_trace_headers
-from adaos.api import scenarios
+from adaos.apps.bootstrap import bootstrap_app
+from adaos.services.agent_context import set_ctx, AgentContext
 
 app: FastAPI  # объявим ниже
 
 
+def _bootstrap_agent_context() -> AgentContext:
+    """
+    Минимальный bootstrap контекста для API.
+    Предполагаем dev-настройки и autodiscovery путей из окружения/проекта.
+    Если у вас есть фабрика из CLI — замените тело на вызов её фабрики.
+    """
+    # ВАЖНО: подставьте вашу фактическую фабрику/инициализацию.
+    # Ниже – безопасный «скелет», который вы можете связать со своими реализациями Paths/SQL/Git/Caps/SkillCtx.
+    from pathlib import Path
+    import os
+
+    base = Path(os.environ.get("ADAOS_HOME", Path.cwd() / ".adaos")).resolve()
+    base.mkdir(parents=True, exist_ok=True)
+
+    # Конструируйте AgentContext вашей фабрикой, например:
+    # ctx = AgentContext.for_api(base_dir=base)
+    # или, если есть dev-режим:
+    # ctx = AgentContext.dev_defaults(base_dir=base)
+
+    # Если фабрики нет — создайте простейший контекст (заглушка с путями),
+    # но лучше использовать вашу существующую фабрику из CLI.
+    ctx = AgentContext(  # тип есть в проекте; параметры подставьте свои
+        # ... ваши поля/сервисы: paths, sql, git, bus, caps, skill_ctx, ...
+    )
+    set_ctx(ctx)
+    return ctx
+
+
+app = FastAPI(title="AdaOS API")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # STARTUP
+    # 1) инициализируем AgentContext (публикуется через set_ctx внутри bootstrap_app)
+    bootstrap_app()
+
+    # 2) только теперь импортируем то, что может косвенно дернуть контекст
+    from adaos.agent.core.observe import start_observer, stop_observer
+    from adaos.agent.core.lifecycle import run_boot_sequence, shutdown
+    from adaos.api import tool_bridge, subnet_api, observe_api, node_api, scenarios
+
+    # 3) монтируем роутеры после bootstrap
+    app.include_router(tool_bridge.router, prefix="/api")
+    app.include_router(subnet_api.router, prefix="/api")
+    app.include_router(node_api.router, prefix="/api/node")
+    app.include_router(observe_api.router, prefix="/api/observe")
+    app.include_router(scenarios.router, prefix="/api/scenarios")
+
+    # 4) поднимаем наблюдатель и выполняем boot-последовательность
     await start_observer()
     await run_boot_sequence(app)
 
-    # Диагностика: распечатать все маршруты
-    print("\n[AdaOS] Mounted routes:")
-    for r in app.router.routes:
-        try:
-            print(" -", r.methods, r.path)
-        except Exception:
-            pass
-    print()
-
-    yield
-    # shutdown
-    await stop_observer()
-    await shutdown()
+    try:
+        yield
+    finally:
+        await stop_observer()
+        await shutdown()
 
 
-app = FastAPI(title="AdaOS API", version="0.1.0", lifespan=lifespan)
-app.include_router(tool_bridge.router, prefix="/api")
-app.include_router(subnet_api.router, prefix="/api")
-app.include_router(node_api.router, prefix="/api/node")
-app.include_router(observe_api.router, prefix="/api/observe")
-app.include_router(scenarios.router, prefix="/api/scenarios")
+# пересоздаём приложение с lifespan
+app = FastAPI(title="AdaOS API", lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200", "http://127.0.0.1:4200", "*"],  # под dev и/или произвольный origin
     allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "X-AdaOS-Token"],
+    allow_headers=["Content-Type", "X-AdaOS-Token", "Authorization"],
     allow_credentials=False,  # токен идёт в заголовке, куки не нужны
 )
 
