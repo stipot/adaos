@@ -7,7 +7,7 @@ from typing import Any, Dict, List, AsyncIterator
 import json, time
 from pathlib import Path
 
-from adaos.api.auth import require_token
+from adaos.apps.api.auth import require_token
 from adaos.agent.core.node_config import load_config
 from adaos.agent.core.observe import _log_path, BROADCAST, pass_filters  # локальный writer совместим с форматом
 import adaos.sdk.bus as bus

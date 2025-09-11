@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Any
 
-from adaos.api.auth import require_token
+from adaos.apps.api.auth import require_token
 from adaos.agent.core.node_config import load_config
 from adaos.agent.core.subnet_context import CTX
 from adaos.agent.core.subnet_registry import (

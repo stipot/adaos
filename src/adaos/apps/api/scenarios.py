@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from adaos.api.auth import require_token
+from adaos.apps.api.auth import require_token
 from adaos.services.agent_context import get_ctx, AgentContext
 from adaos.services.scenario.manager import ScenarioManager
 from adaos.adapters.db import SqliteScenarioRegistry

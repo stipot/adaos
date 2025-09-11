@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 import platform, time
 
-from adaos.api.auth import require_token
+from adaos.apps.api.auth import require_token
 from adaos.sdk.env import get_tts_backend
 from adaos.adapters.audio.tts.native_tts import NativeTTS
 
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     # 2) только теперь импортируем то, что может косвенно дернуть контекст
     from adaos.agent.core.observe import start_observer, stop_observer
     from adaos.agent.core.lifecycle import run_boot_sequence, shutdown
-    from adaos.api import tool_bridge, subnet_api, observe_api, node_api, scenarios
+    from adaos.apps.api import tool_bridge, subnet_api, observe_api, node_api, scenarios
 
     # 3) монтируем роутеры после bootstrap
     app.include_router(tool_bridge.router, prefix="/api")

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import importlib.util
 from typing import Any, Dict
 
-from adaos.api.auth import require_token
+from adaos.apps.api.auth import require_token
 from adaos.sdk.decorators import resolve_tool
 from adaos.agent.core.observe import attach_http_trace_headers
 from adaos.services.agent_context import get_ctx
