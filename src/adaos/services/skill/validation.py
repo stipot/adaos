@@ -184,22 +184,30 @@ print(json.dumps({{"ok": True, "tools": exports, "subs": subs}}))
 class SkillValidationService:
     ctx: AgentContext
 
-    def validate(self, skill_name: Optional[str] = None, *, strict: bool = False, install_mode: Optional[bool] = False, probe_tools: bool = False) -> ValidationReport:
-        ctx = get_ctx()
-        # определяем каталог навыка
+    def validate(
+        self,
+        skill_name: Optional[str] = None,
+        *,
+        strict: bool = False,
+        install_mode: Optional[bool] = False,
+        probe_tools: bool = False,
+    ) -> ValidationReport:
+        """
+        Валидация текущего (или указанного) навыка:
+        - статическая проверка skill.yaml + структуры
+        - динамическая: импорт handlers/main.py в отдельном процессе и сверка экспортов/подписок
+        """
+        ctx = self.ctx or get_ctx()
+        # выбрать активный навык
         if skill_name:
-            if not body.ctx.skill_ctx.set(skill_name):
-                return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
-        current = body.ctx.skill_ctx.get()
-        if current is None or current.path is None:
+            if not ctx.skill_ctx.set(skill_name):
+                return ValidationReport(False, [Issue("error", "skill.context.missing", f"skill '{skill_name}' not found")])
+        current = ctx.skill_ctx.get()
+        if current is None or getattr(current, "path", None) is None:
             return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
-        skill_dir = current.path
+        from pathlib import Path as _P
 
-        issues: List[Issue] = []
-        issues += _static_checks(skill_dir, install_mode)
-        # если есть критические на статике — дальше нет смысла
-        if any(i.level == "error" for i in issues):
-            return ValidationReport(False, issues)
+        skill_dir = _P(current.path)
 
         issues += _dynamic_checks(current.name, skill_dir, install_mode, probe_tools)
         ok = not any(i.level == "error" for i in issues)

@@ -1,3 +1,4 @@
+# src\adaos\apps\api\subnet_api.py
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -5,16 +6,9 @@ from pydantic import BaseModel
 from typing import Any
 
 from adaos.apps.api.auth import require_token
-from adaos.agent.core.node_config import load_config
-from adaos.agent.core.subnet_context import CTX
-from adaos.agent.core.subnet_registry import (
-    register_node,
-    heartbeat as registry_heartbeat,
-    list_nodes as registry_list,
-    get_node as registry_get,
-    unregister_node as registry_unregister,
-    LEASE_SECONDS_DEFAULT,
-)
+from adaos.services.node_config import load_config
+from adaos.services.subnet_kv_file_http import get_subnet_kv
+from adaos.services.subnet_registry_mem import get_subnet_registry, LEASE_SECONDS_DEFAULT, DOWN_GRACE_SECONDS
 
 import adaos.sdk.bus as bus
 
@@ -69,8 +63,9 @@ async def register(body: RegisterRequest):
         raise HTTPException(status_code=400, detail="subnet mismatch")
 
     # Добавляем/обновляем запись в реестре
-    was = registry_get(body.node_id)
-    register_node(
+    reg = get_subnet_registry()
+    was = reg.get_node(body.node_id)
+    reg.register_node(
         body.node_id,
         meta={"hostname": body.hostname, "roles": body.roles or []},
     )
@@ -91,14 +86,14 @@ async def heartbeat(body: HeartbeatRequest):
     if conf.role != "hub":
         raise HTTPException(status_code=403, detail="only hub node accepts heartbeats")
 
-    before = registry_get(body.node_id)
-    info = registry_heartbeat(body.node_id)
+    reg = get_subnet_registry()
+    info = reg.heartbeat(body.node_id)
     if not info:
         # Неизвестная нода — просим повторную регистрацию
         raise HTTPException(status_code=404, detail="node not registered")
 
     # Если статус был 'down' и поднялся в 'up' — шлём node.up
-    if before and isinstance(before, dict) and before.get("status") == "down" and info.status == "up":
+    if info and isinstance(info, dict) and info.get("status") == "down" and info.status == "up":
         await bus.emit("net.subnet.node.up", {"node_id": body.node_id}, source="subnet_api", actor="system")
 
     return HeartbeatResponse(ok=True, lease_seconds=LEASE_SECONDS_DEFAULT)
@@ -110,7 +105,7 @@ async def deregister(body: DeregisterRequest):
     conf = load_config()
     if conf.role != "hub":
         raise HTTPException(status_code=403, detail="only hub node accepts deregistration")
-    existed = registry_unregister(body.node_id)
+    existed = get_subnet_registry().unregister_node(body.node_id)
     if existed:
         await bus.emit("net.subnet.node.down", {"node_id": body.node_id}, source="subnet_api", actor="system")
     return {"ok": True, "existed": bool(existed)}
@@ -147,7 +142,9 @@ async def nodes_list():
     conf = load_config()
     if conf.role != "hub":
         raise HTTPException(status_code=403, detail="only hub node lists nodes")
-    return {"ok": True, "nodes": registry_list()}
+    reg = get_subnet_registry()
+    items = [{"node_id": n.node_id, "last_seen": n.last_seen, "status": n.status, "meta": n.meta} for n in reg.list_nodes()]
+    return {"ok": True, "nodes": items}
 
 
 @router.get("/subnet/nodes/{node_id}", dependencies=[Depends(require_token)])
@@ -158,7 +155,7 @@ async def node_get(node_id: str):
     conf = load_config()
     if conf.role != "hub":
         raise HTTPException(status_code=403, detail="only hub node has node details")
-    info = registry_get(node_id)
+    info = get_subnet_registry().get_node(node_id)
     if not info:
         raise HTTPException(status_code=404, detail="node not found")
     return {"ok": True, "node": info}

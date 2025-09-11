@@ -1,70 +1,34 @@
 from __future__ import annotations
-import asyncio
-import socket
-import time
-import uuid
-from typing import List, Optional, Sequence, Any
+import asyncio, socket, time, uuid
+from typing import Any, List, Optional, Sequence
 
-from adaos.services.agent_context import AgentContext
+from adaos.services.agent_context import AgentContext, get_ctx
 from adaos.sdk import bus
-from adaos.agent.core.node_config import load_config, set_role as cfg_set_role, NodeConfig
+from adaos.services.node_config import load_config, set_role as cfg_set_role, NodeConfig
 from adaos.ports.heartbeat import HeartbeatPort
 from adaos.ports.skills_loader import SkillsLoaderPort
-from adaos.ports.subnet import SubnetRegistryPort
+from adaos.ports.subnet_registry import SubnetRegistryPort
 
 
 class BootstrapService:
-    def __init__(
-        self,
-        ctx: AgentContext,
-        *,
-        heartbeat: HeartbeatPort,
-        skills_loader: SkillsLoaderPort,
-        subnet_registry: SubnetRegistryPort,
-    ) -> None:
+    def __init__(self, ctx: AgentContext, *, heartbeat: HeartbeatPort, skills_loader: SkillsLoaderPort, subnet_registry: SubnetRegistryPort) -> None:
         self.ctx = ctx
         self.heartbeat = heartbeat
         self.skills_loader = skills_loader
         self.subnet_registry = subnet_registry
-
         self._boot_tasks: List[asyncio.Task] = []
-        self._ready_event: asyncio.Event = asyncio.Event()
-        self._booted: bool = False
-        self._app: Any = None  # FastAPI | None
-
-    @classmethod
-    def from_ctx(
-        cls,
-        ctx: AgentContext,
-        *,
-        heartbeat: HeartbeatPort,
-        skills_loader: SkillsLoaderPort,
-        subnet_registry: SubnetRegistryPort,
-    ) -> "BootstrapService":
-        return cls(ctx, heartbeat=heartbeat, skills_loader=skills_loader, subnet_registry=subnet_registry)
+        self._ready = asyncio.Event()
+        self._booted = False
+        self._app: Any = None
 
     def is_ready(self) -> bool:
-        return self._ready_event.is_set()
+        return self._ready.is_set()
 
     async def _member_register_and_heartbeat(self, conf: NodeConfig) -> Optional[asyncio.Task]:
-        assert conf.role == "member"
-        ok = await self.heartbeat.register(
-            conf.hub_url or "",
-            conf.token or "",
-            node_id=conf.node_id,
-            subnet_id=conf.subnet_id,
-            hostname=socket.gethostname(),
-            roles=["member"],
-        )
+        ok = await self.heartbeat.register(conf.hub_url or "", conf.token or "", node_id=conf.node_id, subnet_id=conf.subnet_id, hostname=socket.gethostname(), roles=["member"])
         if not ok:
-            await bus.emit(
-                "net.subnet.register.error",
-                {"status": "non-200 or exception"},
-                source="lifecycle",
-                actor="system",
-            )
+            await bus.emit("net.subnet.register.error", {"status": "non-200"}, source="lifecycle", actor="system")
             return None
-
         await bus.emit("net.subnet.registered", {"hub": conf.hub_url}, source="lifecycle", actor="system")
 
         async def loop() -> None:
@@ -75,20 +39,10 @@ class BootstrapService:
                     if ok_hb:
                         backoff = 1
                     else:
-                        await bus.emit(
-                            "net.subnet.heartbeat.warn",
-                            {"status": "non-200"},
-                            source="lifecycle",
-                            actor="system",
-                        )
+                        await bus.emit("net.subnet.heartbeat.warn", {"status": "non-200"}, source="lifecycle", actor="system")
                         backoff = min(backoff * 2, 30)
                 except Exception as e:
-                    await bus.emit(
-                        "net.subnet.heartbeat.error",
-                        {"error": str(e)},
-                        source="lifecycle",
-                        actor="system",
-                    )
+                    await bus.emit("net.subnet.heartbeat.error", {"error": str(e)}, source="lifecycle", actor="system")
                     backoff = min(backoff * 2, 30)
                 await asyncio.sleep(backoff if backoff > 1 else 5)
 
@@ -98,41 +52,34 @@ class BootstrapService:
         if self._booted:
             return
         self._app = app
-
         conf = load_config(ctx=self.ctx)
-        await bus.emit(
-            "sys.boot.start",
-            {"role": conf.role, "node_id": conf.node_id, "subnet_id": conf.subnet_id},
-            source="lifecycle",
-            actor="system",
-        )
-
-        # загрузка хендлеров и подписок
-        await self.skills_loader.import_all_handlers(self.ctx.paths.skills_dir())
-        from adaos.sdk.decorators import register_subscriptions  # локальный импорт, без ранних побочек
+        await bus.emit("sys.boot.start", {"role": conf.role, "node_id": conf.node_id, "subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
+        # paths.skills_dir может быть функцией; нормализуем до Path/str
+        skills_dir_attr = getattr(self.ctx.paths, "skills_dir", None)
+        skills_root = skills_dir_attr() if callable(skills_dir_attr) else skills_dir_attr
+        await self.skills_loader.import_all_handlers(skills_root)
+        from adaos.sdk.decorators import register_subscriptions
 
         await register_subscriptions()
         await bus.emit("sys.bus.ready", {}, source="lifecycle", actor="system")
-
         if conf.role == "hub":
             await bus.emit("net.subnet.hub.ready", {"subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
 
             async def lease_monitor() -> None:
                 while True:
-                    down_list = self.subnet_registry.mark_down_if_expired()
-                    for info in down_list:
+                    for info in self.subnet_registry.mark_down_if_expired():
                         await bus.emit("net.subnet.node.down", {"node_id": getattr(info, "node_id", None)}, source="lifecycle", actor="system")
                     await asyncio.sleep(5)
 
             self._boot_tasks.append(asyncio.create_task(lease_monitor(), name="adaos-lease-monitor"))
-            self._ready_event.set()
+            self._ready.set()
             self._booted = True
             await bus.emit("sys.ready", {"ts": time.time()}, source="lifecycle", actor="system")
         else:
             task = await self._member_register_and_heartbeat(conf)
             if task:
                 self._boot_tasks.append(task)
-                self._ready_event.set()
+                self._ready.set()
                 self._booted = True
                 await bus.emit("sys.ready", {"ts": time.time()}, source="lifecycle", actor="system")
 
@@ -147,21 +94,50 @@ class BootstrapService:
             await asyncio.gather(*self._boot_tasks, return_exceptions=True)
             self._boot_tasks.clear()
         self._booted = False
-        self._ready_event.clear()
+        self._ready.clear()
         await bus.emit("sys.stopped", {}, source="lifecycle", actor="system")
 
     async def switch_role(self, app: Any, role: str, *, hub_url: str | None = None, subnet_id: str | None = None) -> NodeConfig:
         prev = load_config(ctx=self.ctx)
         await self.shutdown()
-
-        # member → hub: корректная дерегистрация и новая подсеть
         if prev.role == "member" and role.lower().strip() == "hub" and prev.hub_url:
             try:
                 await self.heartbeat.deregister(prev.hub_url, prev.token or "", node_id=prev.node_id)
             except Exception:
                 pass
             subnet_id = subnet_id or str(uuid.uuid4())
-
         conf = cfg_set_role(role, hub_url=hub_url, subnet_id=subnet_id, ctx=self.ctx)
         await self.run_boot_sequence(app or self._app)
         return conf
+
+
+# --- модульные фасады (синглтон) ---
+from adaos.services.heartbeat_requests import RequestsHeartbeat
+from adaos.services.skills_loader_importlib import ImportlibSkillsLoader
+from adaos.services.subnet_registry_mem import get_subnet_registry
+
+_SERVICE: BootstrapService | None = None
+
+
+def _svc() -> BootstrapService:
+    global _SERVICE
+    if _SERVICE is None:
+        ctx = get_ctx()
+        _SERVICE = BootstrapService(ctx, heartbeat=RequestsHeartbeat(), skills_loader=ImportlibSkillsLoader(), subnet_registry=get_subnet_registry())
+    return _SERVICE
+
+
+def is_ready() -> bool:
+    return _svc().is_ready()
+
+
+async def run_boot_sequence(app: Any) -> None:
+    await _svc().run_boot_sequence(app)
+
+
+async def shutdown() -> None:
+    await _svc().shutdown()
+
+
+async def switch_role(app: Any, role: str, *, hub_url: str | None = None, subnet_id: str | None = None) -> NodeConfig:
+    return await _svc().switch_role(app, role, hub_url=hub_url, subnet_id=subnet_id)

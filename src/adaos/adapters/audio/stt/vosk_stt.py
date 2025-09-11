@@ -25,13 +25,13 @@ class VoskSTT:
         self, model_path: Optional[str] = None, samplerate: int = 16000, device: Optional[int | str] = None, lang: str = "en", external_stream: Optional[Iterable[bytes]] = None
     ):
 
-        ADAOS_VOSK_MODEL = str(get_ctx().paths.base / "models" / "vosk" / "en-us")  # TODO move to constants
+        ADAOS_VOSK_MODEL = str(get_ctx().paths.base() / "models" / "vosk" / "en-us")  # TODO move to constants
         # Инициализация модели
         if model_path:
             model_dir = Path(model_path)
         else:
             # ваша ensure_vosk_model уже готова – используем
-            from adaos.agent.utils.model_manager import ensure_vosk_model
+            from adaos.adapters.audio.stt.model_manager import ensure_vosk_model
 
             model_dir = ensure_vosk_model(lang or "en", base_dir=ADAOS_VOSK_MODEL)
 

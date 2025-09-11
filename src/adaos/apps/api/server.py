@@ -11,13 +11,8 @@ from adaos.sdk.env import get_tts_backend
 from adaos.adapters.audio.tts.native_tts import NativeTTS
 
 from adaos.apps.bootstrap import bootstrap_app
-from adaos.agent.core.lifecycle import is_ready
-from adaos.services.agent_context import set_ctx, AgentContext
-
-app: FastAPI  # объявим ниже
-
-
-app = FastAPI(title="AdaOS API")
+from adaos.services.bootstrap import run_boot_sequence, shutdown, is_ready
+from adaos.services.observe import start_observer, stop_observer
 
 
 @asynccontextmanager
@@ -26,8 +21,6 @@ async def lifespan(app: FastAPI):
     bootstrap_app()
 
     # 2) только теперь импортируем то, что может косвенно дернуть контекст
-    from adaos.agent.core.observe import start_observer, stop_observer
-    from adaos.agent.core.lifecycle import run_boot_sequence, shutdown
     from adaos.apps.api import tool_bridge, subnet_api, observe_api, node_api, scenarios
 
     # 3) монтируем роутеры после bootstrap

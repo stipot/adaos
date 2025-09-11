@@ -1,5 +1,5 @@
 from fastapi import Header, HTTPException, status
-from adaos.agent.core.node_config import load_config
+from adaos.services.node_config import load_config
 
 
 def _expected_token() -> str:

@@ -135,7 +135,7 @@ def main(
 @app.command("reset")
 def reset():
     """Сброс окружения AdaOS (удаляет base_dir)."""
-    base_dir = get_ctx().paths.base
+    base_dir = get_ctx().paths.base()
     if base_dir.exists():
         shutil.rmtree(base_dir)
         typer.echo(_("cli.env_deleted"))

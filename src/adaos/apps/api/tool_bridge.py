@@ -1,13 +1,12 @@
 # src\adaos\api\tool_bridge.py
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import importlib.util
 from typing import Any, Dict
 
 from adaos.apps.api.auth import require_token
 from adaos.sdk.decorators import resolve_tool
-from adaos.agent.core.observe import attach_http_trace_headers
-from adaos.services.agent_context import get_ctx
+from adaos.services.observe import attach_http_trace_headers
 from adaos.services.agent_context import get_ctx, AgentContext
 
 
@@ -25,6 +24,7 @@ class ToolCall(BaseModel):
     tool: str
     arguments: Dict[str, Any] | None = None
     context: Dict[str, Any] | None = None
+    model_config = {"extra": "ignore"}
 
 
 @router.post("/tools/call", dependencies=[Depends(require_token)])

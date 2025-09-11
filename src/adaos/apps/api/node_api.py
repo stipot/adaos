@@ -1,5 +1,5 @@
 # src/adaos/api/node_api.py
-# TODO Вместо захардкоженного "dev-local-token" можно дернуть требуемый токен из единого места (например, from adaos.agent.core.node_config import load_config и взять load_config().token). Главное — чтобы токен, с которым member ходит на hub, совпадал с тем, который hub ожидает.
+# TODO Вместо захардкоженного "dev-local-token" можно дернуть требуемый токен из единого места (например, from adaos.seervice.node_config import load_config и взять load_config().token). Главное — чтобы токен, с которым member ходит на hub, совпадал с тем, который hub ожидает.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -8,8 +8,7 @@ from typing import Optional
 import requests
 
 from adaos.apps.api.auth import require_token
-from adaos.agent.core.node_config import load_config
-from adaos.agent.core.lifecycle import is_ready, switch_role
+from adaos.services.bootstrap import is_ready, switch_role, load_config
 
 router = APIRouter()
 

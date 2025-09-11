@@ -8,8 +8,8 @@ import json, time
 from pathlib import Path
 
 from adaos.apps.api.auth import require_token
-from adaos.agent.core.node_config import load_config
-from adaos.agent.core.observe import _log_path, BROADCAST, pass_filters  # локальный writer совместим с форматом
+from adaos.services.node_config import load_config
+from adaos.services.observe import _log_path, BROADCAST, pass_filters
 import adaos.sdk.bus as bus
 
 router = APIRouter(tags=["observe"], dependencies=[Depends(require_token)])
@@ -82,7 +82,7 @@ async def _sse_iter(topic_prefix: str | None, node_id: str | None, since: float 
     heartbeat_at = time.time()
     if replay_lines and not since:
         # прочитаем хвост и отправим их как "исторические"
-        from adaos.agent.core.observe import _log_path
+        from adaos.services.observe import _log_path
 
         try:
             with _log_path().open("r", encoding="utf-8") as f:
