@@ -16,34 +16,6 @@ from adaos.services.agent_context import set_ctx, AgentContext
 app: FastAPI  # объявим ниже
 
 
-def _bootstrap_agent_context() -> AgentContext:
-    """
-    Минимальный bootstrap контекста для API.
-    Предполагаем dev-настройки и autodiscovery путей из окружения/проекта.
-    Если у вас есть фабрика из CLI — замените тело на вызов её фабрики.
-    """
-    # ВАЖНО: подставьте вашу фактическую фабрику/инициализацию.
-    # Ниже – безопасный «скелет», который вы можете связать со своими реализациями Paths/SQL/Git/Caps/SkillCtx.
-    from pathlib import Path
-    import os
-
-    base = Path(os.environ.get("ADAOS_HOME", Path.cwd() / ".adaos")).resolve()
-    base.mkdir(parents=True, exist_ok=True)
-
-    # Конструируйте AgentContext вашей фабрикой, например:
-    # ctx = AgentContext.for_api(base_dir=base)
-    # или, если есть dev-режим:
-    # ctx = AgentContext.dev_defaults(base_dir=base)
-
-    # Если фабрики нет — создайте простейший контекст (заглушка с путями),
-    # но лучше использовать вашу существующую фабрику из CLI.
-    ctx = AgentContext(  # тип есть в проекте; параметры подставьте свои
-        # ... ваши поля/сервисы: paths, sql, git, bus, caps, skill_ctx, ...
-    )
-    set_ctx(ctx)
-    return ctx
-
-
 app = FastAPI(title="AdaOS API")
 
 
@@ -54,7 +26,7 @@ async def lifespan(app: FastAPI):
 
     # 2) только теперь импортируем то, что может косвенно дернуть контекст
     from adaos.agent.core.observe import start_observer, stop_observer
-    from adaos.agent.core.lifecycle import run_boot_sequence, shutdown
+    from adaos.agent.core.lifecycle import run_boot_sequence, shutdown, is_ready
     from adaos.api import tool_bridge, subnet_api, observe_api, node_api, scenarios
 
     # 3) монтируем роутеры после bootstrap
