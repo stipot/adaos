@@ -1,6 +1,5 @@
 import typer, json, time, sys, requests
 from pathlib import Path
-from adaos.sdk.context import get_base_dir
 from adaos.apps.bootstrap import get_ctx
 from adaos.services.eventbus import emit
 
@@ -12,7 +11,7 @@ def monitor_events(
     topic: str = typer.Option(None, "--topic", "-t", help="Фильтр по префиксу топика"),
     follow: bool = typer.Option(True, "--follow/--no-follow", help="Следить за логом"),
 ):
-    logf = Path(get_base_dir()) / "logs" / "events.log"
+    logf = get_ctx().paths.base / "logs" / "events.log"
     if not logf.exists():
         typer.echo("No events yet.")
         raise typer.Exit(0)

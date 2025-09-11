@@ -1,4 +1,5 @@
 # src/adaos/sdk/skill_service.py
+# Adopted
 from __future__ import annotations
 from typing import Optional, List
 from adaos.sdk.skills import (

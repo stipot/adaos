@@ -56,6 +56,12 @@ class PathProvider:
     def state_dir(self) -> Path:
         return (self.base / "state").resolve()
 
+    def skills_locales_dir(self) -> Path:  # TODO Move to global context&
+        return (self.base / "i18n").resolve()
+
+    def scenarios_locales_dir(self) -> Path:  # TODO Move to global context&
+        return (self.base / "i18n").resolve()
+
     def tmp_dir(self) -> Path:
         return (self.base / "tmp").resolve()
 

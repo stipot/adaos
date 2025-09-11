@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
-from adaos.sdk.context import get_current_skill_path
+from adaos.apps.bootstrap import get_ctx
 
 
 def _env_path() -> Path:
-    return get_current_skill_path() / ".skill_env.json"
+    return get_ctx().paths.skills_dir / ".skill_env.json"
 
 
 def get_env(key: str, default=None):

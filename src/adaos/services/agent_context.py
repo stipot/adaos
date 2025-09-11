@@ -11,6 +11,8 @@ from adaos.ports.sandbox import Sandbox
 
 from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.scenarios.git_repo import GitScenarioRepository
+from adaos.ports.skill_context import SkillContextPort
+from adaos.adapters.sdk.inproc_skill_context import InprocSkillContext
 
 
 @dataclass(slots=True)
@@ -33,6 +35,7 @@ class AgentContext:
     # приватные кэши под slots
     _skills_repo: Optional[GitSkillRepository] = field(default=None, init=False, repr=False)
     _scenarios_repo: Optional[GitScenarioRepository] = field(default=None, init=False, repr=False)
+    _skill_ctx_port: Optional[SkillContextPort] = field(default=None, init=False, repr=False)
 
     @property
     def skills_repo(self) -> GitSkillRepository:
@@ -60,6 +63,18 @@ class AgentContext:
             )
             object.__setattr__(self, "_scenarios_repo", repo)
         return repo
+
+    @property
+    def skill_ctx(self) -> SkillContextPort:
+        port = self._skill_ctx_port
+        if port is None:
+            port = InprocSkillContext()
+            object.__setattr__(self, "_skill_ctx_port", port)
+        return port
+
+    def reload_repos(self) -> None:
+        object.__setattr__(self, "_skills_repo", None)
+        object.__setattr__(self, "_scenarios_repo", None)
 
     def reload_repos(self) -> None:
         object.__setattr__(self, "_skills_repo", None)

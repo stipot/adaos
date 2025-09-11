@@ -8,8 +8,6 @@ import copy
 
 import yaml
 from jsonschema import validate as js_validate, Draft202012Validator, ValidationError, Draft7Validator
-
-from adaos.sdk.context import get_current_skill, set_current_skill
 from adaos.sdk.decorators import resolve_tool, _SUBSCRIPTIONS  # реестр подписок из декораторов
 from adaos.sdk.skill_env import get_env
 from adaos.sdk.skill_memory import get as mem_get  # пригодится позже
@@ -190,9 +188,9 @@ class SkillValidationService:
         ctx = get_ctx()
         # определяем каталог навыка
         if skill_name:
-            if not set_current_skill(skill_name):
+            if not body.ctx.skill_ctx.set(skill_name):
                 return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
-        current = get_current_skill()
+        current = body.ctx.skill_ctx.get()
         if current is None or current.path is None:
             return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
         skill_dir = current.path

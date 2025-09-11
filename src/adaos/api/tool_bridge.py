@@ -5,10 +5,10 @@ import importlib.util
 from typing import Any, Dict
 
 from adaos.api.auth import require_token
-from adaos.sdk.context import get_current_skill, set_current_skill
 from adaos.sdk.decorators import resolve_tool
-from adaos.sdk.context import set_current_skill
 from adaos.agent.core.observe import attach_http_trace_headers
+from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import AgentContext
 
 
 router = APIRouter()
@@ -25,6 +25,7 @@ class ToolCall(BaseModel):
     tool: str
     arguments: Dict[str, Any] | None = None
     context: Dict[str, Any] | None = None
+    ctx: AgentContext = get_ctx()
 
 
 @router.post("/tools/call", dependencies=[Depends(require_token)])
@@ -38,11 +39,11 @@ async def call_tool(body: ToolCall, request: Request, response: Response):
         raise HTTPException(status_code=400, detail="invalid tool spec")
 
     # 2) Устанавливаем текущий навык на время выполнения запроса
-    if not set_current_skill(skill_name):
+    if not body.ctx.skill_ctx.set(skill_name):  # set_current_skill(skill_name):
         raise HTTPException(status_code=503, detail=f"The skill {skill_name} is not found")
 
     # 3) Получаем текущий навык (после установки)
-    current = get_current_skill()
+    current = body.ctx.skill_ctx.get()  # get_current_skill
     if current is None or current.path is None or current.name is None:
         raise HTTPException(status_code=503, detail="current skill is not set")
 

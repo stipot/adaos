@@ -1,3 +1,4 @@
+# src\adaos\sdk\skills\i18n.py
 import os
 import json
 from pathlib import Path
