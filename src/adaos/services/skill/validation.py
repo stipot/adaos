@@ -1,18 +1,15 @@
-# src\adaos\sdk\skill_validator.py
+# src/adaos/sdk/skill_validator.py
+
 from __future__ import annotations
 import os, sys, json, subprocess, importlib.util
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional
 import copy
-
 import yaml
-from jsonschema import validate as js_validate, Draft202012Validator, ValidationError, Draft7Validator
-from adaos.sdk.decorators import resolve_tool, _SUBSCRIPTIONS  # реестр подписок из декораторов
-from adaos.sdk.skill_env import get_env
-from adaos.sdk.skill_memory import get as mem_get  # пригодится позже
-from adaos.services.agent_context import AgentContext
-from adaos.services.agent_context import get_ctx
+from jsonschema import Draft202012Validator, ValidationError
+
+from adaos.services.agent_context import AgentContext, get_ctx
 
 SCHEMA_PATH = Path(__file__).with_name("skill_schema.json")
 
@@ -43,21 +40,9 @@ def _read_yaml(path: Path) -> Dict[str, Any]:
 
 
 def _normalize_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Подставляем дефолты для опциональных полей и приводим типы:
-    - dependencies         → []
-    - events               → {}
-      - events.subscribe   → []
-      - events.publish     → []
-    - tools                → []
-    - exports              → {}
-      - exports.tools      → []
-    """
     s = copy.deepcopy(spec or {})
-    # простые поля
     if s.get("description") is None:
         s["description"] = ""
-    # массивы/объекты
     if not isinstance(s.get("dependencies"), list):
         s["dependencies"] = []
     if not isinstance(s.get("tools"), list):
@@ -66,7 +51,6 @@ def _normalize_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
         s["exports"] = {}
     if not isinstance(s["exports"].get("tools"), list):
         s["exports"]["tools"] = []
-    # events
     if not isinstance(s.get("events"), dict):
         s["events"] = {}
     if not isinstance(s["events"].get("subscribe"), list):
@@ -78,30 +62,28 @@ def _normalize_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
 
 def _static_checks(skill_dir: Path, install_mode: bool) -> List[Issue]:
     issues: List[Issue] = []
-    # 1) skill.yaml
     sy = skill_dir / "skill.yaml"
     if not sy.exists():
         issues.append(Issue("error", "missing.skill_yaml", "skill.yaml not found", str(sy)))
         return issues
     raw = _read_yaml(sy)
     data = _normalize_spec(raw)
-    # 2) схема
     try:
         schema = _load_schema()
         Draft202012Validator(schema).validate(data)
     except ValidationError as e:
         issues.append(Issue("error", "schema.invalid", f"skill.yaml schema violation: {e.message}", "skill.yaml"))
         return issues
-    # 3) обязательные файлы
+
     handler = skill_dir / "handlers" / "main.py"
     if not handler.exists():
         issues.append(Issue("error", "missing.handler", "handlers/main.py not found", str(handler)))
-    # 4) инструменты: уникальность имён
+
     tools = data.get("tools") or []
     names = [t.get("name") for t in tools if isinstance(t, dict)]
     if len(names) != len(set(names)):
         issues.append(Issue("error", "tools.duplicate_names", "duplicate tool names in skill.yaml", "tools[]"))
-    # 5) схемы инструментов — базовая валидация структуры (что это объекты)
+
     for t in tools:
         if not isinstance(t, dict):
             issues.append(Issue("error", "tools.invalid_item", "tool item must be an object", "tools[]"))
@@ -112,7 +94,7 @@ def _static_checks(skill_dir: Path, install_mode: bool) -> List[Issue]:
             issues.append(
                 Issue("warning" if not install_mode else "error", "tools.output_schema.invalid", f"tool '{t.get('name')}' output_schema should be object", "tools[].output_schema")
             )
-    # 6) events — строки
+
     ev = data.get("events") or {}
     for key in ("subscribe", "publish"):
         arr = ev.get(key) or []
@@ -124,8 +106,8 @@ def _static_checks(skill_dir: Path, install_mode: bool) -> List[Issue]:
 
 def _dynamic_checks(skill_name: str, skill_dir: Path, install_mode: bool, probe_tools: bool) -> List[Issue]:
     """
-    Импортируем handlers/main.py в ОТДЕЛЬНОМ процессе Python,
-    чтобы исключить побочные эффекты. Используем resolve_tool через модульное имя.
+    Импортируем handlers/main.py в ОТДЕЛЬНОМ процессе Python
+    и сверяем экспорт инструментов/подписок.
     """
     code = f"""
 import os, json, importlib.util
@@ -139,14 +121,20 @@ if spec is None or spec.loader is None:
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
-# introspect exported tools and subscriptions
+# попытка получить новые публичные реестры (с fallback на старые)
 try:
-    from adaos.sdk.decorators import _TOOLS, _SUBSCRIPTIONS
+    from adaos.sdk.decorators import tools_registry, subscriptions
+    mod_tools = (tools_registry.get(mod_name) or {{}})
+    subs = [t for (t, _fn) in subscriptions]
 except Exception:
-    _TOOLS, _SUBSCRIPTIONS = {{}}, []
+    try:
+        from adaos.sdk.decorators import _TOOLS, _SUBSCRIPTIONS
+        mod_tools = (_TOOLS.get(mod_name) or {{}})
+        subs = [t for (t, _fn) in _SUBSCRIPTIONS]
+    except Exception:
+        mod_tools, subs = {{}}, []
 
-exports = list((_TOOLS.get(mod_name) or {{}}).keys())
-subs = [t for (t, _fn) in _SUBSCRIPTIONS]
+exports = list(mod_tools.keys())
 print(json.dumps({{"ok": True, "tools": exports, "subs": subs}}))
 """
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
@@ -163,20 +151,20 @@ print(json.dumps({{"ok": True, "tools": exports, "subs": subs}}))
         issues.append(Issue("error", "introspect.failed", str(payload)))
         return issues
 
-    # Сверка с skill.yaml
     data = _normalize_spec(_read_yaml(skill_dir / "skill.yaml"))
     declared_tools = [t.get("name") for t in (data.get("tools") or []) if isinstance(t, dict)]
     exported_tools = set(payload.get("tools") or [])
     for name in declared_tools:
         if name not in exported_tools:
             issues.append(Issue("error", "tools.missing_export", f"tool '{name}' declared in skill.yaml but not exported by @tool", "tools[].name"))
+
     declared_subs = set((data.get("events") or {}).get("subscribe") or [])
     exported_subs = set(payload.get("subs") or [])
     for topic in declared_subs:
         if topic not in exported_subs:
             issues.append(Issue("error", "events.missing_sub", f"no @subscribe handler for '{topic}'", "events.subscribe[]"))
 
-    # (опционально) пробный вызов инструментов — здесь пропускаем, чтобы не исполнять код навыка
+    # probe_tools оставим на будущее (без исполнения)
     return issues
 
 
@@ -193,22 +181,30 @@ class SkillValidationService:
         probe_tools: bool = False,
     ) -> ValidationReport:
         """
-        Валидация текущего (или указанного) навыка:
-        - статическая проверка skill.yaml + структуры
-        - динамическая: импорт handlers/main.py в отдельном процессе и сверка экспортов/подписок
+        Валидация навыка:
+        - статическая проверка skill.yaml и структуры
+        - динамическая проверка экспортов/подписок через импорт handlers/main.py в отдельном процессе
         """
         ctx = self.ctx or get_ctx()
+
         # выбрать активный навык
         if skill_name:
             if not ctx.skill_ctx.set(skill_name):
                 return ValidationReport(False, [Issue("error", "skill.context.missing", f"skill '{skill_name}' not found")])
+
         current = ctx.skill_ctx.get()
         if current is None or getattr(current, "path", None) is None:
             return ValidationReport(False, [Issue("error", "skill.context.missing", "current skill not set")])
-        from pathlib import Path as _P
 
-        skill_dir = _P(current.path)
+        skill_dir = Path(current.path)
 
-        issues += _dynamic_checks(current.name, skill_dir, install_mode, probe_tools)
+        issues: List[Issue] = []
+        issues += _static_checks(skill_dir, bool(install_mode))
+        # если уже есть фатальные ошибки структуры — не продолжаем
+        if any(i.level == "error" for i in issues):
+            ok = not any(i.level == "error" for i in issues)
+            return ValidationReport(ok, issues)
+
+        issues += _dynamic_checks(current.name, skill_dir, bool(install_mode), bool(probe_tools))
         ok = not any(i.level == "error" for i in issues)
         return ValidationReport(ok, issues)

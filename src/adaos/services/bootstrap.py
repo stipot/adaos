@@ -1,13 +1,17 @@
+# src\adaos\services\bootstrap.py
 from __future__ import annotations
-import asyncio, socket, time, uuid
+import asyncio, socket, time, uuid, os
 from typing import Any, List, Optional, Sequence
-
+from pathlib import Path
 from adaos.services.agent_context import AgentContext, get_ctx
 from adaos.sdk import bus
 from adaos.services.node_config import load_config, set_role as cfg_set_role, NodeConfig
 from adaos.ports.heartbeat import HeartbeatPort
 from adaos.ports.skills_loader import SkillsLoaderPort
 from adaos.ports.subnet_registry import SubnetRegistryPort
+from adaos.adapters.db.sqlite_schema import ensure_schema
+from adaos.adapters.skills.git_repo import GitSkillRepository
+from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 
 
 class BootstrapService:
@@ -23,6 +27,71 @@ class BootstrapService:
 
     def is_ready(self) -> bool:
         return self._ready.is_set()
+
+    def _prepare_environment(self) -> None:
+        """
+        Гарантированная подготовка окружения:
+          - создаёт каталоги (skills, scenarios, state, cache, logs)
+          - инициализирует схему БД (skills/scenarios)
+          - при наличии URL монорепо — клонирует репозитории без установки
+        """
+        ctx = self.ctx
+
+        # каталоги (учитываем, что в paths могут быть callables)
+        def _resolve(x):
+            return x() if callable(x) else x
+
+        skills_root = Path(_resolve(getattr(ctx.paths, "skills_dir", "")))
+        scenarios_root = Path(_resolve(getattr(ctx.paths, "scenarios_dir", "")))
+        state_root = Path(_resolve(getattr(ctx.paths, "state_dir", "")))
+        cache_root = Path(_resolve(getattr(ctx.paths, "cache_dir", "")))
+        logs_root = Path(_resolve(getattr(ctx.paths, "logs_dir", "")))
+
+        for p in (skills_root, scenarios_root, state_root, cache_root, logs_root):
+            if p:
+                p.mkdir(parents=True, exist_ok=True)
+
+        # схема БД (единая функция, не через побочный эффект конкретного реестра)
+        ensure_schema(ctx.sql)
+
+        # в тестах — не трогаем удалённые репозитории/сеть
+        if os.getenv("ADAOS_TESTING") == "1":
+            return
+
+        # монорепо навыков
+        try:
+            if ctx.settings.skills_monorepo_url and not (skills_root / ".git").exists():
+                GitSkillRepository(
+                    paths=ctx.paths,
+                    git=ctx.git,
+                    monorepo_url=getattr(ctx.settings, "skills_monorepo_url", None),
+                    monorepo_branch=getattr(ctx.settings, "skills_monorepo_branch", None),
+                ).ensure()
+        except Exception:
+            # не блокируем бут при сбое ensure; логирование можно добавить позже
+            pass
+
+        # монорепо сценариев (поддержим оба возможных конструктора)
+        try:
+            if ctx.settings.scenarios_monorepo_url and not (scenarios_root / ".git").exists():
+                try:
+                    # вариант с именами url/branch
+                    GitScenarioRepository(
+                        paths=ctx.paths,
+                        git=ctx.git,
+                        url=getattr(ctx.settings, "scenarios_monorepo_url", None),
+                        branch=getattr(ctx.settings, "scenarios_monorepo_branch", None),
+                    ).ensure()
+                except TypeError:
+                    # вариант с именами monorepo_url/monorepo_branch
+                    GitScenarioRepository(
+                        paths=ctx.paths,
+                        git=ctx.git,
+                        monorepo_url=getattr(ctx.settings, "scenarios_monorepo_url", None),
+                        monorepo_branch=getattr(ctx.settings, "scenarios_monorepo_branch", None),
+                    ).ensure()
+        except Exception:
+            pass
 
     async def _member_register_and_heartbeat(self, conf: NodeConfig) -> Optional[asyncio.Task]:
         ok = await self.heartbeat.register(conf.hub_url or "", conf.token or "", node_id=conf.node_id, subnet_id=conf.subnet_id, hostname=socket.gethostname(), roles=["member"])
@@ -53,6 +122,7 @@ class BootstrapService:
             return
         self._app = app
         conf = load_config(ctx=self.ctx)
+        self._prepare_environment()
         await bus.emit("sys.boot.start", {"role": conf.role, "node_id": conf.node_id, "subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
         # paths.skills_dir может быть функцией; нормализуем до Path/str
         skills_dir_attr = getattr(self.ctx.paths, "skills_dir", None)

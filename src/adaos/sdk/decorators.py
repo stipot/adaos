@@ -1,34 +1,35 @@
-# src\adaos\sdk\decorators.py
-from typing import Callable, List, Tuple, Dict
+from __future__ import annotations
+from typing import Callable, Dict, List, Tuple, Optional
 import inspect
 from adaos.sdk.bus import on
 
-# Глобальный реестр подписок, наполняется при импорте модулей навыков
-_SUBSCRIPTIONS: List[Tuple[str, Callable]] = []
-_REGISTERED: bool = False
-# глобальный реестр инструментов: {module_name: {public_name: callable}}
-_TOOLS: Dict[str, Dict[str, Callable]] = {}
+# публичные реестры (стабильные имена)
+subscriptions: List[Tuple[str, Callable]] = []
+tools_registry: Dict[str, Dict[str, Callable]] = {}
+tools_meta: Dict[str, dict] = {}  # по qualname функции
+event_payloads: Dict[str, dict] = {}  # topic -> schema
+emits_map: Dict[str, set[str]] = {}  # qualname -> {topics}
+_registered: bool = False  # внутренняя защита от двойной регистрации
+_SUBSCRIPTIONS = subscriptions
+_TOOLS = tools_registry
 
 
 def subscribe(topic: str):
-    """Регистрирует обработчик в реестре; фактическая подписка выполняется в register_subscriptions()."""
+    """Регистрирует обработчик; фактическая подписка делает register_subscriptions()."""
 
     def deco(fn: Callable):
-        _SUBSCRIPTIONS.append((topic, fn))
+        subscriptions.append((topic, fn))
         return fn
 
     return deco
 
 
 async def register_subscriptions():
-    """
-    Выполнить фактическую подписку всех зарегистрированных обработчиков.
-    Вызывайте один раз на старте процесса, когда event loop уже запущен.
-    """
-    global _REGISTERED
-    if _REGISTERED:
+    """Фактическая подписка всех зарегистрированных обработчиков (однократно)."""
+    global _registered
+    if _registered:
         return
-    for topic, fn in _SUBSCRIPTIONS:
+    for topic, fn in subscriptions:
         if inspect.iscoroutinefunction(fn):
 
             async def _wrap(evt, _fn=fn):
@@ -40,29 +41,59 @@ async def register_subscriptions():
                 _fn(evt)
 
         await on(topic, _wrap)
-    _REGISTERED = True
+    _registered = True
 
 
-def tool(public_name: str | None = None):
-    """
-    Маркер инструмента с публичным именем.
-    'public_name' — то имя, по которому инструмент будет вызываться извне (через ОС).
-    Если не задано — берём fn.__name__.
-    """
+def tool(
+    public_name: Optional[str] = None,
+    *,
+    summary: str = "",
+    stability: str = "experimental",
+    idempotent: Optional[bool] = None,
+    side_effects: Optional[str] = None,
+    examples: Optional[list[str]] = None,
+    since: Optional[str] = None,
+    version: Optional[str] = None,
+):
+    """Маркер инструмента с публичным именем и метаданными."""
 
     def deco(fn: Callable):
         name = public_name or fn.__name__
-        setattr(fn, "__adaos_tool__", True)
-        setattr(fn, "__adaos_tool_name__", name)
-        # сохраним в глобальный реестр
         mod = fn.__module__
-        _TOOLS.setdefault(mod, {})[name] = fn
+        tools_registry.setdefault(mod, {})[name] = fn
+        qn = f"{mod}.{fn.__name__}"
+        tools_meta[qn] = {
+            "public_name": name,
+            "summary": summary,
+            "stability": stability,
+            "idempotent": idempotent,
+            "side_effects": side_effects,
+            "examples": (examples or []),
+            "since": since,
+            "version": version,
+        }
         return fn
 
     return deco
 
 
+def event_payload(topic: str, schema: dict):
+    """Опишите форму payload для события (для экспорта)."""
+    event_payloads[topic] = schema
+    return lambda fn: fn
+
+
+def emits(*topics: str):
+    """Пометьте функцию как публикующую события (для карты событий)."""
+
+    def _wrap(fn: Callable):
+        qn = f"{fn.__module__}.{fn.__name__}"
+        emits_map.setdefault(qn, set()).update(topics)
+        return fn
+
+    return _wrap
+
+
 def resolve_tool(module_name: str, public_name: str) -> Callable | None:
     """Вернуть callable по публичному имени инструмента из модуля."""
-    mod_tools = _TOOLS.get(module_name) or {}
-    return mod_tools.get(public_name)
+    return (tools_registry.get(module_name) or {}).get(public_name)

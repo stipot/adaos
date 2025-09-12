@@ -1,0 +1,7 @@
+{"k":"tool","n":"skills.create","sig":"(name:str,template:str=\"demo_skill\",register:bool=true,push:bool=true)->str","s":"create skill from template","ex":["skills.create('demo_skill')"],"st":"stable"}
+{"k":"tool","n":"skills.install","sig":"(name:str)->str","s":"install skill into runtime","ex":[],"st":"stable"}
+{"k":"tool","n":"skills.uninstall","sig":"(name:str)->str","s":"uninstall skill from runtime","ex":[],"st":"stable"}
+{"k":"tool","n":"skills.pull","sig":"(name:str)->str","s":"pull skill sources","ex":[],"st":"experimental"}
+{"k":"tool","n":"skills.push","sig":"(name:str,message:str,signoff:bool=false)->str","s":"push local changes of a skill","ex":[],"st":"experimental"}
+{"k":"tool","n":"skills.list_installed","sig":"()->List[str]","s":"list installed skills","ex":[],"st":"stable"}
+{"k":"tool","n":"skills.install_all","sig":"(limit:Optional[int]=null)->List[str]","s":"best-effort bulk install","ex":[],"st":"experimental"}

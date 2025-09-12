@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src\adaos\adapters\db\sqlite.py
 """
 Лёгкий слой совместимости со старым API:
 add_or_update_entity, update_skill_version, list_entities, set_installed_flag.

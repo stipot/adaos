@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional, TYPE_CHECKING
+import sys, subprocess, os
 
 from adaos.services.settings import Settings
 from adaos.ports import EventBus, Process, Capabilities, Devices, KV, SQL, Secrets, Net, Updates, GitClient
@@ -124,3 +125,47 @@ class AgentContext:
             svc = I18nService(self)
             object.__setattr__(self, "_i18n", svc)
         return svc
+
+
+_MIN_PY = tuple(int(x) for x in os.getenv("ADAOS_MIN_PY", "3.11").split("."))  # по умолчанию 3.11
+
+
+def _list_pythons_windows() -> str:
+    """Возвращает список установленных Python в Windows (через py -0p и where)."""
+    lines = []
+    try:
+        out = subprocess.check_output(["py", "-0p"], text=True, stderr=subprocess.STDOUT)
+        lines.append("py -0p:\n" + out.strip())
+    except Exception as e:
+        lines.append(f"py -0p: (не удалось вызвать) {e}")
+    try:
+        out = subprocess.check_output(["where", "python"], text=True, stderr=subprocess.STDOUT)
+        lines.append("where python:\n" + out.strip())
+    except Exception as e:
+        lines.append(f"where python: (не удалось вызвать) {e}")
+    return "\n".join(lines)
+
+
+def pytest_sessionstart(session):
+    if sys.version_info < _MIN_PY:
+        msg = [
+            f"AdaOS tests require Python >= {'.'.join(map(str,_MIN_PY))}.",
+            f"Current interpreter: {sys.executable} (Python {sys.version.split()[0]}).",
+        ]
+        if os.name == "nt":
+            msg += [
+                "",
+                "Detected Python installations:",
+                _list_pythons_windows(),
+                "",
+                "You can re-run tests using a different interpreter:",
+                "  - Temporarily: set ADAOS_TEST_PY=3.11-64   (py launcher spec) ",
+                "                 or ADAOS_TEST_PY=C:\\Path\\to\\Python311\\python.exe",
+                "  - Or run:     adaos tests run --python 3.11-64",
+            ]
+        else:
+            msg += ["", "Tip: create/use a venv with a newer Python and re-run tests."]
+        # внятный exit вместо cryptic tracebacks
+        from _pytest.outcomes import Exit
+
+        raise Exit("\n".join(msg), returncode=2)

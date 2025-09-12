@@ -6,6 +6,7 @@ from adaos.services.agent_context import get_ctx
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
+from adaos.sdk.decorators import tool
 
 # делегат в scaffold для create()
 from adaos.services.skill.scaffold import create as _scaffold_create
@@ -29,33 +30,40 @@ def _mgr() -> SkillManager:
 # ---------- high-level SDK API ----------
 
 
+@tool("skills.create", summary="create skill from template", stability="stable", examples=["skills.create('demo_skill')"])
 def create(name: str, template: str = "demo_skill", *, register: bool = True, push: bool = True) -> str:
     """Создать навык из шаблона (вся логика resolve — внутри services.skill.scaffold)."""
     p = _scaffold_create(name, template=template, register=register, push=push)
     return str(p)
 
 
+@tool("skills.install", summary="install skill into runtime", stability="stable")
 def install(name: str) -> str:
     return _mgr().install(name)
 
 
+@tool("skills.uninstall", summary="uninstall skill from runtime", stability="stable")
 def uninstall(name: str) -> str:
     return _mgr().uninstall(name)
 
 
+@tool("skills.pull", summary="pull skill sources", stability="experimental")
 def pull(name: str) -> str:
     return _mgr().pull(name)
 
 
+@tool("skills.push", summary="push local changes of a skill", stability="experimental")
 def push(name: str, message: str, signoff: bool = False) -> str:
     return _mgr().push(name, message, signoff=signoff)
 
 
+@tool("skills.list_installed", summary="list installed skills", stability="stable")
 def list_installed() -> List[str]:
     m = _mgr()
     return [r.name for r in m.list_installed() if getattr(r, "installed", True)]
 
 
+@tool("skills.install_all", summary="best-effort bulk install", stability="experimental")
 def install_all(limit: Optional[int] = None) -> List[str]:
     """Лучшее усилие: ставим все доступные (или первую страницу), полезно для тестов/демо."""
     m = _mgr()

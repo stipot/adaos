@@ -68,10 +68,6 @@ Generate a minimal but fully functional skill compatible with the AdaOS SDK.
 
 * **Persistent skill settings:** use
 
-  ```python
-  from adaos.sdk.skill_env import get_env, set_env
-  ```
-
   * At the first launch, if settings are missing, the skill must read them from `prep_result.json` and write them into `.skill_env.json` using `set_env()`.
 
 * **Temporary skill data:** use
@@ -151,7 +147,6 @@ The skill must consist of **two files only**, formatted exactly as shown below:
 3. Must use the AdaOS SDK for:
 
    * i18n: `from adaos.i18n.translator import _`
-   * persistent settings: `adaos.sdk.skill_env`
    * temporary data: `adaos.sdk.skill_memory`
    * output abstraction: `adaos.sdk.output`
 

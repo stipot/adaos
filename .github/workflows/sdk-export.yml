@@ -1,0 +1,19 @@
+# .github/workflows/sdk-export.yml
+name: SDK Export
+on:
+  push:
+  pull_request:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install . pyyaml
+      - name: Generate manifests
+        run: |
+          adaos sdk export-all
+      - name: Check drift (std.json)
+        run: |
+          adaos sdk check --ref sdk/descriptions/std.json --level std

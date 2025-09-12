@@ -16,8 +16,6 @@ router = APIRouter(tags=["subnet"])
 
 
 # ---------- Models ----------
-
-
 class RegisterRequest(BaseModel):
     node_id: str
     subnet_id: str
