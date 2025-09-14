@@ -11,9 +11,19 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install . pyyaml
-      - name: Generate manifests
+      - name: Generate SDK manifest (std)
+        run: adaos sdk export --level std --out /tmp/std.gen.json
+
+      - name: Show diff vs reference
         run: |
-          adaos sdk export-all
-      - name: Check drift (std.json)
-        run: |
-          adaos sdk check --ref sdk/descriptions/std.json --level std
+          set +e
+          diff -u sdk/descriptions/std.json /tmp/std.gen.json || true
+
+      - name: Upload generated manifest (for review)
+        uses: actions/upload-artifact@v4
+        with:
+          name: std.gen.json
+          path: /tmp/std.gen.json
+
+      - name: Check drift (fails on mismatch)
+        run: adaos sdk check --ref sdk/descriptions/std.json --level std
