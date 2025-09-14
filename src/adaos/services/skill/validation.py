@@ -189,7 +189,7 @@ class SkillValidationService:
 
         # выбрать активный навык
         if skill_name:
-            if not ctx.skill_ctx.set(skill_name):
+            if not ctx.skill_ctx.set(skill_name, ctx.paths.skills_dir() / skill_name):
                 return ValidationReport(False, [Issue("error", "skill.context.missing", f"skill '{skill_name}' not found")])
 
         current = ctx.skill_ctx.get()
