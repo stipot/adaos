@@ -14,7 +14,6 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
-    - toc.integrate
     - navigation.top
     - toc.integrate
     - search.suggest
@@ -61,17 +60,15 @@ plugins:
         - locale: en
           name: English
           nav_translations:
+            "Главная": "Home"
             "Быстрый старт": "Quickstart"
             "Архитектура": "Architecture"
-            "Руководства": "Guides"
-            "Справочник": "Reference"
-            "Интеграции": "Integrations"
-            "Безопасность": "Security"
-            "Мониторинг": "Monitoring"
-            "ОС-интерфейсы": "OS Interfaces"
+            "CLI": "CLI"
+            "SDK": "SDK"
+            "Навыки": "Skills"
+            "Сценарии": "Scenarios"
+            "DevPortal": "DevPortal"
             "Дорожная карта": "Roadmap"
-            "Глоссарий": "Glossary"
-            "FAQ": "FAQ"
   - git-revision-date-localized:
       enable_creation_date: true
       enable_git_follow: false
@@ -80,6 +77,13 @@ plugins:
 
 watch:
   - src/adaos
+
+extra_css:
+  - assets/graphviz-fix.css
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/gh/rod2ik/cdn@main/mkdocs/javascripts/mkdocs-graphviz.js
+
 markdown_extensions:
   - admonition
   - footnotes
@@ -88,13 +92,8 @@ markdown_extensions:
   - def_list
   - pymdownx.details
   - pymdownx.mark
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
+  - mkdocs_graphviz # ← СТАВИМ РАНО, до подсветки и superfences
   - pymdownx.inlinehilite
-  - pymdownx.snippets
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.emoji:
@@ -102,23 +101,27 @@ markdown_extensions:
       emoji_generator: !!python/name:materialx.emoji.to_svg
   - pymdownx.arithmatex:
       generic: true
+  - pymdownx.superfences
 
 nav:
   - "Главная": index.md
   - "Быстрый старт": quickstart.md
   - "Архитектура":
-      - "Обзор": architecture/overview.md
-  - "Руководства":
-      - "Навыки": guides/skills.md
-      - "Сценарии": guides/scenarios.md
-      - "Тестирование": guides/testing.md
-  - "Справочник":
-      - "CLI": reference/cli.md
-      - "Python API": reference/python.md
-  - "Интеграции":
-      - "Inimatic": integrations/inimatic.md
-  - "Мониторинг":
-      - "Наблюдаемость": monitoring/observability.md
+      - "Обзор": architecture/index.md
+      - "Слои": architecture/layers.md
+      - "AgentContext": architecture/context.md
+      - "Безопасность": architecture/security.md
+  - "CLI":
+      - "Обзор": cli/index.md
+  - "SDK":
+      - "Обзор": sdk/index.md
+      - "Bus": sdk/bus.md
+      - "Decorators": sdk/decorators.md
+      - "Context": sdk/context.md
+      - "Adapters": sdk/adapters.md
+  - "Навыки": skills.md
+  - "Сценарии": scenarios.md
+  - "DevPortal": devportal.md
   - "Дорожная карта": roadmap.md
 
 copyright: |

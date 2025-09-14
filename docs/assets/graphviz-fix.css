@@ -1,0 +1,20 @@
+.graphviz svg .edge path,
+.graphviz svg .edge polygon,
+.graphviz svg .node polygon,
+.graphviz svg .node rect,
+.graphviz svg .node ellipse,
+.graphviz svg .cluster rect,
+.graphviz svg polyline {
+    stroke: var(--md-default-fg-color) !important;
+}
+
+.graphviz svg .node polygon,
+.graphviz svg .node rect,
+.graphviz svg .node ellipse,
+.graphviz svg .cluster rect {
+    fill: transparent !important;
+}
+
+.graphviz svg {
+    shape-rendering: geometricPrecision;
+}
