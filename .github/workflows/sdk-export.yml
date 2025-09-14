@@ -4,26 +4,44 @@ on:
   push:
   pull_request:
 jobs:
-  export:
-    runs-on: ubuntu-latest
+  sdk-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11"] # можно расширить матрицу позже
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install . pyyaml
-      - name: Generate SDK manifest (std)
-        run: adaos sdk export --level std --out /tmp/std.gen.json
 
-      - name: Show diff vs reference
-        run: |
-          set +e
-          diff -u sdk/descriptions/std.json /tmp/std.gen.json || true
-
-      - name: Upload generated manifest (for review)
-        uses: actions/upload-artifact@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          name: std.gen.json
-          path: /tmp/std.gen.json
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
 
-      - name: Check drift (fails on mismatch)
-        run: adaos sdk check --ref sdk/descriptions/std.json --level std
+      - name: Show Python
+        shell: bash
+        run: |
+          python --version
+          which python || where python
+
+      - name: Install deps
+        run: pip install -e ".[dev]" # ваш способ установки
+
+      - name: Run SDK tests (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          ADAOS_TESTING: 1
+          MONOREPO_URL: https://github.com/stipot/adaoskills.git
+        run: |
+          adaos tests run --only-sdk -- --junitxml=reports/sdk-junit.xml -q
+
+      - name: Run SDK tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ADAOS_TESTING: 1
+          MONOREPO_URL: https://github.com/stipot/adaoskills.git
+        run: |
+          adaos tests run --only-sdk -- --junitxml=reports/sdk-junit.xml -q
