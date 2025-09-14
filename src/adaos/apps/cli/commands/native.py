@@ -2,6 +2,7 @@
 import typer, sys, os
 from typing import Optional
 from pathlib import Path
+from adaos.apps.cli.i18n import _
 
 from adaos.adapters.audio.tts.native_tts import NativeTTS
 

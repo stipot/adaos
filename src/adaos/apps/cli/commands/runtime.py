@@ -4,8 +4,9 @@ import typer
 from rich import print
 from pathlib import Path
 import sys
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.domain import ProcessSpec
+from adaos.apps.cli.i18n import _
 
 app = typer.Typer()
 

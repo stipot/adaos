@@ -17,6 +17,9 @@ bash tools/bootstrap.sh
 ./tools/bootstrap.ps1
 . .\.venv\Scripts\Activate.ps1
 
+# install dev core (optional)
+pip install -e ".[dev]"
+
 # запустить API и Web:
 make dev        # или: just dev / npm run dev
 # API: http://127.0.0.1:8777

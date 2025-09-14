@@ -1,0 +1,18 @@
+{"k":"tool","n":"scenarios.create","sig":"(sid:str,template:str=\"template\")->str","s":"create scenario from template","ex":[],"st":"experimental"}
+{"k":"tool","n":"scenarios.install","sig":"(sid:str)->str","s":"install (pull) scenario into runtime","ex":[],"st":"stable"}
+{"k":"tool","n":"scenarios.uninstall","sig":"(sid:str)->str","s":"uninstall scenario from runtime","ex":[],"st":"stable"}
+{"k":"tool","n":"scenarios.pull","sig":"(sid:str)->str","s":"pull/update scenario sources","ex":[],"st":"stable"}
+{"k":"tool","n":"scenarios.push","sig":"(sid:str,message:Optional[str]=null,signoff:bool=false)->str","s":"commit & push scenario changes","ex":[],"st":"experimental"}
+{"k":"tool","n":"scenarios.list_installed","sig":"()->List[str]","s":"list installed scenarios","ex":[],"st":"stable"}
+{"k":"tool","n":"scenarios.delete","sig":"(sid:str)->bool","s":"delete scenario locally","ex":[],"st":"experimental"}
+{"k":"tool","n":"scenarios.read_proto","sig":"(sid:str)->Dict[str, Any]","s":"read scenario prototype JSON","ex":[],"st":"experimental"}
+{"k":"tool","n":"scenarios.write_proto","sig":"(sid:str,data:Dict[str, Any])->str","s":"write scenario prototype JSON","ex":[],"st":"experimental"}
+{"k":"tool","n":"scenarios.read_bindings","sig":"(sid:str,user:str)->Dict[str, Any]","s":"read scenario bindings for user","ex":[],"st":"experimental"}
+{"k":"tool","n":"scenarios.write_bindings","sig":"(sid:str,user:str,data:Dict[str, Any])->str","s":"write scenario bindings for user","ex":[],"st":"experimental"}
+{"k":"tool","n":"skills.create","sig":"(name:str,template:str=\"demo_skill\",register:bool=true,push:bool=true)->str","s":"create skill from template","ex":["skills.create('demo_skill')"],"st":"stable"}
+{"k":"tool","n":"skills.install","sig":"(name:str)->str","s":"install skill into runtime","ex":[],"st":"stable"}
+{"k":"tool","n":"skills.uninstall","sig":"(name:str)->str","s":"uninstall skill from runtime","ex":[],"st":"stable"}
+{"k":"tool","n":"skills.pull","sig":"(name:str)->str","s":"pull skill sources","ex":[],"st":"experimental"}
+{"k":"tool","n":"skills.push","sig":"(name:str,message:str,signoff:bool=false)->str","s":"push local changes of a skill","ex":[],"st":"experimental"}
+{"k":"tool","n":"skills.list_installed","sig":"()->List[str]","s":"list installed skills","ex":[],"st":"stable"}
+{"k":"tool","n":"skills.install_all","sig":"(limit:Optional[int]=null)->List[str]","s":"best-effort bulk install","ex":[],"st":"experimental"}

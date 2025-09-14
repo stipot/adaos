@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import typer
 from typing import Optional
+from adaos.apps.cli.i18n import _
 
 from adaos.integrations.rhasspy.runner import (
     start_rhasspy,

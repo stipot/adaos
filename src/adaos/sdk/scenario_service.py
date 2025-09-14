@@ -1,75 +1,83 @@
+# src/adaos/sdk/scenario_service.py
 from __future__ import annotations
-from typing import Optional
-from adaos.apps.bootstrap import get_ctx
-from adaos.adapters.db import SqliteScenarioRegistry
-from adaos.adapters.scenarios.mono_repo import MonoScenarioRepository
-from adaos.services.scenario.manager import ScenarioManager
+import warnings
+from typing import Any, Dict, List, Optional
+
+# проксируем в новый фасад
+from adaos.sdk.scenarios import (
+    create,
+    install,
+    uninstall,
+    pull,
+    push,
+    list_installed,
+    delete,
+    read_proto,
+    write_proto,
+    read_bindings,
+    write_bindings,
+)
+
+__all__ = [
+    "create_scenario",
+    "install_scenario",
+    "uninstall_scenario",
+    "pull_scenario",
+    "push_scenario",
+    "list_installed_scenarios",
+    "delete_scenario",
+    "read_prototype",
+    "write_prototype",
+    "read_bindings",
+    "write_bindings",
+]
 
 
-def _mgr() -> ScenarioManager:
-    ctx = get_ctx()
-    repo = MonoScenarioRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.scenarios_monorepo_url, branch=ctx.settings.scenarios_monorepo_branch)
-    reg = SqliteScenarioRegistry(ctx.sql)
-    return ScenarioManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=ctx.bus, caps=ctx.caps, settings=ctx.settings)
+def _dep(old: str, new: str):
+    warnings.warn(f"adaos.sdk.{old} is deprecated; use adaos.sdk.scenarios.{new}", DeprecationWarning, stacklevel=2)
 
 
-def list_installed():
-    return [r.name for r in _mgr().list_installed()]
-
-
-def install_scenario(sid: str) -> str:
-    meta = _mgr().install(sid)
-    return f"Installed scenario: {meta.id.value} v{meta.version} @ {meta.path}"
-
-
-def uninstall_scenario(sid: str) -> str:
-    _mgr().remove(sid)
-    return f"Uninstalled scenario: {sid}"
-
-
-# совместимые алиасы
-def pull_scenario(sid: str) -> str:
-    return install_scenario(sid)
-
-
-def update_from_repo(sid: str, ref: Optional[str] = None) -> str:
-    return f"Update scenario: deferred (PR-later)."
-
-
-def install_from_repo(repo_url: str, sid: Optional[str], ref: Optional[str], subpath: Optional[str]) -> str:
-    return "Install from arbitrary repo is disabled in MVP (security)."
-
-
-# файловые операции (prototype/impl/bindings) оставим как были, если они у тебя реализованы,
-# либо временно заглушим:
 def create_scenario(sid: str, template: str = "template"):
-    raise NotImplementedError("Scenario templates are deferred.")
+    _dep("create_scenario", "create")
+    return create(sid, template)
 
 
-def read_prototype(sid: str):
-    raise NotImplementedError("Deferred.")
+def install_scenario(sid: str):
+    _dep("install_scenario", "install")
+    return install(sid)
 
 
-def write_prototype(sid: str, data):
-    raise NotImplementedError("Deferred.")
+def uninstall_scenario(sid: str):
+    _dep("uninstall_scenario", "uninstall")
+    return uninstall(sid)
 
 
-def read_impl(sid: str, user: str):
-    raise NotImplementedError("Deferred.")
-
-
-def write_impl(sid: str, user: str, data):
-    raise NotImplementedError("Deferred.")
-
-
-def read_bindings(sid: str, user: str):
-    raise NotImplementedError("Deferred.")
-
-
-def write_bindings(sid: str, user: str, data):
-    raise NotImplementedError("Deferred.")
+def pull_scenario(sid: str):
+    _dep("pull_scenario", "pull")
+    return pull(sid)
 
 
 def push_scenario(sid: str, message: Optional[str] = None):
-    msg = message or f"scenario: update {sid}"
-    return _mgr().push(sid, msg, signoff=False)
+    _dep("push_scenario", "push")
+    return push(sid, message=message)
+
+
+def list_installed_scenarios() -> List[str]:
+    _dep("list_installed_scenarios", "list_installed")
+    return list_installed()
+
+
+def delete_scenario(sid: str) -> bool:
+    _dep("delete_scenario", "delete")
+    return delete(sid)
+
+
+# алиасы имён под старый интерфейс
+def read_prototype(sid: str) -> Dict[str, Any]:
+    _dep("read_prototype", "read_proto")
+    return read_proto(sid)
+
+
+def write_prototype(sid: str, data: Dict[str, Any]) -> str:
+    _dep("write_prototype", "write_proto")
+    return write_proto(sid, data)

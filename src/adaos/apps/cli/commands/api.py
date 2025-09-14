@@ -1,6 +1,8 @@
+# src\adaos\apps\cli\commands\api.py
 import typer
 import uvicorn
 import os
+from adaos.apps.cli.i18n import _
 
 app = typer.Typer(help="HTTP API для AdaOS")
 
@@ -16,7 +18,7 @@ def serve(
     if token:
         os.environ["ADAOS_TOKEN"] = token
     # точка входа FastAPI
-    uvicorn.run("adaos.api.server:app", host=host, port=port, reload=reload)
+    uvicorn.run("adaos.apps.api.server:app", host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":

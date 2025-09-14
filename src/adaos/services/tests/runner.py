@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
 
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.ports.sandbox import ExecLimits
 
 
@@ -39,7 +39,7 @@ def run_pytest(
                  None — автодетект: True, если target внутри BASE_DIR.
     """
     ctx = get_ctx()
-    base = Path(ctx.paths.base())
+    base = Path(ctx.paths.base)
     # разумный выбор директории по умолчанию:
     if target:
         tpath = Path(target)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import typer, json, sys
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
+from adaos.apps.cli.i18n import _
 
 app = typer.Typer(help="Управление секретами")
 

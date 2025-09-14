@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src\adaos\adapters\db\sqlite.py
 """
 Лёгкий слой совместимости со старым API:
 add_or_update_entity, update_skill_version, list_entities, set_installed_flag.
@@ -8,7 +8,7 @@ add_or_update_entity, update_skill_version, list_entities, set_installed_flag.
 """
 from __future__ import annotations
 from typing import Optional, Iterable, Literal, List, Dict, Any
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 
 Entity = Literal["skills", "scenarios"]
 

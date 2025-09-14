@@ -1,0 +1,47 @@
+# .github/workflows/sdk-export.yml
+name: SDK Export
+on:
+  push:
+  pull_request:
+jobs:
+  sdk-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11"] # можно расширить матрицу позже
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Show Python
+        shell: bash
+        run: |
+          python --version
+          which python || where python
+
+      - name: Install deps
+        run: pip install -e ".[dev]" # ваш способ установки
+
+      - name: Run SDK tests (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          ADAOS_TESTING: 1
+          MONOREPO_URL: https://github.com/stipot/adaoskills.git
+        run: |
+          adaos tests run --only-sdk -- --junitxml=reports/sdk-junit.xml -q
+
+      - name: Run SDK tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ADAOS_TESTING: 1
+          MONOREPO_URL: https://github.com/stipot/adaoskills.git
+        run: |
+          adaos tests run --only-sdk -- --junitxml=reports/sdk-junit.xml -q

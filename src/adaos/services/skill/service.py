@@ -1,3 +1,4 @@
+# \src\adaos\services\skill\service.py
 from __future__ import annotations
 from typing import Optional
 from adaos.domain import SkillMeta
@@ -14,9 +15,8 @@ class SkillService:
     def list(self) -> list[SkillMeta]:
         return self.repo.list()
 
-    def install(self, url: str, *, branch: Optional[str] = None, dest_name: Optional[str] = None) -> SkillMeta:
-        print("1_log", url, branch, dest_name)
-        meta = self.repo.install(url, branch=branch, dest_name=dest_name)
+    def install(self, name: str, *, branch: Optional[str] = None, dest_name: Optional[str] = None) -> SkillMeta:
+        meta = self.repo.install(name, branch=branch, dest_name=dest_name)
         emit(self.bus, "skill.installed", {"id": meta.id.value, "version": meta.version, "path": meta.path}, "skill.svc")
         return meta
 

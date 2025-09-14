@@ -1,11 +1,14 @@
 # src/adaos/apps/cli/commands/tests.py
 from __future__ import annotations
-import os
+import os, sys
 from pathlib import Path
 from typing import List, Optional
 import typer
+import subprocess
+import inspect
+from adaos.apps.cli.i18n import _
 from adaos.services.sandbox.bootstrap import ensure_dev_venv
-from adaos.apps.bootstrap import get_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.ports.sandbox import ExecLimits
 from adaos.sdk.skills import (
     push as push_skill,
@@ -79,12 +82,7 @@ def _drive_key(path_str: str) -> str:
 
 
 def _run_one_group(
-    ctx=None,  # ← опционально: AgentContext
-    *,
-    base_dir: Path,
-    venv_python: str,
-    paths: list[str],
-    addopts: str = "",
+    ctx=None, *, base_dir: Path, venv_python: str, paths: list[str], addopts: str = "", py_exec: str, py_prefix: list[str], use_sandbox: bool  # ← опционально: AgentContext
 ) -> tuple[int, str, str]:
     """
     Запускает pytest внутри песочницы.
@@ -118,8 +116,8 @@ def _run_one_group(
 
     if addopts:
         extra_env["PYTEST_ADDOPTS"] = addopts
-
-    return _sandbox_run([venv_python, "-m", "pytest", *pytest_args], cwd=base_dir, extra_env=extra_env)
+    cmd = [(venv_python or py_exec), *([] if venv_python else py_prefix), "-m", "pytest", *pytest_args]
+    return _sandbox_run(cmd, cwd=base_dir, extra_env=extra_env, use_sandbox=use_sandbox)
 
 
 def _mk_sandbox(base_dir: Path, profile: str = "tool"):
@@ -190,19 +188,33 @@ def _mk_sandbox(base_dir: Path, profile: str = "tool"):
     return sb  # как есть (но это вряд ли)
 
 
-def _sandbox_run(cmd: list[str], *, cwd: Path, profile: str = "tool", extra_env: dict | None = None):
+def _run_direct(cmd: list[str], *, cwd: Path, extra_env: dict | None = None):
+    env = dict(os.environ)
+    if extra_env:
+        env.update({k: v for k, v in (extra_env or {}).items() if isinstance(k, str) and isinstance(v, str)})
+    p = subprocess.run(cmd, cwd=str(cwd), env=env, text=True, capture_output=True)
+    return p.returncode, p.stdout, p.stderr
+
+
+def _sandbox_run(cmd: list[str], *, cwd: Path, profile: str = "tool", extra_env: dict | None = None, use_sandbox: bool = True):
     """
     Универсальный запуск внутри песочницы:
     - авто-определяет сигнатуру ProcSandbox.run(...) и прокидывает только поддерживаемые kwargs
     - если inherit_env не поддерживается, сам мерджит окружение
     - нормализует результат к (exit_code, stdout, stderr)
     """
-    import os
-    import inspect
+    if not use_sandbox or os.getenv("ADAOS_SANDBOX_DISABLED") == "1":
+        return _run_direct(cmd, cwd=cwd, extra_env=extra_env)
+    extra_env = dict(extra_env or {})
+    # По возможности просигнализируем раннеру о «лёгком» профиле
+    extra_env.setdefault("ADAOS_SANDBOX_PROFILE", "tests")
+    extra_env.setdefault("ADAOS_SANDBOX_FS_SIZE_MB", "32")  # если раннер поддерживает
+    extra_env.setdefault("ADAOS_SANDBOX_TMP_SIZE_MB", "32")
+    extra_env.setdefault("PYTHONUNBUFFERED", "1")
+
     from adaos.services.sandbox.runner import ProcSandbox
 
     sb = _mk_sandbox(cwd, profile=profile)
-
     # пытаемся импортировать ExecLimits, но делаем это опционально
     ExecLimits = None
     try:
@@ -252,6 +264,50 @@ def _sandbox_run(cmd: list[str], *, cwd: Path, profile: str = "tool", extra_env:
     return code, (out or ""), (err or "")
 
 
+import shutil, re
+
+
+def _pick_python(spec: Optional[str]) -> tuple[str, list[str]]:
+    """
+    Возвращает ("python-exe", launcher_prefix_args).
+    Если spec — путь к exe -> (path, []).
+    Если spec — '3.11-64' -> ("py", ["-3.11-64"]).
+    Если spec пуст -> авто-подбор через py -0p (Windows) или просто "python".
+    """
+    # явный путь
+    if spec and Path(spec).exists():
+        return str(Path(spec)), []
+    # явный spec для py
+    if spec and re.match(r"^\d+(\.\d+)?(-\d+)?$", spec):
+        return "py", [f"-{spec}"]
+
+    # авто-подбор
+    if os.name == "nt":
+        try:
+            out = subprocess.check_output(["py", "-0p"], text=True, stderr=subprocess.STDOUT)
+            # формат строк вида:  -3.12-64 * C:\...\python.exe
+            min_major, min_minor = map(int, os.getenv("ADAOS_MIN_PY", "3.11").split("."))
+            candidates = []
+            for line in out.splitlines():
+                m = re.search(r"-?(\d+)\.(\d+)(?:-\d+)?\s+\*\s+(.+python\.exe)", line, re.IGNORECASE)
+                if m:
+                    major, minor = int(m.group(1)), int(m.group(2))
+                    path = m.group(3).strip()
+                    if (major, minor) >= (min_major, min_minor):
+                        candidates.append(((major, minor), path))
+            if candidates:
+                # берём наивысшую
+                candidates.sort(reverse=True)
+                return candidates[0][1], []
+        except Exception:
+            pass
+        # fallback
+        return shutil.which("python") or "python", []
+    else:
+        # *nix: просто python из PATH
+        return shutil.which("python") or "python", []
+
+
 @app.command("run")
 def run_tests(
     only_sdk: bool = typer.Option(False, help="Run only SDK/API tests (./tests)."),
@@ -261,27 +317,41 @@ def run_tests(
     no_install: bool = typer.Option(False, help="Do not auto-install skills before running tests."),
     no_clone: bool = typer.Option(False, help="Do not clone/init skills monorepo (expect it to exist)."),
     bootstrap: bool = typer.Option(True, help="Bootstrap dev dependencies in sandbox venv once."),
+    sandbox: bool = typer.Option(False, "--sandbox/--no-sandbox", help="Run tests inside ProcSandbox"),
+    python_spec: Optional[str] = typer.Option(None, "--python", help="Python to run tests with. Path to python.exe OR py-launcher spec like '3.11-64'. Overrides --use-current."),
+    use_current: bool = typer.Option(True, "--use-current/--no-use-current", help="Use the same interpreter that's running this CLI (ideal for your current venv)."),
     extra: Optional[List[str]] = typer.Argument(None),
 ):
     # 0) изоляция BASE
     if not use_real_base:
         tmpdir = _ensure_tmp_base_dir()
         typer.secho(f"[AdaOS] Using isolated ADAOS_BASE_DIR at: {tmpdir}", fg=typer.colors.BLUE)
-
+    if not sandbox:
+        os.environ["ADAOS_SANDBOX_DISABLED"] = "1"
+    env_spec = os.getenv("ADAOS_TEST_PY")
+    py_exec, py_prefix = None, []
+    if use_current:
+        # всегда этот интерпретатор (текущий venv)
+        py_exec, py_prefix = sys.executable, []
+    elif python_spec or env_spec:
+        # использовать указанный пользователем
+        py_exec, py_prefix = _pick_python(python_spec or env_spec)
+    else:
+        # авто-подбор (как делали ранее)
+        py_exec, py_prefix = _pick_python(None)
     # ctx уже читает настройки с учётом только что установленного ADAOS_BASE_DIR
     ctx = get_ctx()
     base_dir = Path(os.environ["ADAOS_BASE_DIR"])
     repo_root = Path(".").resolve()
     pytest_paths: List[str] = []
-
     # 1) Подготовка dev venv (однократно), затем используем его python
-    if bootstrap:
+    if bootstrap and sandbox:
         try:
             venv_python = str(
                 ensure_dev_venv(
                     base_dir=base_dir,
                     repo_root=repo_root,
-                    run=lambda c, cwd, env=None: _sandbox_run(c, cwd=cwd, extra_env=env),
+                    run=lambda c, cwd, env=None: _sandbox_run(c, cwd=cwd, extra_env=env, use_sandbox=sandbox),
                     env={"PYTHONUNBUFFERED": "1"},
                 )
             )
@@ -290,11 +360,13 @@ def run_tests(
             typer.secho(f"[AdaOS] Bootstrap failed: {e}", fg=typer.colors.RED)
             raise typer.Exit(code=2)
     else:
-        venv_python = "python"
-        # деликатно проверим наличие pytest
-        code, _, _ = _sandbox_run([venv_python, "-c", "import pytest"], cwd=base_dir)
+        venv_python = None  # важное изменение: используем выбранный py_exec, а не "python" из PATH
+        # probe выбранного интерпретатора:
+        probe = [py_exec, *py_prefix, "-c", "import pytest; print('ok')"]
+        code, out, err = _sandbox_run(probe, cwd=base_dir, use_sandbox=sandbox)
         if code != 0:
-            typer.secho("pytest is not installed. Tip: use --bootstrap or install dev deps: pip install -e .[dev]", fg=typer.colors.RED)
+            typer.secho(f"pytest is not installed for the selected interpreter: {py_exec} {' '.join(py_prefix)}", fg=typer.colors.RED)
+            typer.secho("Tip: use --bootstrap or install dev deps: py -m pip install -e .[dev]", fg=typer.colors.YELLOW)
             raise typer.Exit(code=2)
 
     # 2) Подбор путей
@@ -350,11 +422,18 @@ def run_tests(
     # 5) Прогон по группам (каждую — через venv_python)
     overall_code = 0
     for dk, paths in grouped.items():
+        interp = venv_python or py_exec
+        prefix = [] if venv_python else py_prefix
+
         code, out, err = _run_one_group(
+            ctx=ctx,
             base_dir=base_dir,
-            venv_python=venv_python,
+            venv_python=interp,  # всегда непустой путь/исполняемый
             paths=paths,
             addopts=addopts_str,
+            py_exec=interp,  # дублируем для совместимости сигнатуры
+            py_prefix=prefix,  # [] если venv_python задан, иначе py-prefix для py-launcher
+            use_sandbox=sandbox,
         )
         # трактуем пустую группу как успех
         if code == 5 and "no tests ran" in (out.lower() + err.lower()):

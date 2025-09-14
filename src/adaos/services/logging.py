@@ -4,6 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
+from datetime import datetime, timezone
 
 from adaos.domain import Event
 from adaos.ports.paths import PathProvider
@@ -67,10 +68,12 @@ def attach_event_logger(bus: EventBus, logger: Optional[logging.Logger] = None) 
     base_logger = logger or logging.getLogger("adaos.events")
 
     def _handler(ev: Event) -> None:
+        iso_time = datetime.fromtimestamp(getattr(ev, "ts", 0), tz=timezone.utc).isoformat() if getattr(ev, "ts", None) else None
         base_logger.info(
             "event",
             extra={
                 "extra": {
+                    "time": iso_time,
                     "type": ev.type,
                     "source": ev.source,
                     "ts": ev.ts,

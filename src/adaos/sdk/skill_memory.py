@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
-from adaos.sdk.context import get_current_skill_path
+from adaos.services.agent_context import get_ctx
 
 
 def _memory_path() -> Path:
-    return get_current_skill_path() / ".skill_memory.json"
+    return get_ctx().skill_ctx.get().path / ".skill_memory.json"
 
 
 def get(key: str, default=None):

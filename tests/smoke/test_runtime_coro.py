@@ -1,7 +1,7 @@
 # tests/smoke/test_runtime_coro.py
 import asyncio
 import pytest
-from adaos.apps.bootstrap import init_ctx
+from adaos.services.agent_context import get_ctx
 from adaos.domain import ProcessSpec
 
 
@@ -12,7 +12,7 @@ async def _demo_task():
 @pytest.mark.asyncio
 async def test_coro_start_stop(tmp_path, monkeypatch):
     monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path / "base"))
-    ctx = init_ctx()
+    ctx = get_ctx()
     h = await ctx.proc.start(ProcessSpec(name="demo-coro", entrypoint=_demo_task))
     st = await ctx.proc.status(h)
     assert st in ("starting", "running")  # мгновенный старт может быть ещё starting

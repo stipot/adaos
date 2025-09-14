@@ -8,8 +8,8 @@ import shlex
 from typing import List
 
 import typer
-
-from adaos.apps.bootstrap import get_ctx
+from adaos.apps.cli.i18n import _
+from adaos.services.agent_context import get_ctx
 from adaos.ports.sandbox import ExecLimits
 
 app = typer.Typer(help="Песочница процессов (диагностика)")

@@ -5,11 +5,11 @@ import json
 from typing import Optional
 import os, traceback
 from pathlib import Path
-
-from adaos.apps.bootstrap import get_ctx
-from adaos.adapters.skills.mono_repo import MonoSkillRepository
+from adaos.apps.cli.i18n import _
+from adaos.services.agent_context import get_ctx
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.db import SqliteSkillRegistry
+from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.sdk.skills import (
     push as push_skill,
     pull as pull_skill,
@@ -37,7 +37,7 @@ def _run_safe(func):
 
 def _mgr() -> SkillManager:
     ctx = get_ctx()
-    repo = MonoSkillRepository(paths=ctx.paths, git=ctx.git, url=ctx.settings.skills_monorepo_url, branch=ctx.settings.skills_monorepo_branch)
+    repo = ctx.skills_repo
     reg = SqliteSkillRegistry(ctx.sql)
     return SkillManager(repo=repo, registry=reg, git=ctx.git, paths=ctx.paths, bus=getattr(ctx, "bus", None), caps=ctx.caps)
 
@@ -86,6 +86,7 @@ def list_cmd(
         missing = desired - present
         extra = present - desired
         if missing:
+            # TODO автоматически установить из репозитория
             typer.echo(f"⚠ На диске отсутствуют (есть в реестре): {', '.join(sorted(missing))}")
         if extra:
             typer.echo(f"⚠ На диске лишние (нет в реестре): {', '.join(sorted(extra))}")

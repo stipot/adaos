@@ -76,10 +76,6 @@ Rules:
 * Logging: use a **dedicated logger** with `FileHandler` to `prep_dir / "prep.log"`; do **not** call `logging.basicConfig`.
 * Persistence: use AdaOS helpers, **not** `os.environ`:
 
-  ```python
-  from adaos.sdk.skill_env import get_env, set_env
-  ```
-
   Prefer existing values (`get_env`) and store discovered ones (`set_env`).
 * Network: only stdlib + `requests`; timeouts ≤ 5s; robust JSON handling; fail fast with clear i18n reasons.
 * Interactivity: ask via `input()` **only if necessary**; keep prompts minimal. Sending a **test message** requires explicit user consent (record the decision).
