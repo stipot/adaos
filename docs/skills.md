@@ -78,6 +78,13 @@ async def on_hello(event):
 
 ---
 
+## Использование навыка
+
+```bash
+adaos skill run weather_skill
+adaos skill run weather_skill --topic nlp.intent.weather.get --payload '{"city": "Berlin"}'
+```
+
 ## Репозитории
 
 ### Моно-репозиторий
