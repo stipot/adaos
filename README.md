@@ -20,11 +20,6 @@ bash tools/bootstrap.sh
 # install dev core (optional)
 pip install -e ".[dev]"
 
-# запустить API и Web:
-make dev        # или: just dev / npm run dev
-# API: http://127.0.0.1:8777
-# Web (Inimatic): http://127.0.0.1:810
-
 adaos --help
 ```
 
@@ -32,15 +27,17 @@ adaos --help
 
 ```bash
 adaos --help
+adaos skill install weather_skill
 adaos skill list
+adaos skill run weather_skill
+adaos skill run weather_skill --topic nlp.intent.weather.get --payload '{"city": "Berlin"}'
 adaos api serve --host 127.0.0.1 --port 8777
 curl -i http://127.0.0.1:8777/health/live
 curl -i http://127.0.0.1:8777/health/ready
-adaos skill run weather_skill weather.get --event --wait-notify --entities '{"city":"Berlin"}'
 # Windows запустить альтернативную ноду в той-же кодовой базе
 $env:ADAOS_BASE_DIR_SUFFIX="_1"; adaos api serve --host 127.0.0.1 --port 8778
+
 # Мониотринг
-#
 adaos api serve --host 127.0.0.1 --port 8777
 $env:ADAOS_BASE_DIR_SUFFIX="_1"; adaos api serve --host 127.0.0.1 --port 8778
 adaos monitor sse http://127.0.0.1:8777/api/observe/stream
