@@ -55,6 +55,18 @@ curl -H "X-AdaOS-Token: dev-local-token" -H "Content-Type: application/json" \
 adaos monitor sse http://127.0.0.1:8777/api/observe/stream?replay_lines=50 --topic net.subnet.
 ```
 
+```python
+from adaos.services.skill.runtime import run_skill_handler_sync
+
+print(
+    run_skill_handler_sync(
+        "weather_skill",
+        "nlp.intent.weather.get",
+        {"city": "Berlin"},
+    )
+)
+```
+
 ### Сменить роль ноды
 
 ```python
