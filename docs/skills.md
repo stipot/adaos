@@ -101,6 +101,22 @@ adaos skill run weather_skill
 adaos skill run weather_skill --topic nlp.intent.weather.get --payload '{"city": "Berlin"}'
 ```
 
+### Программно из Python
+
+```python
+from adaos.services.skill.runtime import run_skill_handler_sync, run_skill_prep
+
+result = run_skill_handler_sync(
+    "weather_skill",
+    "nlp.intent.weather.get",
+    {"city": "Berlin"},
+)
+print(result)
+
+prep_report = run_skill_prep("weather_skill")
+print(prep_report)
+```
+
 ## Репозитории
 
 ### Моно-репозиторий
