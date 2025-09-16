@@ -124,7 +124,7 @@ class BootstrapService:
         conf = load_config(ctx=self.ctx)
         self._prepare_environment()
         await bus.emit("sys.boot.start", {"role": conf.role, "node_id": conf.node_id, "subnet_id": conf.subnet_id}, source="lifecycle", actor="system")
-        # paths.skills_dir может быть функцией; нормализуем до Path/str
+        # paths.skills_dir() может быть функцией; нормализуем до Path/str
         skills_dir_attr = getattr(self.ctx.paths, "skills_dir", None)
         skills_root = skills_dir_attr() if callable(skills_dir_attr) else skills_dir_attr
         await self.skills_loader.import_all_handlers(skills_root)
