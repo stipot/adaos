@@ -23,8 +23,6 @@ def _run_git(args: list[str], cwd: Optional[StrOrPath] = None) -> str:
 
 
 def _append_exclude(dir: str, lines: list[str]) -> None:
-    from pathlib import Path
-
     p = Path(dir) / ".git" / "info" / "exclude"
     existing = set()
     if p.exists():
@@ -38,30 +36,11 @@ class CliGitClient(GitClient):
     def __init__(self, depth: int = 1) -> None:
         self._depth: Final[int] = depth
 
-    def sparse_init(self, dir: StrOrPath, cone: bool = False) -> None:
-        args = ["sparse-checkout", "init"]
-        if cone:
-            args.append("--cone")
-        _run_git(args, cwd=dir)
-
-    def sparse_set(self, dir: StrOrPath, paths: Sequence[str], no_cone: bool = True) -> None:
-        args = ["sparse-checkout", "set", *paths]
-        if no_cone:
-            args.append("--no-cone")
-        _run_git(args, cwd=dir)
-
     def ensure_repo(self, dir: StrOrPath, url: str, branch: Optional[str] = None) -> None:
         d = Path(dir)
         d.mkdir(parents=True, exist_ok=True)
         git_dir = d / ".git"
-        if git_dir.exists():
-            if branch:
-                _run_git(["fetch", "origin", branch, f"--depth={self._depth}"], cwd=str(d))
-                _run_git(["checkout", branch], cwd=str(d))
-                _run_git(["reset", "--hard", f"origin/{branch}"], cwd=str(d))
-            else:
-                _run_git(["pull", "--ff-only"], cwd=str(d))
-        else:
+        if not git_dir.exists():
             args = ["clone", url, str(d)]
             if self._depth > 0:
                 args += [f"--depth={self._depth}"]
