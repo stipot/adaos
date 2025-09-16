@@ -38,7 +38,7 @@ async def call_tool(body: ToolCall, request: Request, response: Response, ctx: A
         raise HTTPException(status_code=400, detail="invalid tool spec")
 
     # 2) Устанавливаем текущий навык на время выполнения запроса
-    if not ctx.skill_ctx.set(skill_name):  # set_current_skill(skill_name):
+    if not ctx.skill_ctx.set(skill_name, ctx.paths.skills_dir() / skill_name):  # set_current_skill(skill_name):
         raise HTTPException(status_code=503, detail=f"The skill {skill_name} is not found")
 
     # 3) Получаем текущий навык (после установки)

@@ -16,9 +16,10 @@ class Translator:
         self.skill_cache = {}  # кэш локалей навыков: {skill_path: messages}
 
     def _load_messages(self, lang):
-        file_path = Path(LOCALES_DIR) / f"{lang}.json"
+        skill_path = self._find_skill_path_in_stack() / "i18n"
+        file_path = skill_path / f"{lang}.json"
         if not file_path.exists():
-            file_path = Path(LOCALES_DIR) / f"{DEFAULT_LANG}.json"
+            file_path = skill_path / f"{DEFAULT_LANG}.json"
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
 

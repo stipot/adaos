@@ -7,17 +7,30 @@
 
 ## Что такое skill
 
-- Изолированный модуль с собственным `manifest.yaml`.  
-- Реализует одну задачу: TTS, каталогизацию медиа, интеграцию с API.  
-- Загружается в runtime и подписывается на события через SDK.  
+- Изолированный модуль с собственным `skill.yaml`.  
+- Реализует одну задачу: получения данных о погоде, каталогизацию медиа, интеграцию с API.  
+- Использует SDK для доступа к ядру AdaOS
 
-Пример:  
+Структура папок:  
 
 ```text
 skills/
-  └── hello-skill/
-      ├── manifest.yaml
-      └── handler.py
+  └── skill-name/
+      ├── handlers
+        └── main.py         # start script
+      ├── i18n
+        └── ru.json         # locales data
+        └── en.json
+      ├── prep
+        └── prep_prompt.md  # preparation request to LLM
+        └── prepare.py      # preparation code
+      ├── tests
+        └── conftest.py     # tests
+      ├── .skill_env.json   # skill env data
+      ├── config.json       # skill conf data
+      ├── prep_result.json  # preparation result
+      ├── skill_prompt.md   # skill generation request to LLM
+      └── skill.yaml        # Skill metadata
 ````
 
 ---
@@ -29,14 +42,33 @@ skills/
 ### Пример
 
 ```yaml
-id: hello-skill
-name: Hello World Skill
-version: 0.1.0
-entrypoint: handler.py
-description: >
-  Демонстрационный навык. Подписывается на события и отвечает "Hello".
+name: weather_skill
+version: 1.0.4
+description: Навык для получения текущей погоды на сегодня
+runtime:
+  python: "3.11"
 dependencies:
-  - requests
+  - requests>=2.31
+events:
+  subscribe:
+    - "nlp.intent.weather.get"
+  publish:
+    - "ui.notify"
+tools:
+  - name: "get_weather"
+    input_schema:
+      type: object
+      required: [city]
+      properties:
+        city: { type: string, minLength: 1 }
+    output_schema:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        city: { type: string }
+        temp: { type: number }
+        description: { type: string }
 ```
 
 ### Основные поля
@@ -44,39 +76,30 @@ dependencies:
 - **id** — уникальный идентификатор навыка.
 - **name** — человекочитаемое название.
 - **version** — семантическая версия.
-- **entrypoint** — точка входа (Python-файл с обработчиками).
 - **description** — описание назначения.
 - **dependencies** — список Python-зависимостей.
+- **events** — подписки
+- **tools** — методы: название, входные и выходные схемы
 
 ---
 
-## Scaffold
-
-CLI позволяет быстро создать навык из шаблона:
+## Pipeline
 
 ```bash
-adaos skills scaffold hello-skill
+adaos skill create skill-name -t demo_skill # Template is optional
+# подготовить запрос на исследовательский код
+adaos llm build-prep skill-name "Научись отправлять уведомления в Telegram через Bot API при получении события"
+# подготовить запрос на создание навыка
+adaos llm build-skill skill-name "Научись отправлять уведомления в Telegram через Bot API при получении события"
+
 ```
 
-Структура после scaffold:
+## Использование навыка
 
-```text
-hello-skill/
-  ├── manifest.yaml
-  └── handler.py
+```bash
+adaos skill run weather_skill
+adaos skill run weather_skill --topic nlp.intent.weather.get --payload '{"city": "Berlin"}'
 ```
-
-`handler.py`:
-
-```python
-from adaos.sdk.decorators import subscribe
-
-@subscribe("demo.hello")
-async def on_hello(event):
-    print("Hello from skill!", event)
-```
-
----
 
 ## Репозитории
 

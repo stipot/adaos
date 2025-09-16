@@ -19,13 +19,12 @@ except Exception as e:
     _sd_error = e
     sd = None
 
-
 class VoskSTT:
     def __init__(
         self, model_path: Optional[str] = None, samplerate: int = 16000, device: Optional[int | str] = None, lang: str = "en", external_stream: Optional[Iterable[bytes]] = None
     ):
 
-        ADAOS_VOSK_MODEL = str(get_ctx().paths.base() / "models" / "vosk" / "en-us")  # TODO move to constants
+        ADAOS_VOSK_MODEL = str(get_ctx().paths.base_dir() / "models" / "vosk" / "en-us")  # TODO move to constants
         # Инициализация модели
         if model_path:
             model_dir = Path(model_path)
@@ -51,19 +50,27 @@ class VoskSTT:
         self._q = None
         self.stream = None
         if external_stream is None:
-            import queue, sounddevice as sd
-
+            import queue  # этот import уместен
             self._q = queue.Queue()
-            self.stream = sd.RawInputStream(samplerate=self.samplerate, blocksize=8000, dtype="int16", channels=1, callback=self._on_audio, device=device)
+            self.stream = sd.RawInputStream(
+                samplerate=self.samplerate,
+                blocksize=8000,
+                dtype="int16",
+                channels=1,
+                callback=self._on_audio,
+                device=device,
+            )
             self.stream.start()
         else:
-            # Очередь аудио-чанков из callback’а
             self._q: queue.Queue[bytes] = queue.Queue()
-
-            # Аудио-поток
             self.stream = sd.RawInputStream(
-                samplerate=self.samplerate, blocksize=8000, dtype="int16", channels=1, callback=self._on_audio, device=device
-            )  # ≈0.5s при 16кГц int16 mono
+                samplerate=self.samplerate,
+                blocksize=8000,
+                dtype="int16",
+                channels=1,
+                callback=self._on_audio,
+                device=device,
+            )
             self.stream.start()
 
     def _on_audio(self, indata, frames, time_info, status):
