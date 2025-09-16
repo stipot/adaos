@@ -8,8 +8,10 @@ from adaos.ports import EventBus, GitClient, Capabilities
 from adaos.ports.paths import PathProvider
 from adaos.ports.scenarios import ScenarioRepository
 from adaos.services.eventbus import emit
+from adaos.services.agent_context import get_ctx
 from adaos.services.fs.safe_io import remove_tree
 from adaos.services.git.safe_commit import sanitize_message, check_no_denied
+from adaos.adapters.db import SqliteScenarioRegistry
 
 _name_re = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
 
@@ -20,7 +22,14 @@ class ScenarioManager:
     """
 
     def __init__(
-        self, *, repo: ScenarioRepository, registry, git: GitClient, paths: PathProvider, bus: EventBus, caps: Capabilities  # SqliteScenarioRegistry протоколом не ограничиваем
+        self,
+        *,
+        repo: ScenarioRepository,
+        registry: SqliteScenarioRegistry,
+        git: GitClient,
+        paths: PathProvider,
+        bus: EventBus,
+        caps: Capabilities,  # SqliteScenarioRegistry протоколом не ограничиваем
     ):
         self.repo, self.reg, self.git, self.paths, self.bus, self.caps = repo, registry, git, paths, bus, caps
 

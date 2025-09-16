@@ -14,11 +14,12 @@ from adaos.apps.bootstrap import bootstrap_app
 from adaos.services.bootstrap import run_boot_sequence, shutdown, is_ready
 from adaos.services.observe import start_observer, stop_observer
 
+bootstrap_app()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1) инициализируем AgentContext (публикуется через set_ctx внутри bootstrap_app)
-    bootstrap_app()
 
     # 2) только теперь импортируем то, что может косвенно дернуть контекст
     from adaos.apps.api import tool_bridge, subnet_api, observe_api, node_api, scenarios, root_endpoints

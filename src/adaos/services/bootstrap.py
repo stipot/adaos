@@ -74,22 +74,13 @@ class BootstrapService:
         # монорепо сценариев (поддержим оба возможных конструктора)
         try:
             if ctx.settings.scenarios_monorepo_url and not (scenarios_root / ".git").exists():
-                try:
-                    # вариант с именами url/branch
-                    GitScenarioRepository(
-                        paths=ctx.paths,
-                        git=ctx.git,
-                        url=getattr(ctx.settings, "scenarios_monorepo_url", None),
-                        branch=getattr(ctx.settings, "scenarios_monorepo_branch", None),
-                    ).ensure()
-                except TypeError:
-                    # вариант с именами monorepo_url/monorepo_branch
-                    GitScenarioRepository(
-                        paths=ctx.paths,
-                        git=ctx.git,
-                        monorepo_url=getattr(ctx.settings, "scenarios_monorepo_url", None),
-                        monorepo_branch=getattr(ctx.settings, "scenarios_monorepo_branch", None),
-                    ).ensure()
+                GitScenarioRepository(
+                    paths=ctx.paths,
+                    git=ctx.git,
+                    url=getattr(ctx.settings, "scenarios_monorepo_url", None),
+                    branch=getattr(ctx.settings, "scenarios_monorepo_branch", None),
+                ).ensure()
+
         except Exception:
             pass
 
