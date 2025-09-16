@@ -28,7 +28,7 @@ def build_prep(skill_name: str, user_request: str):
     )
 
     # Путь к файлу навыка
-    out_dir = ctx.paths.skills_dir / skill_name / "prep"
+    out_dir = ctx.paths.skills_dir() / skill_name / "prep"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "prep_prompt.md"
     out_path.write_text(prompt, encoding="utf-8")
@@ -48,7 +48,7 @@ def build_skill(skill_name: str, user_request: str):
         raise typer.Exit(1)
 
     # Загружаем prep_result.json
-    prep_result_path = ctx.paths.skills_dir / skill_name / "prep_result.json"
+    prep_result_path = ctx.paths.skills_dir() / skill_name / "prep_result.json"
     if not prep_result_path.exists():
         print(prep_result_path)
         typer.echo(f"[red]{_('cli.llm.skill.prep_missing', skill_name=skill_name)}[/red]")
@@ -61,7 +61,7 @@ def build_skill(skill_name: str, user_request: str):
     prompt = prompt_template.replace("<<<USER_REQUEST>>>", user_request).replace("<<<PREP_RESULT_JSON>>>", prep_result).replace("<<<SKILL_NAME>>>", skill_name)
 
     # Сохраняем prompt
-    out_dir = ctx.paths.skills_dir / skill_name
+    out_dir = ctx.paths.skills_dir() / skill_name
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "skill_prompt.md"
     out_path.write_text(prompt, encoding="utf-8")

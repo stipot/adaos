@@ -13,6 +13,7 @@ from adaos.services.agent_context import get_ctx
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.adapters.skills.git_repo import GitSkillRepository
+from adaos.sdk.context import set_current_skill, get_current_skill
 from adaos.sdk.skills import (
     push as push_skill,
     pull as pull_skill,
@@ -175,6 +176,7 @@ def _resolve_skill_dir(skill_name: str) -> Path:
     1) <skills_root>/<skill_name>
     2) Fallback: поиск по подкаталогам с наличием одного из манифестов.
     """
+    # TODO логику перенести на уровень сервиса
     ctx = get_ctx()
     skills_root = Path(ctx.paths.skills_dir())  # ожидается, что в контексте настроено
     direct = skills_root / skill_name
@@ -212,13 +214,13 @@ def run(
     skill: str = typer.Argument(..., help="Имя навыка (директория в skills_root)"),
     topic: str = typer.Option("nlp.intent.weather.get", "--topic", "-t", help="Топик/интент"),
     payload: str = typer.Option("{}", "--payload", "-p", help='JSON-пейлоад, например: \'{"city":"Berlin"}\''),
-    handler: str = typer.Option("handler.py", "--handler", help="Имя файла обработчика внутри навыка"),
 ):
     """
     Запустить навык локально из каталога skills_root, определяемого через get_ctx().
     Пример:
-      adaos skill run weather --topic nlp.intent.weather.get -p '{"city":"Berlin"}'
+    adaos skill run weather_skill --topic nlp.intent.weather.get --payload '{"city": "Berlin"}'
     """
+    # TODO логику перенести на уровень сервиса
     # 1) находим папку навыка через get_ctx()
     skill_dir = _resolve_skill_dir(skill)
     handler_path = skill_dir / "handlers" / "main.py"
@@ -244,3 +246,31 @@ def run(
         typer.echo(f"OK: {res!r}")
 
     asyncio.run(main())
+
+
+@app.command("prep")
+def prep_command(skill_name: str):
+    """Запуск стадии подготовки (discover) для навыка"""
+    # TODO логику перенести на уровень сервиса
+    set_current_skill(skill_name)
+    ctx = get_ctx()
+    skill_path = ctx.paths.skills_dir() / skill_name
+
+    prep_script = skill_path / "prep" / "prepare.py"
+    if not prep_script.exists():
+        print(f"[red]{_('skill.prep.not_found', skill_name=skill_name)}[/red]")
+        raise typer.Exit(code=1)
+
+    # Динамически импортируем prepare.py
+    spec = importlib.util.spec_from_file_location("prepare", prep_script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    if hasattr(module, "run_prep"):
+        result = module.run_prep(skill_path)
+        if result["status"] == "ok":
+            print(f"[green]{_('skill.prep.success', skill_name=skill_name)}[/green]")
+        else:
+            print(f"[red]{_('skill.prep.failed', reason=result['reason'])}[/red]")
+    else:
+        print(f"[red]{_('skill.prep.missing_func', skill_name=skill_name)}[/red]")
