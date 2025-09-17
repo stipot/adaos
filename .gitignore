@@ -1,4 +1,3 @@
-Sandbox/voskapi/vosk-model-small-ru-0.22/
 .env
 .venv
 __pycache__/
@@ -9,4 +8,3 @@ src/adaos/orchestrator/
 src/adaos/devportal/
 src/adaos/store/
 .adaos_1
-site/
