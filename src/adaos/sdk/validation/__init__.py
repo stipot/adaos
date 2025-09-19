@@ -1,4 +1,4 @@
-"""Compatibility wrapper for :mod:`adaos.sdk.core.validation.skill`."""
+"""Compatibility package for :mod:`adaos.sdk.core.validation`."""
 
 from __future__ import annotations
 
