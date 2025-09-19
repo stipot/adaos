@@ -1,0 +1,28 @@
+# .adaos\skills\weather_skill\skill.yaml
+name: weather_skill
+version: 1.0.4
+description: Навык для получения текущей погоды на сегодня
+runtime:
+  python: "3.11"
+dependencies:
+  - requests>=2.31
+events:
+  subscribe:
+    - "nlp.intent.weather.get"
+  publish:
+    - "ui.notify"
+tools:
+  - name: "get_weather"
+    input_schema:
+      type: object
+      required: [city]
+      properties:
+        city: { type: string, minLength: 1 }
+    output_schema:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        city: { type: string }
+        temp: { type: number }
+        description: { type: string }
