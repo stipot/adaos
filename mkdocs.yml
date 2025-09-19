@@ -119,6 +119,7 @@ nav:
       - "Decorators": sdk/decorators.md
       - "Context": sdk/context.md
       - "Adapters": sdk/adapters.md
+      - "Control Plane": sdk_control_plane.md
   - "Навыки": skills.md
   - "Сценарии": scenarios.md
   - "DevPortal": devportal.md

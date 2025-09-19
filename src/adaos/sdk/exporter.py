@@ -123,6 +123,10 @@ def export(level: str = "std") -> dict:
                 },
                 "examples": tm.get("examples", []),
             }
+            if tm.get("input_schema"):
+                item["input_schema"] = tm["input_schema"]
+            if tm.get("output_schema"):
+                item["output_schema"] = tm["output_schema"]
             if level in ("std", "rich"):
                 sig = inspect.signature(fn)
                 args = []

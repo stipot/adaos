@@ -54,6 +54,8 @@ def tool(
     examples: Optional[list[str]] = None,
     since: Optional[str] = None,
     version: Optional[str] = None,
+    input_schema: Optional[dict] = None,
+    output_schema: Optional[dict] = None,
 ):
     """Маркер инструмента с публичным именем и метаданными."""
 
@@ -71,6 +73,8 @@ def tool(
             "examples": (examples or []),
             "since": since,
             "version": version,
+            "input_schema": input_schema,
+            "output_schema": output_schema,
         }
         return fn
 
