@@ -2,8 +2,6 @@
 # tools/bootstrap.sh — унифицированный bootstrap (macOS/Linux)
 set -euo pipefail
 
-SUBMODULE_PATH="src/adaos/integrations/inimatic"
-
 # --- helpers ---------------------------------------------------------------
 
 log()   { printf "\033[36m▶ %s\033[0m\n" "$*"; }
@@ -125,9 +123,6 @@ EOF
 log "Проверяю и выбираю Python…"
 choose_python
 
-log "Инициализирую submodule (Inimatic)…"
-[[ -d "$SUBMODULE_PATH" ]] || git submodule update --init --recursive
-[[ -d "$SUBMODULE_PATH" ]] || fail "Субмодуль не найден по пути '$SUBMODULE_PATH'. Проверь .gitmodules → path=…"
 
 log "Создаю venv (если нужно)…"
 if [[ -d .venv ]]; then

@@ -29,7 +29,7 @@ def _default_base_dir() -> Path:
 def _resolve_base_dir() -> Path:
     if get_ctx:
         try:
-            return Path(get_ctx().paths.base())  # type: ignore[attr-defined]
+            return Path(get_ctx().paths.base_dir())  # type: ignore[attr-defined]
         except Exception:
             pass
     return _default_base_dir()

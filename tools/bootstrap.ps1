@@ -2,7 +2,6 @@
 # Unified bootstrap for Windows PowerShell 5.1+
 
 $ErrorActionPreference = "Stop"
-$subPath = "src\adaos\integrations\inimatic"
 
 function Get-PythonCandidates {
     $cands = @()
@@ -76,15 +75,6 @@ else {
 }
 Write-Host ("Using Python {0} {1} -> {2}" -f $chosen.Version, $chosen.Arch, $chosen.Path) -ForegroundColor Green
 
-# Init submodule
-if (!(Test-Path $subPath)) {
-    Write-Host "Initializing git submodules..."
-    git submodule update --init --recursive
-}
-if (!(Test-Path $subPath)) {
-    Write-Host "Submodule '$subPath' not found. Check .gitmodules." -ForegroundColor Red
-    exit 1
-}
 
 function Get-VenvPyVersion {
     if (Test-Path ".venv\Scripts\python.exe") {

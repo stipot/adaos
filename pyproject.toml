@@ -1,3 +1,4 @@
+
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = ["setuptools>=65.0", "wheel"]
@@ -63,6 +64,7 @@ where = ["src"]
 adaos = [
   "skills_templates/**/*.yaml",
   "skills_templates/**/*.py",
+  "locales/*.json",
 ]
 
 [project.optional-dependencies]

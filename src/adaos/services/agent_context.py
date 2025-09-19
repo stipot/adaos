@@ -114,10 +114,6 @@ class AgentContext:
         object.__setattr__(self, "_skills_repo", None)
         object.__setattr__(self, "_scenarios_repo", None)
 
-    def reload_repos(self) -> None:
-        object.__setattr__(self, "_skills_repo", None)
-        object.__setattr__(self, "_scenarios_repo", None)
-
     @property
     def i18n(self) -> I18nService:
         svc = self._i18n

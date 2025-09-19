@@ -2,7 +2,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 from adaos.services.settings import Settings
 
 
@@ -26,7 +25,9 @@ class PathProvider:
         object.__setattr__(self, "package_dir", package_dir.expanduser().resolve())
 
     # --- базовые каталоги ---
-    def locales_dir(self) -> Path:  # TODO Move to global context&
+    def locales_dir(self) -> Path:
+        """Package-level locales shipped with AdaOS (see ``get_ctx().paths``)."""
+
         return (self.package_dir / "locales").resolve()
 
     def skill_templates_dir(self) -> Path:
@@ -56,11 +57,20 @@ class PathProvider:
     def state_dir(self) -> Path:
         return (self.base / "state").resolve()
 
-    def skills_locales_dir(self) -> Path:  # TODO Move to global context&
+    def locales_base_dir(self) -> Path:
+        """Base directory for runtime locales exposed via ``get_ctx().paths``."""
+
         return (self.base / "i18n").resolve()
 
-    def scenarios_locales_dir(self) -> Path:  # TODO Move to global context&
-        return (self.base / "i18n").resolve()
+    def skills_locales_dir(self) -> Path:
+        """Skill locales managed through the global context."""
+
+        return self.locales_base_dir()
+
+    def scenarios_locales_dir(self) -> Path:
+        """Scenario locales managed through the global context."""
+
+        return self.locales_base_dir()
 
     def tmp_dir(self) -> Path:
         return (self.base / "tmp").resolve()
@@ -68,6 +78,7 @@ class PathProvider:
     def ensure_tree(self) -> None:
         for p in (
             self.locales_dir(),
+            self.locales_base_dir(),
             self.base_dir(),
             self.skills_dir(),
             self.scenarios_dir(),
