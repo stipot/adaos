@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from adaos.services.agent_context import get_ctx
-from adaos.sdk.decorators import tool
+from adaos.sdk.core.decorators import tool
 from adaos.services.scenario.manager import ScenarioManager  # предпочтительно
 from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 from adaos.adapters.db import SqliteScenarioRegistry

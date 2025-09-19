@@ -6,7 +6,7 @@ from adaos.services.agent_context import get_ctx
 from adaos.services.skill.manager import SkillManager
 from adaos.adapters.skills.git_repo import GitSkillRepository
 from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
-from adaos.sdk.decorators import tool
+from adaos.sdk.core.decorators import tool
 
 # делегат в scaffold для create()
 from adaos.services.skill.scaffold import create as _scaffold_create

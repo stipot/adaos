@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from adaos.services.node_config import load_config
-from adaos.sdk import bus as bus_module  # будем мягко оборачивать emit
+from adaos.sdk.data import bus as bus_module  # будем мягко оборачивать emit
 
 try:
     # get_ctx может быть недоступен/неинициализирован на момент импорта

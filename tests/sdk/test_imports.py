@@ -8,13 +8,13 @@ from adaos.services.agent_context import clear_ctx
 def test_sdk_imports_no_ctx():
     clear_ctx()
     modules = [
-        "adaos.sdk.memory",
-        "adaos.sdk.secrets",
-        "adaos.sdk.fs",
-        "adaos.sdk.validation.skill",
+        "adaos.sdk.data.memory",
+        "adaos.sdk.data.secrets",
+        "adaos.sdk.data.fs",
+        "adaos.sdk.core.validation.skill",
         "adaos.sdk.manage",
-        "adaos.sdk.events",
-        "adaos.sdk.i18n",
+        "adaos.sdk.data.events",
+        "adaos.sdk.data.i18n",
     ]
     for name in modules:
         importlib.import_module(name)

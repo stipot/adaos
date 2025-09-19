@@ -1,6 +1,6 @@
 # tests/test_decorators_registry.py
 from __future__ import annotations
-from adaos.sdk.decorators import tool, resolve_tool
+from adaos.sdk.core.decorators import tool, resolve_tool
 
 
 def test_tool_registration_and_resolve():

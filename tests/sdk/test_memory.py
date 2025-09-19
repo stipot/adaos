@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from adaos.sdk import memory
+from adaos.sdk.data import memory
 from adaos.services.agent_context import get_ctx
 
 

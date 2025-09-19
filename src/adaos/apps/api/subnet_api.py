@@ -10,7 +10,7 @@ from adaos.services.node_config import load_config
 from adaos.services.subnet_kv_file_http import get_subnet_kv
 from adaos.services.subnet_registry_mem import get_subnet_registry, LEASE_SECONDS_DEFAULT, DOWN_GRACE_SECONDS
 
-import adaos.sdk.bus as bus
+from adaos.sdk.data import bus
 
 router = APIRouter(tags=["subnet"])
 

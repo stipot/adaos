@@ -4,7 +4,7 @@ import asyncio, socket, time, uuid, os
 from typing import Any, List, Optional, Sequence
 from pathlib import Path
 from adaos.services.agent_context import AgentContext, get_ctx
-from adaos.sdk import bus
+from adaos.sdk.data import bus
 from adaos.services.node_config import load_config, set_role as cfg_set_role, NodeConfig
 from adaos.ports.heartbeat import HeartbeatPort
 from adaos.ports.skills_loader import SkillsLoaderPort
@@ -119,7 +119,7 @@ class BootstrapService:
         skills_dir_attr = getattr(self.ctx.paths, "skills_dir", None)
         skills_root = skills_dir_attr() if callable(skills_dir_attr) else skills_dir_attr
         await self.skills_loader.import_all_handlers(skills_root)
-        from adaos.sdk.decorators import register_subscriptions
+        from adaos.sdk.core.decorators import register_subscriptions
 
         await register_subscriptions()
         await bus.emit("sys.bus.ready", {}, source="lifecycle", actor="system")

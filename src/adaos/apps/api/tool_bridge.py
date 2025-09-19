@@ -5,7 +5,7 @@ import importlib.util
 from typing import Any, Dict
 
 from adaos.apps.api.auth import require_token
-from adaos.sdk.decorators import resolve_tool
+from adaos.sdk.core.decorators import resolve_tool
 from adaos.services.observe import attach_http_trace_headers
 from adaos.services.agent_context import get_ctx, AgentContext
 

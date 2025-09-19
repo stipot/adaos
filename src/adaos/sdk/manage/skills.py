@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from adaos.adapters.db.sqlite_skill_registry import SqliteSkillRegistry
 from adaos.adapters.skills.git_repo import GitSkillRepository
-from adaos.sdk.decorators import tool
+from adaos.sdk.core.decorators import tool
 from adaos.services.skill.manager import SkillManager
 
 from .common import (

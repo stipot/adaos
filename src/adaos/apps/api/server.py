@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 import platform, time
 
 from adaos.apps.api.auth import require_token
-from adaos.sdk.env import get_tts_backend
+from adaos.sdk.data.env import get_tts_backend
 from adaos.adapters.audio.tts.native_tts import NativeTTS
 
 from adaos.apps.bootstrap import bootstrap_app

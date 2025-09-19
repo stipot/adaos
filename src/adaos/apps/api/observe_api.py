@@ -10,7 +10,7 @@ from pathlib import Path
 from adaos.apps.api.auth import require_token
 from adaos.services.node_config import load_config
 from adaos.services.observe import _log_path, BROADCAST, pass_filters
-import adaos.sdk.bus as bus
+from adaos.sdk.data import bus
 
 router = APIRouter(tags=["observe"], dependencies=[Depends(require_token)])
 
