@@ -1,9 +1,5 @@
-from typing import Any, Awaitable, Callable, Dict, Protocol
+"""Compatibility wrapper for :mod:`adaos.sdk.core.types`."""
 
-Topic = str
-Payload = Dict[str, Any]
-Handler = Callable[[Payload], Awaitable[Any]]
+from __future__ import annotations
 
-
-class ToolFn(Protocol):
-    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+from adaos.sdk.core.types import *  # noqa: F401,F403
