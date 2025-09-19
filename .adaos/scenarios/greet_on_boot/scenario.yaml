@@ -1,0 +1,56 @@
+id: greet_on_boot
+version: 0.1
+trigger: manual
+vars:
+  ask_prompt: "как к вам обращаться?"
+  greet_default: "привет!"
+steps:
+  - name: get_name
+    call: profile.get_name
+    save_as: user_name
+
+  - name: ensure_name
+    when: ${not user_name}
+    do:
+      - name: ask_for_name
+        call: io.voice.tts.speak
+        args:
+          text: ${vars.ask_prompt}
+      - name: listen_for_name
+        call: io.voice.stt.listen
+        args:
+          timeout: "20s"
+        save_as: name_answer
+      - name: store_name
+        when: ${name_answer.text}
+        call: profile.set_name
+        args:
+          name: ${name_answer.text}
+        save_as: user_name
+
+  - name: run_weather
+    call: skills.call_fs
+    args:
+      skill_dir: ".adaos/skills/weather_skill"
+      entry: "handle"
+      topic: "nlp.intent.weather.get"
+      payload: {}
+    save_as: weather
+
+  - name: compose_message
+    call: runtime.compose_greeting
+    args:
+      name: ${user_name}
+      default_greeting: ${vars.greet_default}
+      weather: ${weather.stdout}
+    save_as: msg
+
+  - name: out_console
+    call: io.console.print
+    args:
+      text: ${msg}
+
+  - name: out_voice
+    call: io.voice.tts.speak
+    args:
+      text: ${msg}
