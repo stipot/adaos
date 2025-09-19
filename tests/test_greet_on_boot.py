@@ -7,7 +7,8 @@ import sys
 from adaos.services.scenario_runner_min import run_from_file
 from adaos.sdk.data import memory
 
-SCENARIO = Path('.adaos/scenarios/greet_on_boot/scenario.yaml')
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCENARIO = REPO_ROOT / '.adaos/scenarios/greet_on_boot/scenario.yaml'
 
 
 def test_greet_with_name():

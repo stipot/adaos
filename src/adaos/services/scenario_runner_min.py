@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -190,14 +191,49 @@ def _execute_step(step: Dict[str, Any], bag: Dict[str, Any]) -> None:
         bag[save_as] = result
 
 
+def _resolve_scenario_path(path: str) -> Path:
+    candidate = Path(path).expanduser()
+    if candidate.is_absolute():
+        return candidate
+
+    search_roots: list[Path] = []
+    env_base = os.getenv("ADAOS_BASE_DIR")
+    if env_base:
+        search_roots.append(Path(env_base))
+    search_roots.append(Path.cwd())
+    try:
+        repo_root = Path(__file__).resolve().parents[3]
+    except IndexError:
+        repo_root = None
+    if repo_root is not None:
+        search_roots.append(repo_root)
+
+    for root in search_roots:
+        candidate_path = (root / candidate).resolve()
+        if candidate_path.exists():
+            return candidate_path
+
+    # Fall back to the first search root so that the resulting path is stable in error messages.
+    if search_roots:
+        return (search_roots[0] / candidate).resolve()
+    return candidate.resolve()
+
+
+def _locate_base_dir(scenario_path: Path) -> Path:
+    for parent in scenario_path.parents:
+        if parent.name == ".adaos":
+            return parent
+    env_base = os.getenv("ADAOS_BASE_DIR")
+    if env_base:
+        return Path(env_base)
+    return scenario_path.parent
+
+
 def run_from_file(path: str) -> Dict[str, Any]:
-    scenario_path = Path(path).expanduser().resolve()
+    scenario_path = _resolve_scenario_path(path)
     data = yaml.safe_load(scenario_path.read_text(encoding="utf-8")) or {}
 
-    try:
-        base_dir = scenario_path.parents[2]
-    except IndexError:
-        base_dir = scenario_path.parent
+    base_dir = _locate_base_dir(scenario_path)
 
     _ensure_agent_context(base_dir)
 
