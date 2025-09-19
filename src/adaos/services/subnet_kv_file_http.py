@@ -21,7 +21,7 @@ def _resolve_base_dir() -> Path:
         from adaos.services.agent_context import get_ctx  # type: ignore
 
         try:
-            return Path(get_ctx().paths.base())  # type: ignore[attr-defined]
+            return Path(get_ctx().paths.base_dir())  # type: ignore[attr-defined]
         except Exception:
             pass
     except Exception:

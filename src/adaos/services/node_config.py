@@ -27,7 +27,7 @@ def _base_dir(ctx: AgentContext | None = None) -> Path:
         return Path(getattr(ctx.paths, "base"))
     if "adaos" in sys.modules and get_ctx:
         try:
-            return Path(get_ctx().paths.base())  # type: ignore[attr-defined]
+            return Path(get_ctx().paths.base_dir())  # type: ignore[attr-defined]
         except Exception:
             pass
     return _default_base_dir()

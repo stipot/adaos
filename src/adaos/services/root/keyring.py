@@ -17,7 +17,7 @@ class KeyStore:
 
 def _base_dir() -> Path:
     # все артефакты root держим здесь
-    return Path(get_ctx().paths.base()) / "root"
+    return Path(get_ctx().paths.base_dir()) / "root"
 
 
 def _fp(data: bytes) -> str:

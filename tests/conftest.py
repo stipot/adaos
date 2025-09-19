@@ -32,28 +32,63 @@ class TestPaths:
         self._state = self._base / "state"
         self._cache = self._base / "cache"
         self._logs = self._base / "logs"
+        self._models = self._base / "models"
+        self._tmp = self._base / "tmp"
+        self._i18n = self._base / "i18n"
         self._package = Path(__file__).resolve().parents[1]
+        self._package_locales = self._package / "locales"
+        self._skill_templates = self._package / "skills_templates"
+        self._scenario_templates = self._package / "scenario_templates"
 
-    def base_dir(self) -> str:
-        return str(self._base)
+    @property
+    def base(self) -> Path:
+        return self._base
 
-    def skills_dir(self) -> str:
-        return str(self._skills)
+    @property
+    def package_dir(self) -> Path:
+        return self._package
 
-    def scenarios_dir(self) -> str:
-        return str(self._scenarios)
+    def base_dir(self) -> Path:
+        return self._base
 
-    def state_dir(self) -> str:
-        return str(self._state)
+    def locales_dir(self) -> Path:
+        return self._package_locales
 
-    def cache_dir(self) -> str:
-        return str(self._cache)
+    def locales_base_dir(self) -> Path:
+        return self._i18n
 
-    def logs_dir(self) -> str:
-        return str(self._logs)
+    def skills_locales_dir(self) -> Path:
+        return self.locales_base_dir()
 
-    def package_dir(self) -> str:
-        return str(self._package)
+    def scenarios_locales_dir(self) -> Path:
+        return self.locales_base_dir()
+
+    def skill_templates_dir(self) -> Path:
+        return self._skill_templates
+
+    def scenario_templates_dir(self) -> Path:
+        return self._scenario_templates
+
+    def skills_dir(self) -> Path:
+        return self._skills
+
+    def scenarios_dir(self) -> Path:
+        return self._scenarios
+
+    def state_dir(self) -> Path:
+        return self._state
+
+    def cache_dir(self) -> Path:
+        return self._cache
+
+    def logs_dir(self) -> Path:
+        return self._logs
+
+    def models_dir(self) -> Path:
+        return self._models
+
+    def tmp_dir(self) -> Path:
+        return self._tmp
 
 
 # ---- минимальный реалистичный процесс-менеджер для тестов ----
@@ -163,7 +198,16 @@ def _autocontext(tmp_path, monkeypatch):
 
     # Paths + каталоги
     paths = TestPaths(base_dir)
-    for p in (paths.skills_dir(), paths.scenarios_dir(), paths.state_dir(), paths.cache_dir(), paths.logs_dir()):
+    for p in (
+        paths.skills_dir(),
+        paths.scenarios_dir(),
+        paths.state_dir(),
+        paths.cache_dir(),
+        paths.logs_dir(),
+        paths.models_dir(),
+        paths.tmp_dir(),
+        paths.locales_base_dir(),
+    ):
         Path(p).mkdir(parents=True, exist_ok=True)
 
     # Реальные порты

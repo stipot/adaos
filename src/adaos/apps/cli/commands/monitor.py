@@ -12,7 +12,7 @@ def monitor_events(
     topic: str = typer.Option(None, "--topic", "-t", help="Фильтр по префиксу топика"),
     follow: bool = typer.Option(True, "--follow/--no-follow", help="Следить за логом"),
 ):
-    logf = get_ctx().paths.base() / "logs" / "events.log"
+    logf = get_ctx().paths.base_dir() / "logs" / "events.log"
     if not logf.exists():
         typer.echo("No events yet.")
         raise typer.Exit(0)
