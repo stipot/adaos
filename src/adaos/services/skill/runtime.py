@@ -165,10 +165,20 @@ async def run_skill_handler(
 
     handle_fn = _load_handler(handler_path)
 
-    result = handle_fn(topic, payload)
-    if isawaitable(result):
-        result = await result
-    return result
+    skill_ctx_port = agent_ctx.skill_ctx
+    previous = skill_ctx_port.get()
+    if not skill_ctx_port.set(skill_name, skill_dir):
+        raise SkillRuntimeError(f"failed to establish context for skill '{skill_name}'")
+    try:
+        result = handle_fn(topic, payload)
+        if isawaitable(result):
+            result = await result
+        return result
+    finally:
+        if previous is None:
+            skill_ctx_port.clear()
+        else:
+            skill_ctx_port.set(previous.name, previous.path)
 
 
 def run_skill_handler_sync(

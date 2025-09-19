@@ -2,7 +2,7 @@
 from __future__ import annotations
 import asyncio, json
 from pathlib import Path
-from adaos.sdk import bus
+from adaos.sdk.data import bus
 from adaos.services.agent_context import get_ctx
 
 

@@ -123,12 +123,12 @@ spec.loader.exec_module(module)
 
 # попытка получить новые публичные реестры (с fallback на старые)
 try:
-    from adaos.sdk.decorators import tools_registry, subscriptions
+    from adaos.sdk.core.decorators import tools_registry, subscriptions
     mod_tools = (tools_registry.get(mod_name) or {{}})
     subs = [t for (t, _fn) in subscriptions]
 except Exception:
     try:
-        from adaos.sdk.decorators import _TOOLS, _SUBSCRIPTIONS
+        from adaos.sdk.core.decorators import _TOOLS, _SUBSCRIPTIONS
         mod_tools = (_TOOLS.get(mod_name) or {{}})
         subs = [t for (t, _fn) in _SUBSCRIPTIONS]
     except Exception:

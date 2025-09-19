@@ -2,7 +2,8 @@ import os
 import re
 import yaml
 from pathlib import Path
-from adaos.sdk.context import SKILLS_DIR
+
+from adaos.services.agent_context import get_ctx
 
 
 def process_llm_output(llm_output: str, skill_name_hint="Skill"):
@@ -36,7 +37,12 @@ def process_llm_output(llm_output: str, skill_name_hint="Skill"):
         raise ValueError("Нет интентов в манифесте.")
 
     # Создаём папку навыка
-    skill_dir = Path(SKILLS_DIR) / skill_name.lower()
+    ctx = get_ctx()
+    skills_dir_attr = getattr(ctx.paths, "skills_dir", None)
+    skills_root = skills_dir_attr() if callable(skills_dir_attr) else skills_dir_attr
+    if not skills_root:
+        raise RuntimeError("skills directory path is not configured in agent context")
+    skill_dir = Path(skills_root) / skill_name.lower()
     skill_dir.mkdir(parents=True, exist_ok=True)
 
     # Записываем файлы

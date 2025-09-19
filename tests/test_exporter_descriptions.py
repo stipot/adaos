@@ -1,7 +1,7 @@
 # tests/test_exporter_descriptions.py
 from __future__ import annotations
 import json, pathlib
-from adaos.sdk.exporter import export as sdk_export
+from adaos.sdk.core.exporter import export as sdk_export
 from adaos.services.agent_context import get_ctx
 
 

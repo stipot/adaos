@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from adaos.sdk.i18n import _
+from adaos.sdk.data.i18n import _
 from adaos.services.agent_context import clear_ctx
 
 

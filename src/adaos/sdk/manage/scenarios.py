@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from adaos.sdk.decorators import tool
+from adaos.sdk.core.decorators import tool
 
 from .common import (
     SCHEMA_RESULT_ENVELOPE,

@@ -7,7 +7,7 @@ import traceback
 
 import typer
 
-from adaos.sdk.i18n import _
+from adaos.sdk.data.i18n import _
 from adaos.services.agent_context import get_ctx
 from adaos.services.skill.manager import SkillManager
 from adaos.services.skill.runtime import (

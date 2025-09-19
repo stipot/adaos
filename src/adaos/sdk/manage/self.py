@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from adaos.sdk.core.types import SCHEMA_VALIDATION_REPORT
 from adaos.sdk.core.validation.skill import validate_self as _validate_self
-from adaos.sdk.decorators import tool
+from adaos.sdk.core.decorators import tool
 
 from .common import (
     SCHEMA_RESULT_ENVELOPE,

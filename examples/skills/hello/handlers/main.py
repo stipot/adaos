@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from adaos.sdk.i18n import _
-from adaos.sdk.events import publish
-from adaos.sdk.memory import get, put
-from adaos.sdk.validation.skill import validate_self
+from adaos.sdk.data.i18n import _
+from adaos.sdk.data.events import publish
+from adaos.sdk.data.memory import get, put
+from adaos.sdk.core.validation.skill import validate_self
 
 
 def on_start():

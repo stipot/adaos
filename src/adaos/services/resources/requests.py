@@ -17,19 +17,31 @@ class ResourceTicket:
 class ResourceRequestService:
     ctx: AgentContext
 
+    def _ticket_keys(self, ticket_id: str) -> list[str]:
+        keys: list[str] = []
+        skill_ctx = getattr(self.ctx, "skill_ctx", None)
+        if skill_ctx is not None:
+            current = skill_ctx.get()
+            skill_name = getattr(current, "name", None)
+            if skill_name:
+                keys.append(f"skills/{skill_name}/resources/requests/{ticket_id}")
+        keys.append(f"resources/requests/{ticket_id}")
+        return keys
+
     def create_ticket(self, ticket_id: str, payload: dict) -> ResourceTicket:
-        key = f"resources/requests/{ticket_id}"
-        existing = self.ctx.kv.get(key)
-        if isinstance(existing, dict):
-            return ResourceTicket(ticket_id=ticket_id, status=str(existing.get("status", "pending")), payload=existing)
+        keys = self._ticket_keys(ticket_id)
+        for key in keys:
+            existing = self.ctx.kv.get(key)
+            if isinstance(existing, dict):
+                return ResourceTicket(ticket_id=ticket_id, status=str(existing.get("status", "pending")), payload=existing)
         payload = {**payload, "status": payload.get("status", "pending"), "ticket_id": ticket_id}
-        self.ctx.kv.set(key, payload)
+        self.ctx.kv.set(keys[0], payload)
         return ResourceTicket(ticket_id=ticket_id, status=str(payload.get("status", "pending")), payload=payload)
 
     def get_ticket(self, ticket_id: str) -> Optional[ResourceTicket]:
-        key = f"resources/requests/{ticket_id}"
-        value = self.ctx.kv.get(key)
-        if not isinstance(value, dict):
-            return None
-        status = str(value.get("status", "pending"))
-        return ResourceTicket(ticket_id=ticket_id, status=status, payload=value)
+        for key in self._ticket_keys(ticket_id):
+            value = self.ctx.kv.get(key)
+            if isinstance(value, dict):
+                status = str(value.get("status", "pending"))
+                return ResourceTicket(ticket_id=ticket_id, status=status, payload=value)
+        return None

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from adaos.sdk import events
-from adaos.sdk.errors import SdkRuntimeNotInitialized
+from adaos.sdk.data import events
+from adaos.sdk.core.errors import SdkRuntimeNotInitialized
 from adaos.services.agent_context import clear_ctx
 
 

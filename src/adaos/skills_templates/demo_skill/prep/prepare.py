@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import requests
-from adaos.sdk.skills.i18n import _
+from adaos.sdk.data.i18n import _
 
 
 def lang_res():
