@@ -4,8 +4,7 @@ import inspect, time
 from types import SimpleNamespace
 from adaos.services.agent_context import get_ctx
 
-
-class BusNotAvailable(RuntimeError): ...
+from .errors import BusNotAvailable
 
 
 def _bus():
