@@ -67,3 +67,9 @@ class SQLiteKV(KV):
         with self.sql.connect() as con:
             con.execute("DELETE FROM kv WHERE ns=? AND k=?", (self.ns, key))
             con.commit()
+
+    def list(self, prefix: str = "") -> list[str]:
+        pattern = f"{prefix}%" if prefix else "%"
+        with self.sql.connect() as con:
+            cur = con.execute("SELECT k FROM kv WHERE ns=? AND k LIKE ?", (self.ns, pattern))
+            return [row[0] for row in cur.fetchall()]

@@ -64,6 +64,7 @@ where = ["src"]
 adaos = [
   "skills_templates/**/*.yaml",
   "skills_templates/**/*.py",
+  "locales/*.json",
 ]
 
 [project.optional-dependencies]
