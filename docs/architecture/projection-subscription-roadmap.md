@@ -105,11 +105,11 @@ Current status:
 
 ### 3. Projection ABI
 
-- [ ] `abi.projection_record_shape`: define the canonical projection record shape: `status`, `data`, `meta`, `error`
+- [x] `abi.projection_record_shape`: define the canonical projection record shape: `status`, `data`, `meta`, `error`
 - [ ] `abi.projection_keys_fixed`: define deterministic `projection_key` rules for page, widget, modal, panel, platform-emitted, and node-scoped projections
-- [ ] `abi.client_subscription_shape`: define the browser-written client subscription record shape
+- [x] `abi.client_subscription_shape`: define the browser-written client subscription record shape
 - [ ] `abi.node_aware_yjs_envelope`: define the node-scoped top-level Yjs envelope so shared subnet state can preserve multiple node emitters
-- [ ] `abi.pinned_consumer_semantics`: define `pinned` consumer semantics
+- [x] `abi.pinned_consumer_semantics`: define `pinned` consumer semantics
 
 Next active projection task:
 
@@ -122,17 +122,20 @@ Next active projection task:
 ### 4. Client Subscription Runtime
 
 - [ ] `client.subscription_registry`: add browser-side projection subscription registry support
-- [ ] `client.full_subscription_overwrite`: make each client write its full active subscription set on change
+- [x] `client.full_subscription_overwrite`: make each client write its full active subscription set on change
 - [ ] `client.surface_lifecycle_to_subscriptions`: ensure modal open/close, widget mount/unmount, and visibility changes update the client subscription record
-- [ ] `client.multi_projection_support`: add support for multiple active projections in one webspace
+- [x] `client.multi_projection_support`: add support for multiple active projections in one webspace
 - [ ] `client.node_multiplicity_ready`: prepare the browser to consume node multiplicity from shared Yjs instead of assuming one anonymous node view
-- [ ] `client.soft_session_sanitation`: keep stale-client cleanup as a soft client/session sanitation mechanism, not as projection activity logic
+- [x] `client.soft_session_sanitation`: keep stale-client cleanup as a soft client/session sanitation mechanism, not as projection activity logic
 
 Current status:
 
 - node-aware stream receiver hints and compatibility-era node ownership metadata
   already exist in the browser/runtime path
-- a general browser-written subscription registry is still not implemented
+- a server-side browser demand registry, full-overwrite API, and browser-state
+  mapper are implemented
+- direct Angular client hookup remains pending because the client submodule is
+  not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before
   the shared subscription shape is locked
 

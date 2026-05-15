@@ -227,21 +227,21 @@ Actions:
   shapes, review checklist, and completion definition.
 - [x] Update roadmap progress for named-entity contract/runtime ABI and
   eventbus hot-topic guardrails.
-- [ ] Define the minimal shared event envelope and compatibility rules for
+- [x] Define the minimal shared event envelope and compatibility rules for
   existing `Event(type, payload, source, ts)` producers.
-- [ ] Bind `STATUS-*` work to the platform-emitter phase so status cards do not
+- [x] Bind `STATUS-*` work to the platform-emitter phase so status cards do not
   become a separate monitoring-only architecture.
 
 #### OEM-002: Lock projection ABI before client/runtime migration
 
-Status: helper ABI implemented; runtime registry remains planned.
+Status: helper ABI and server-side browser demand runtime implemented; shared dispatcher remains planned.
 
 Actions:
 
-- [ ] Define canonical projection record fields: `status`, `data`, `meta`,
+- [x] Define canonical projection record fields: `status`, `data`, `meta`,
   `error`, lifecycle timestamps, version/fingerprint, access metadata, and
   source ownership.
-- [ ] Define browser-written subscription records for page, widget, modal, and
+- [x] Define browser-written subscription records for page, widget, modal, and
   pinned panel consumers.
 - [ ] Define compatibility rules for legacy Yjs branches during migration.
 - [ ] Use `registry.named_entities` and planned status cards as reference

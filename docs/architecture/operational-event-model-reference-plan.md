@@ -94,6 +94,13 @@ Goal:
 Make browser projection demand explicit and stable across page, widget, modal,
 and pinned-panel consumers.
 
+Progress:
+
+- server-side demand registry, full-overwrite API, browser-state mapper, and
+  stale-session marking are implemented
+- direct browser client hookup remains because the Angular client submodule is
+  not present in this checkout
+
 Required artifacts:
 
 - browser-side subscription registry
@@ -325,9 +332,9 @@ Use this checklist for every implementation slice touching the event model.
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code added; emitter registry remains |
 | Projection record ABI | Canonical record shape | Helper code added |
-| Browser subscription ABI | Full-overwrite demand records | Helper code added; runtime registry remains |
+| Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
-| Client demand runtime | Page/widget/modal/pinned consumers | Open |
+| Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Open |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Open |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by previous rows |
