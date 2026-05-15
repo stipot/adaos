@@ -99,3 +99,52 @@ def test_projection_demand_api_get_and_delete_snapshot() -> None:
     assert delete_resp.status_code == 200
     assert delete_resp.json()["deleted"] is True
     assert delete_resp.json()["snapshot"]["consumer_total"] == 0
+
+
+def test_projection_demand_api_accepts_browser_state_mapping() -> None:
+    client = _make_client()
+
+    resp = client.post(
+        "/api/node/projection-demand/browser-state",
+        json={
+            "client_id": "browser-1",
+            "device_id": "desktop",
+            "session_id": "session-1",
+            "webspace_id": "desktop",
+            "role": "operator",
+            "updated_at": 10.0,
+            "page": {
+                "id": "infrascope",
+                "projectionKeys": ["projection:hub/overview"],
+            },
+            "widgets": [
+                {
+                    "id": "infra-state",
+                    "projection_key": "status-card:runtime",
+                }
+            ],
+            "modals": [
+                {
+                    "id": "runtime-details",
+                    "projection_key": "projection:hub/object-inspector",
+                    "visible": False,
+                }
+            ],
+            "pinnedPanels": [
+                {
+                    "id": "runtime",
+                    "projection_key": "status-card:runtime",
+                }
+            ],
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["record"]["subscriptions"][0]["consumer_id"] == "page:infrascope"
+    assert payload["record"]["subscriptions"][1]["consumer_id"] == "widget:infra-state"
+    assert payload["record"]["subscriptions"][2]["visibility"] == "hidden"
+    assert payload["record"]["subscriptions"][3]["consumer_kind"] == "pinned-panel"
+    assert payload["record"]["subscriptions"][3]["pinned"] is True
+    assert payload["snapshot"]["projection_total"] == 3
+    assert payload["snapshot"]["consumer_total"] == 4

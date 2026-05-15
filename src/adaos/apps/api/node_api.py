@@ -48,6 +48,7 @@ from adaos.services.projection_demand import (
     projection_demand_snapshot,
     write_client_subscription_record,
 )
+from adaos.services.projection_demand_mapper import build_browser_projection_demand_record
 from adaos.services.operations import submit_install_operation
 from adaos.services.scenario.webspace_runtime import (
     WebspaceService,
@@ -1124,6 +1125,20 @@ class ClientProjectionDemandRequest(BaseModel):
     updated_at: float | None = None
 
 
+class BrowserProjectionDemandStateRequest(BaseModel):
+    client_id: str = Field(..., min_length=1)
+    device_id: str = ""
+    session_id: str = Field(..., min_length=1)
+    webspace_id: str | None = None
+    role: str = "operator"
+    page: dict[str, Any] | str | None = None
+    widgets: list[dict[str, Any] | str] = Field(default_factory=list)
+    modals: list[dict[str, Any] | str] = Field(default_factory=list)
+    pinnedPanels: list[dict[str, Any] | str] = Field(default_factory=list)
+    pinned_panels: list[dict[str, Any] | str] | None = None
+    updated_at: float | None = None
+
+
 def _raise_400(detail: str) -> None:
     raise HTTPException(status_code=400, detail=detail)
 
@@ -1660,6 +1675,31 @@ async def node_projection_demand_write(payload: ClientProjectionDemandRequest) -
         )
     except ValueError as exc:
         _raise_400(str(exc))
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "record": record.to_dict(),
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+    }
+
+
+@router.post("/projection-demand/browser-state", dependencies=[Depends(require_token)])
+async def node_projection_demand_write_browser_state(payload: BrowserProjectionDemandStateRequest) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(payload.webspace_id)
+    record = build_browser_projection_demand_record(
+        client_id=payload.client_id,
+        device_id=payload.device_id,
+        session_id=payload.session_id,
+        webspace_id=target_webspace_id,
+        role=payload.role,
+        page=payload.page,
+        widgets=payload.widgets,
+        modals=payload.modals,
+        pinned_panels=payload.pinned_panels if payload.pinned_panels is not None else payload.pinnedPanels,
+        updated_at=payload.updated_at,
+    )
+    record = write_client_subscription_record(record)
     return {
         "ok": True,
         "accepted": True,
