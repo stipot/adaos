@@ -234,7 +234,7 @@ Actions:
 
 #### OEM-002: Lock projection ABI before client/runtime migration
 
-Status: helper ABI and server-side browser demand runtime implemented; shared dispatcher remains planned.
+Status: helper ABI, server-side browser demand runtime, and base shared dispatcher implemented; projection handlers remain planned.
 
 Actions:
 
@@ -246,6 +246,8 @@ Actions:
 - [ ] Define compatibility rules for legacy Yjs branches during migration.
 - [ ] Use `registry.named_entities` and planned status cards as reference
   examples before Infrascope migration.
+- [x] Add base demanded-projection dispatcher with per-webspace selection,
+  lifecycle state, pressure counters, and inspection API.
 
 #### OEM-003: Keep heavy-skill pilots behind platform-emitter validation
 

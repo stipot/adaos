@@ -125,6 +125,14 @@ Goal:
 Create the reusable runtime path for event-driven semantic updates and demanded
 projection refresh.
 
+Progress:
+
+- base dispatcher contract, per-webspace demand selection, no-cross-webspace
+  tests, lifecycle state tracking, pressure counters, and inspection API are
+  implemented
+- projection-family handlers and Yjs record writes remain for the platform
+  emitter pilot
+
 Required artifacts:
 
 - dispatcher contract for `event -> in-memory update -> demanded refresh`
@@ -335,7 +343,7 @@ Use this checklist for every implementation slice touching the event model.
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper added; browser client hookup remains |
-| Shared dispatcher | Per-webspace demanded refresh | Open |
+| Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API added; projection handlers remain |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Open |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by previous rows |
 

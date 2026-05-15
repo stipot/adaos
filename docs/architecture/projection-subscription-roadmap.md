@@ -141,19 +141,21 @@ Current status:
 
 ### 5. Skill, Scenario, and Platform Dispatcher
 
-- [ ] `dispatcher.shared_pattern`: add a shared dispatcher pattern for `domain/core/platform event -> in-memory update -> demanded projection refresh`
-- [ ] `dispatcher.per_webspace_refresh`: make demanded projection refresh run per webspace
-- [ ] `dispatcher.no_cross_webspace_churn`: prevent one webspace from forcing writes into unrelated webspaces
+- [x] `dispatcher.shared_pattern`: add a shared dispatcher pattern for `domain/core/platform event -> in-memory update -> demanded projection refresh`
+- [x] `dispatcher.per_webspace_refresh`: make demanded projection refresh run per webspace
+- [x] `dispatcher.no_cross_webspace_churn`: prevent one webspace from forcing writes into unrelated webspaces
 - [ ] `dispatcher.memory_richer_than_yjs`: allow skills and platform services to keep richer semantic caches in memory than they publish into Yjs
-- [ ] `dispatcher.lifecycle_exposed`: expose projection lifecycle transitions through the shared projection record
-- [ ] `dispatcher.pressure_observable`: preserve eventbus/rebuild/stream pressure counters when dispatcher coalesces or suppresses work
+- [x] `dispatcher.lifecycle_exposed`: expose projection lifecycle transitions through the shared projection record
+- [x] `dispatcher.pressure_observable`: preserve eventbus/rebuild/stream pressure counters when dispatcher coalesces or suppresses work
 
 Current status:
 
 - selected eventbus hot topics are already bounded/coalesced as incident
   guardrails
-- the dispatcher still needs to own demanded projection refresh, not merely
-  reduce duplicate async work
+- the base dispatcher now owns demanded refresh selection and exposes lifecycle
+  and pressure state through API
+- projection-family handlers and Yjs projection record writes remain the next
+  integration step
 
 ### 6. Yjs Granularity and Client Adapter
 
