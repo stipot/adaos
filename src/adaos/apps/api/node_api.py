@@ -43,6 +43,11 @@ from adaos.services.reliability import (
     reliability_snapshot,
     yjs_sync_runtime_snapshot,
 )
+from adaos.services.projection_demand import (
+    delete_client_subscription_record,
+    projection_demand_snapshot,
+    write_client_subscription_record,
+)
 from adaos.services.operations import submit_install_operation
 from adaos.services.scenario.webspace_runtime import (
     WebspaceService,
@@ -1109,6 +1114,16 @@ class UiRuntimeDiagnosticsRequest(BaseModel):
     events: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ClientProjectionDemandRequest(BaseModel):
+    client_id: str = Field(..., min_length=1)
+    device_id: str = ""
+    session_id: str = Field(..., min_length=1)
+    webspace_id: str | None = None
+    role: str = "operator"
+    subscriptions: list[dict[str, Any]] = Field(default_factory=list)
+    updated_at: float | None = None
+
+
 def _raise_400(detail: str) -> None:
     raise HTTPException(status_code=400, detail=detail)
 
@@ -1612,6 +1627,67 @@ async def node_ui_runtime_diagnostics(payload: UiRuntimeDiagnosticsRequest) -> d
         {"webspace_id": payload.webspace_id, "events": payload.events},
         webspace_id=payload.webspace_id,
     )
+
+
+@router.get("/projection-demand", dependencies=[Depends(require_token)])
+async def node_projection_demand_snapshot(
+    webspace_id: str | None = None,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return projection_demand_snapshot(
+        webspace_id=target_webspace_id,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+    )
+
+
+@router.post("/projection-demand/client", dependencies=[Depends(require_token)])
+async def node_projection_demand_write(payload: ClientProjectionDemandRequest) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(payload.webspace_id)
+    try:
+        record = write_client_subscription_record(
+            {
+                "client_id": payload.client_id,
+                "device_id": payload.device_id,
+                "session_id": payload.session_id,
+                "webspace_id": target_webspace_id,
+                "role": payload.role,
+                "subscriptions": payload.subscriptions,
+                "updated_at": payload.updated_at or time.time(),
+            }
+        )
+    except ValueError as exc:
+        _raise_400(str(exc))
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "record": record.to_dict(),
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+    }
+
+
+@router.delete("/projection-demand/client/{client_id}/{session_id}", dependencies=[Depends(require_token)])
+async def node_projection_demand_delete(
+    client_id: str,
+    session_id: str,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    deleted = delete_client_subscription_record(
+        client_id=client_id,
+        session_id=session_id,
+        webspace_id=target_webspace_id,
+    )
+    return {
+        "ok": True,
+        "accepted": True,
+        "deleted": deleted,
+        "webspace_id": target_webspace_id,
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+    }
 
 
 @router.post("/infrastate/action", dependencies=[Depends(require_token)])
