@@ -39,21 +39,51 @@ def _make_client() -> TestClient:
     return TestClient(app)
 
 
-def test_projection_dispatcher_snapshot_endpoint_is_empty_by_default() -> None:
+def test_status_card_api_publishes_and_reads_projection() -> None:
     client = _make_client()
 
-    resp = client.get("/api/node/projection-dispatcher")
+    publish_resp = client.post(
+        "/api/node/status-cards",
+        json={
+            "id": "runtime",
+            "owner": "core:runtime",
+            "kind": "runtime",
+            "scope": {"node_id": "node-a"},
+            "webspace_id": "desktop",
+            "status": "running",
+            "summary": "Runtime ready",
+            "updated_at": 10.0,
+        },
+    )
+    projection_resp = client.get(
+        "/api/node/status-cards/runtime/projection",
+        params={"webspace_id": "desktop"},
+    )
 
-    assert resp.status_code == 200
-    payload = resp.json()
-    assert payload["ok"] is True
-    assert payload["handler_total"] == 1
-    assert payload["handlers"] == ["status-card:*"]
-    assert payload["stats"]["incoming_total"] == 0
+    assert publish_resp.status_code == 200
+    assert publish_resp.json()["card"]["version"] == 1
+    assert projection_resp.status_code == 200
+    payload = projection_resp.json()
+    assert payload["record"]["status"] == "ready"
+    assert payload["record"]["data"]["summary"] == "Runtime ready"
+    assert payload["record"]["meta"]["projection_key"] == "status-card:runtime"
 
 
-def test_projection_dispatcher_dispatch_endpoint_selects_demanded_projection() -> None:
+def test_status_card_api_dispatches_materialized_demand() -> None:
     client = _make_client()
+    client.post(
+        "/api/node/status-cards",
+        json={
+            "id": "runtime",
+            "owner": "core:runtime",
+            "kind": "runtime",
+            "scope": {"node_id": "node-a"},
+            "webspace_id": "desktop",
+            "status": "running",
+            "summary": "Runtime ready",
+            "updated_at": 10.0,
+        },
+    )
     write_client_subscription_record(
         make_client_subscription_record(
             client_id="browser-1",
@@ -82,10 +112,6 @@ def test_projection_dispatcher_dispatch_endpoint_selects_demanded_projection() -
 
     assert resp.status_code == 200
     payload = resp.json()
-    assert payload["ok"] is True
-    assert payload["report"]["selected"][0]["projection_key"] == "status-card:runtime"
-    assert payload["report"]["refreshed"][0]["status"] == "unavailable"
-    assert payload["report"]["refreshed"][0]["reason"] == "status_card_missing"
-    assert payload["dispatcher"]["stats"]["incoming_total"] == 1
+    assert payload["report"]["refreshed"][0]["status"] == "ready"
+    assert payload["report"]["refreshed"][0]["record"]["data"]["status"] == "online"
     assert payload["dispatcher"]["stats"]["refreshed_total"] == 1
-    assert payload["dispatcher"]["lifecycle"][0]["status"] == "unavailable"

@@ -53,6 +53,12 @@ from adaos.services.projection_dispatcher import (
     dispatch_demanded_projection_refresh,
     projection_dispatcher_snapshot,
 )
+from adaos.services.status_card_registry import (
+    ensure_status_card_dispatcher_handler,
+    publish_status_card,
+    status_card_projection_record,
+    status_card_registry_snapshot,
+)
 from adaos.services.operations import submit_install_operation
 from adaos.services.scenario.webspace_runtime import (
     WebspaceService,
@@ -1152,6 +1158,21 @@ class ProjectionDispatchRequest(BaseModel):
     projection_keys: list[str] | None = None
 
 
+class StatusCardPublishRequest(BaseModel):
+    id: str = Field(..., min_length=1)
+    owner: str = Field(..., min_length=1)
+    kind: str = Field(..., min_length=1)
+    scope: dict[str, Any] | str | None = Field(default_factory=dict)
+    status: str = Field(..., min_length=1)
+    summary: str = Field(..., min_length=1)
+    webspace_id: str | None = None
+    severity: str | None = None
+    ttl_ms: int | None = None
+    details_ref: dict[str, Any] | None = None
+    incident_id: str | None = None
+    updated_at: float | None = None
+
+
 def _raise_400(detail: str) -> None:
     raise HTTPException(status_code=400, detail=detail)
 
@@ -1743,13 +1764,70 @@ async def node_projection_demand_delete(
     }
 
 
+@router.get("/status-cards", dependencies=[Depends(require_token)])
+async def node_status_cards_snapshot(webspace_id: str | None = None) -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return status_card_registry_snapshot(webspace_id=target_webspace_id)
+
+
+@router.post("/status-cards", dependencies=[Depends(require_token)])
+async def node_status_cards_publish(payload: StatusCardPublishRequest) -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
+    target_webspace_id = _coerce_node_webspace_id(payload.webspace_id)
+    try:
+        card = publish_status_card(
+            id=payload.id,
+            owner=payload.owner,
+            kind=payload.kind,
+            scope=payload.scope if payload.scope is not None else {},
+            webspace_id=target_webspace_id,
+            status=payload.status,
+            summary=payload.summary,
+            severity=payload.severity,
+            ttl_ms=payload.ttl_ms,
+            details_ref=payload.details_ref,
+            incident_id=payload.incident_id,
+            updated_at=payload.updated_at,
+        )
+    except ValueError as exc:
+        _raise_400(str(exc))
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "card": card.to_dict(),
+        "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
+    }
+
+
+@router.get("/status-cards/{card_id}/projection", dependencies=[Depends(require_token)])
+async def node_status_card_projection(card_id: str, webspace_id: str | None = None) -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    record = status_card_projection_record(
+        card_id=card_id,
+        webspace_id=target_webspace_id,
+        access={"visibility": "operator"},
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="status_card_not_found")
+    return {
+        "ok": True,
+        "webspace_id": target_webspace_id,
+        "record": record.to_dict(),
+    }
+
+
 @router.get("/projection-dispatcher", dependencies=[Depends(require_token)])
 async def node_projection_dispatcher_snapshot() -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
     return projection_dispatcher_snapshot()
 
 
 @router.post("/projection-dispatcher/dispatch", dependencies=[Depends(require_token)])
 async def node_projection_dispatcher_dispatch(payload: ProjectionDispatchRequest) -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
     event = Event(
         type=payload.type,
         payload=payload.payload,
