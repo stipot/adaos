@@ -183,6 +183,8 @@ Current status:
   than reported as `no_handler`
 - `/api/node/status-cards` provides a thin publish/read surface for materialized
   status-card projection records
+- `/api/node/status-cards` materializes the built-in runtime lifecycle card by
+  default, and `/api/node/status-cards/runtime/refresh` refreshes it explicitly
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot

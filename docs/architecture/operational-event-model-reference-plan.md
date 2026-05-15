@@ -176,6 +176,8 @@ Current status:
 
 - materialized status-card registry is implemented in the node runtime
 - `/api/node/status-cards` publishes and reads status-card projection records
+- runtime lifecycle is now emitted as the built-in `status-card:runtime`
+  platform card
 - demanded dispatcher refreshes `status-card:*` subscriptions through the shared
   projection ABI
 - missing cards surface as `unavailable`; expired cards surface as `stale`
@@ -348,13 +350,13 @@ Use this checklist for every implementation slice touching the event model.
 | Event taxonomy | Stable vocabulary | Complete |
 | Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
-| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code and materialized registry added |
+| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, and runtime card added |
 | Projection record ABI | Canonical record shape | Helper code added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API and status-card wildcard handler added |
-| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Status-card pilot in progress |
+| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by previous rows |
 
 ## Completion Definition

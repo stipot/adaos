@@ -1581,8 +1581,8 @@ Actions:
 
 #### STATUS-002: Add a materialized status registry/service
 
-Status: in progress. First in-memory registry, status-card dispatcher handler,
-and Node API surface are implemented.
+Status: in progress. First in-memory registry, runtime status-card emitter,
+status-card dispatcher handler, and Node API surface are implemented.
 
 Expected behavior:
 
@@ -1606,9 +1606,12 @@ Implemented artifacts:
 
 - `adaos.services.status_card_registry` stores materialized status cards per
   webspace and card id.
+- `adaos.services.runtime_status_cards` publishes the built-in runtime lifecycle
+  card as `status-card:runtime`.
 - `status-card:*` dispatcher handler maps browser demand to canonical projection
   records.
-- `/api/node/status-cards` publishes and reads thin status-card projections.
+- `/api/node/status-cards` publishes and reads thin status-card projections and
+  materializes the runtime card by default.
 - Missing demanded cards are reported as `unavailable`; expired cards are
   reported as `stale`.
 
