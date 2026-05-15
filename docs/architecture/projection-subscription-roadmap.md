@@ -154,8 +154,9 @@ Current status:
   guardrails
 - the base dispatcher now owns demanded refresh selection and exposes lifecycle
   and pressure state through API
-- projection-family handlers and Yjs projection record writes remain the next
-  integration step
+- wildcard projection-family handlers are supported; `status-card:*` is now
+  backed by the materialized status-card registry
+- Yjs projection record writes remain the next integration step
 
 ### 6. Yjs Granularity and Client Adapter
 
@@ -168,13 +169,23 @@ Current status:
 
 ### 7. Early Pilot Sequence
 
-- [ ] `pilot.status_cards_first`: implement status cards as the first small platform-emitter projection family
+- [x] `pilot.status_cards_first`: implement status cards as the first small platform-emitter projection family
 - [ ] `pilot.platform_surfaces_first`: prepare `web_desktop` and the shared platform surfaces first: notifications, diagnostics, workspace manager, and related modals
-- [ ] `pilot.platform_emitter_validated`: validate platform-as-emitter semantics before migrating one heavy skill
+- [x] `pilot.platform_emitter_validated`: validate platform-as-emitter semantics before migrating one heavy skill
 - [ ] `pilot.infrascope_after_prereqs`: migrate `Infrascope` only after the core/runtime and client projection contracts are in place
 - [ ] `pilot.infrastate_aligned`: align `infrastate`-style shared operational overlays with the same contract
 - [ ] `pilot.dev_scenario_followup`: choose one dev-oriented scenario such as `prompt_engineer_scenario` as the first non-operator follow-up
 - [ ] `pilot.simple_skills_deferred`: postpone low-churn simple skills until the core contract and adapter behavior are stable
+
+Current status:
+
+- `status-card:*` demand is now refreshed through the shared dispatcher rather
+  than reported as `no_handler`
+- `/api/node/status-cards` provides a thin publish/read surface for materialized
+  status-card projection records
+- missing cards return `unavailable`; TTL-expired cards return `stale`, so the
+  operator-visible lifecycle semantics are exercised before the heavy skill
+  pilot
 
 ### 8. Infrascope Migration Slice
 

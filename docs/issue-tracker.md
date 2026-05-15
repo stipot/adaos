@@ -1555,7 +1555,7 @@ Design direction:
 
 #### STATUS-001: Define the shared status card contract
 
-Status: planned.
+Status: implemented for the shared ABI and first runtime pilot.
 
 Target shape:
 
@@ -1581,7 +1581,8 @@ Actions:
 
 #### STATUS-002: Add a materialized status registry/service
 
-Status: planned.
+Status: in progress. First in-memory registry, status-card dispatcher handler,
+and Node API surface are implemented.
 
 Expected behavior:
 
@@ -1593,13 +1594,23 @@ Expected behavior:
 
 Actions:
 
-- [ ] Add a core status registry service.
-- [ ] Add per-card fingerprinting that ignores volatile fields such as
+- [x] Add a core status registry service.
+- [x] Add per-card fingerprinting that ignores volatile fields such as
   `updated_at`, `_age_s`, and `_ago_s`.
 - [ ] Add TTL/staleness sweep.
 - [ ] Add compact registry diagnostics: card count, changed count, stale count,
   and last publish latency.
-- [ ] Add unit tests for dedupe, versioning, TTL expiry, and owner scoping.
+- [x] Add unit tests for dedupe, versioning, TTL expiry, and owner scoping.
+
+Implemented artifacts:
+
+- `adaos.services.status_card_registry` stores materialized status cards per
+  webspace and card id.
+- `status-card:*` dispatcher handler maps browser demand to canonical projection
+  records.
+- `/api/node/status-cards` publishes and reads thin status-card projections.
+- Missing demanded cards are reported as `unavailable`; expired cards are
+  reported as `stale`.
 
 #### STATUS-003: Add skill-facing SDK helpers
 

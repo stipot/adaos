@@ -130,8 +130,9 @@ Progress:
 - base dispatcher contract, per-webspace demand selection, no-cross-webspace
   tests, lifecycle state tracking, pressure counters, and inspection API are
   implemented
-- projection-family handlers and Yjs record writes remain for the platform
-  emitter pilot
+- projection-family wildcard handlers are implemented; `status-card:*` is the
+  first platform handler family
+- Yjs projection record writes remain for later client adapter integration
 
 Required artifacts:
 
@@ -170,6 +171,15 @@ Required artifacts:
 - operator-visible stale/error semantics
 - tests for versioning, fingerprinting, dedupe, TTL/staleness, and access
   metadata
+
+Current status:
+
+- materialized status-card registry is implemented in the node runtime
+- `/api/node/status-cards` publishes and reads status-card projection records
+- demanded dispatcher refreshes `status-card:*` subscriptions through the shared
+  projection ABI
+- missing cards surface as `unavailable`; expired cards surface as `stale`
+- push/delta consumption and Yjs record writes remain outside this first pilot
 
 Exit criteria:
 
@@ -338,13 +348,13 @@ Use this checklist for every implementation slice touching the event model.
 | Event taxonomy | Stable vocabulary | Complete |
 | Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
-| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code added; emitter registry remains |
+| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code and materialized registry added |
 | Projection record ABI | Canonical record shape | Helper code added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper added; browser client hookup remains |
-| Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API added; projection handlers remain |
-| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Open |
+| Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API and status-card wildcard handler added |
+| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Status-card pilot in progress |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by previous rows |
 
 ## Completion Definition
