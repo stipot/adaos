@@ -255,6 +255,7 @@ def make_status_card_projection_record(
     source: str | None = None,
     source_authority: str | None = None,
     access: Mapping[str, Any] | None = None,
+    status: str | ProjectionStatus = ProjectionStatus.READY,
     lifecycle_reason: str | None = None,
     previous: Mapping[str, Any] | ProjectionRecord | None = None,
 ) -> ProjectionRecord:
@@ -263,7 +264,7 @@ def make_status_card_projection_record(
         kind=STATUS_CARD_PROJECTION_KIND,
         data=card.to_dict(),
         webspace_id=str(webspace_id or card.webspace_id or ""),
-        status=ProjectionStatus.READY,
+        status=status,
         node_id=node_id,
         version=card.version,
         fingerprint=card.fingerprint,

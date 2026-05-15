@@ -154,3 +154,26 @@ def test_status_card_projection_record_aligns_with_projection_abi() -> None:
     assert payload["meta"]["version"] == card.version
     assert payload["meta"]["changed_at"] == card.changed_at
     assert payload["meta"]["access"] == {"visibility": "operator"}
+
+
+def test_status_card_projection_record_can_mark_stale_lifecycle() -> None:
+    card = make_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        updated_at=10.0,
+    )
+
+    record = make_status_card_projection_record(
+        card,
+        status="stale",
+        lifecycle_reason="ttl_expired",
+    )
+    payload = record.to_dict()
+
+    assert payload["status"] == "stale"
+    assert payload["meta"]["lifecycle_reason"] == "ttl_expired"
