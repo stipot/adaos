@@ -178,7 +178,17 @@ def projection_dispatcher_snapshot() -> dict[str, Any]:
 
 def _handler_for(projection_key: str) -> ProjectionRefreshHandler | None:
     with _LOCK:
-        return _HANDLERS.get(projection_key)
+        exact = _HANDLERS.get(projection_key)
+        if exact is not None:
+            return exact
+        wildcard_matches = [
+            (token[:-1], handler)
+            for token, handler in _HANDLERS.items()
+            if token.endswith("*") and projection_key.startswith(token[:-1])
+        ]
+        if not wildcard_matches:
+            return None
+        return max(wildcard_matches, key=lambda item: len(item[0]))[1]
 
 
 def _try_begin_refresh(context: ProjectionRefreshContext) -> bool:

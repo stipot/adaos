@@ -16,12 +16,18 @@ def setup_function() -> None:
     clear_projection_dispatcher()
 
 
-def _write_demand(webspace_id: str, projection_key: str, *, consumer_id: str = "widget:runtime") -> None:
+def _write_demand(
+    webspace_id: str,
+    projection_key: str,
+    *,
+    consumer_id: str = "widget:runtime",
+    session_id: str = "session-1",
+) -> None:
     write_client_subscription_record(
         make_client_subscription_record(
             client_id=f"browser-{webspace_id}",
             device_id="desktop",
-            session_id="session-1",
+            session_id=session_id,
             webspace_id=webspace_id,
             role="operator",
             updated_at=10.0,
@@ -124,6 +130,42 @@ def test_dispatcher_records_ready_lifecycle_and_pressure_stats() -> None:
     assert snapshot["stats"]["refreshed_total"] == 1
     assert snapshot["lifecycle"][0]["status"] == "ready"
     assert snapshot["lifecycle"][0]["projection_key"] == "status-card:runtime"
+
+
+def test_dispatcher_uses_wildcard_family_handler() -> None:
+    _write_demand("desktop", "status-card:runtime")
+    _write_demand("desktop", "status-card:link", session_id="session-2")
+    handled: list[str] = []
+
+    def _handler(context):
+        handled.append(context.projection_key)
+        return {"status": "ready", "data": {"projection_key": context.projection_key}}
+
+    register_projection_refresh_handler("status-card:*", _handler)
+
+    event = Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0)
+    report = _run(dispatch_demanded_projection_refresh(event, now=20.0))
+
+    assert handled == ["status-card:link", "status-card:runtime"]
+    assert [item.projection_key for item in report.refreshed] == ["status-card:link", "status-card:runtime"]
+
+
+def test_dispatcher_prefers_exact_handler_over_wildcard_family_handler() -> None:
+    _write_demand("desktop", "status-card:runtime")
+
+    def _family_handler(_context):
+        return {"status": "ready", "data": {"handler": "family"}}
+
+    def _exact_handler(_context):
+        return {"status": "ready", "data": {"handler": "exact"}}
+
+    register_projection_refresh_handler("status-card:*", _family_handler)
+    register_projection_refresh_handler("status-card:runtime", _exact_handler)
+
+    event = Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0)
+    report = _run(dispatch_demanded_projection_refresh(event, now=20.0))
+
+    assert report.refreshed[0].record["data"]["handler"] == "exact"
 
 
 def test_dispatcher_records_handler_errors_without_crashing() -> None:
