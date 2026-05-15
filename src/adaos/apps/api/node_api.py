@@ -59,6 +59,7 @@ from adaos.services.status_card_registry import (
     status_card_projection_record,
     status_card_registry_snapshot,
 )
+from adaos.services.runtime_status_cards import publish_runtime_status_card
 from adaos.services.operations import submit_install_operation
 from adaos.services.scenario.webspace_runtime import (
     WebspaceService,
@@ -1765,10 +1766,37 @@ async def node_projection_demand_delete(
 
 
 @router.get("/status-cards", dependencies=[Depends(require_token)])
-async def node_status_cards_snapshot(webspace_id: str | None = None) -> dict[str, Any]:
+async def node_status_cards_snapshot(
+    webspace_id: str | None = None,
+    include_runtime: bool = True,
+) -> dict[str, Any]:
     ensure_status_card_dispatcher_handler()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    if include_runtime:
+        publish_runtime_status_card(
+            webspace_id=target_webspace_id,
+            node_id=_local_node_id(),
+            lifecycle=runtime_lifecycle_snapshot(),
+        )
     return status_card_registry_snapshot(webspace_id=target_webspace_id)
+
+
+@router.post("/status-cards/runtime/refresh", dependencies=[Depends(require_token)])
+async def node_status_cards_refresh_runtime(webspace_id: str | None = None) -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    card = publish_runtime_status_card(
+        webspace_id=target_webspace_id,
+        node_id=_local_node_id(),
+        lifecycle=runtime_lifecycle_snapshot(),
+    )
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "card": card.to_dict(),
+        "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
+    }
 
 
 @router.post("/status-cards", dependencies=[Depends(require_token)])

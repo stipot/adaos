@@ -69,6 +69,31 @@ def test_status_card_api_publishes_and_reads_projection() -> None:
     assert payload["record"]["meta"]["projection_key"] == "status-card:runtime"
 
 
+def test_status_card_api_snapshot_includes_runtime_card_by_default() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/status-cards", params={"webspace_id": "desktop"})
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["card_total"] == 1
+    assert payload["cards"][0]["id"] == "runtime"
+    assert payload["records"][0]["meta"]["projection_key"] == "status-card:runtime"
+    assert payload["stats"]["publish_total"] == 1
+
+
+def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
+    client = _make_client()
+
+    resp = client.post("/api/node/status-cards/runtime/refresh", params={"webspace_id": "desktop"})
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["card"]["id"] == "runtime"
+    assert payload["card"]["owner"] == "core:runtime"
+    assert payload["snapshot"]["projection_total"] == 1
+
+
 def test_status_card_api_dispatches_materialized_demand() -> None:
     client = _make_client()
     client.post(
