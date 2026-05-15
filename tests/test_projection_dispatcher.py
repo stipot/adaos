@@ -6,6 +6,7 @@ from adaos.services.projection_dispatcher import (
     clear_projection_dispatcher,
     demanded_projection_refresh_contexts,
     dispatch_demanded_projection_refresh,
+    projection_dispatcher_snapshot,
     register_projection_refresh_handler,
 )
 
@@ -83,6 +84,9 @@ def test_dispatcher_skips_demand_without_registered_handler() -> None:
     assert len(report.skipped) == 1
     assert report.skipped[0].projection_key == "projection:missing"
     assert report.skipped[0].reason == "no_handler"
+    snapshot = projection_dispatcher_snapshot()
+    assert snapshot["stats"]["skipped_total"] == 1
+    assert snapshot["lifecycle"][0]["status"] == "stale"
 
 
 def test_dispatcher_can_filter_projection_keys() -> None:
@@ -99,6 +103,67 @@ def test_dispatcher_can_filter_projection_keys() -> None:
     assert [(item.webspace_id, item.projection_key) for item in contexts] == [
         ("desktop", "projection:hub/overview")
     ]
+
+
+def test_dispatcher_records_ready_lifecycle_and_pressure_stats() -> None:
+    _write_demand("desktop", "status-card:runtime")
+
+    def _handler(context):
+        return {"status": "ready", "data": {"projection_key": context.projection_key}}
+
+    register_projection_refresh_handler("status-card:runtime", _handler)
+
+    event = Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0)
+    report = _run(dispatch_demanded_projection_refresh(event, now=20.0))
+    snapshot = projection_dispatcher_snapshot()
+
+    assert len(report.refreshed) == 1
+    assert report.refreshed[0].status == "ready"
+    assert snapshot["stats"]["incoming_total"] == 1
+    assert snapshot["stats"]["selected_total"] == 1
+    assert snapshot["stats"]["refreshed_total"] == 1
+    assert snapshot["lifecycle"][0]["status"] == "ready"
+    assert snapshot["lifecycle"][0]["projection_key"] == "status-card:runtime"
+
+
+def test_dispatcher_records_handler_errors_without_crashing() -> None:
+    _write_demand("desktop", "status-card:runtime")
+
+    def _handler(_context):
+        raise RuntimeError("boom")
+
+    register_projection_refresh_handler("status-card:runtime", _handler)
+
+    event = Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0)
+    report = _run(dispatch_demanded_projection_refresh(event, now=20.0))
+    snapshot = projection_dispatcher_snapshot()
+
+    assert len(report.errors) == 1
+    assert report.errors[0].status == "error"
+    assert snapshot["stats"]["error_total"] == 1
+    assert snapshot["lifecycle"][0]["status"] == "error"
+    assert "RuntimeError" in snapshot["lifecycle"][0]["error"]
+
+
+def test_dispatcher_coalesces_refresh_already_in_progress() -> None:
+    _write_demand("desktop", "status-card:runtime")
+    nested_reports = []
+    event = Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0)
+
+    async def _handler(_context):
+        nested_reports.append(await dispatch_demanded_projection_refresh(event, now=21.0))
+        return {"status": "ready"}
+
+    register_projection_refresh_handler("status-card:runtime", _handler)
+
+    report = _run(dispatch_demanded_projection_refresh(event, now=20.0))
+    snapshot = projection_dispatcher_snapshot()
+
+    assert len(report.refreshed) == 1
+    assert len(nested_reports) == 1
+    assert nested_reports[0].skipped[0].reason == "coalesced"
+    assert snapshot["stats"]["coalesced_total"] == 1
+    assert snapshot["stats"]["skipped_total"] == 1
 
 
 def _run(awaitable):

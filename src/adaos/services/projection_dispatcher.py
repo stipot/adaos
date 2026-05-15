@@ -53,6 +53,7 @@ class ProjectionDispatchReport:
     selected: tuple[ProjectionRefreshContext, ...] = field(default_factory=tuple)
     refreshed: tuple[ProjectionRefreshResult, ...] = field(default_factory=tuple)
     skipped: tuple[ProjectionRefreshResult, ...] = field(default_factory=tuple)
+    errors: tuple[ProjectionRefreshResult, ...] = field(default_factory=tuple)
     started_at: float = 0.0
     finished_at: float = 0.0
 
@@ -63,6 +64,7 @@ class ProjectionDispatchReport:
             "selected": [item.to_dict() for item in self.selected],
             "refreshed": [item.to_dict() for item in self.refreshed],
             "skipped": [item.to_dict() for item in self.skipped],
+            "errors": [item.to_dict() for item in self.errors],
             "started_at": self.started_at,
             "finished_at": self.finished_at,
         }
@@ -73,11 +75,27 @@ ProjectionRefreshHandler = Callable[[ProjectionRefreshContext], Any | Awaitable[
 
 _LOCK = RLock()
 _HANDLERS: dict[str, ProjectionRefreshHandler] = {}
+_ACTIVE_REFRESHES: set[tuple[str, str]] = set()
+_LIFECYCLE: dict[tuple[str, str], dict[str, Any]] = {}
+_STATS: dict[str, int] = {
+    "incoming_total": 0,
+    "selected_total": 0,
+    "refreshed_total": 0,
+    "skipped_total": 0,
+    "error_total": 0,
+    "coalesced_total": 0,
+    "dropped_total": 0,
+    "superseded_total": 0,
+}
 
 
 def clear_projection_dispatcher() -> None:
     with _LOCK:
         _HANDLERS.clear()
+        _ACTIVE_REFRESHES.clear()
+        _LIFECYCLE.clear()
+        for key in list(_STATS):
+            _STATS[key] = 0
 
 
 def register_projection_refresh_handler(
@@ -102,9 +120,80 @@ def registered_projection_refresh_handlers() -> list[str]:
         return sorted(_HANDLERS)
 
 
+def _inc_stat(name: str, amount: int = 1) -> None:
+    with _LOCK:
+        _STATS[name] = int(_STATS.get(name) or 0) + int(amount)
+
+
+def _set_lifecycle(
+    *,
+    context: ProjectionRefreshContext,
+    status: str,
+    reason: str | None = None,
+    error: str | None = None,
+    ts: float | None = None,
+) -> None:
+    now = float(ts if ts is not None else time.time())
+    with _LOCK:
+        previous = dict(_LIFECYCLE.get((context.webspace_id, context.projection_key)) or {})
+        changed_at = float(previous.get("changed_at") or now)
+        if previous.get("status") != status:
+            changed_at = now
+        _LIFECYCLE[(context.webspace_id, context.projection_key)] = {
+            "webspace_id": context.webspace_id,
+            "projection_key": context.projection_key,
+            "status": status,
+            "reason": reason,
+            "error": error,
+            "consumer_total": len(context.consumers),
+            "updated_at": now,
+            "changed_at": changed_at,
+            "event_type": context.event.type,
+        }
+
+
+def projection_dispatcher_snapshot() -> dict[str, Any]:
+    with _LOCK:
+        lifecycle = [
+            dict(value)
+            for _, value in sorted(_LIFECYCLE.items(), key=lambda item: (item[0][0], item[0][1]))
+        ]
+        stats = dict(_STATS)
+        active = [
+            {"webspace_id": webspace_id, "projection_key": projection_key}
+            for webspace_id, projection_key in sorted(_ACTIVE_REFRESHES)
+        ]
+        handlers = sorted(_HANDLERS)
+    return {
+        "ok": True,
+        "handlers": handlers,
+        "handler_total": len(handlers),
+        "active": active,
+        "active_total": len(active),
+        "lifecycle": lifecycle,
+        "stats": stats,
+        "updated_at": time.time(),
+    }
+
+
 def _handler_for(projection_key: str) -> ProjectionRefreshHandler | None:
     with _LOCK:
         return _HANDLERS.get(projection_key)
+
+
+def _try_begin_refresh(context: ProjectionRefreshContext) -> bool:
+    key = (context.webspace_id, context.projection_key)
+    with _LOCK:
+        if key in _ACTIVE_REFRESHES:
+            _STATS["coalesced_total"] = int(_STATS.get("coalesced_total") or 0) + 1
+            return False
+        _ACTIVE_REFRESHES.add(key)
+        return True
+
+
+def _end_refresh(context: ProjectionRefreshContext) -> None:
+    with _LOCK:
+        _ACTIVE_REFRESHES.discard((context.webspace_id, context.projection_key))
 
 
 def _event_scope_webspace_ids(event: EventEnvelope) -> list[str]:
@@ -223,9 +312,15 @@ async def dispatch_demanded_projection_refresh(
     )
     refreshed: list[ProjectionRefreshResult] = []
     skipped: list[ProjectionRefreshResult] = []
+    errors: list[ProjectionRefreshResult] = []
+    _inc_stat("incoming_total")
+    _inc_stat("selected_total", len(selected))
     for context in selected:
+        _set_lifecycle(context=context, status="pending", reason="demanded", ts=started_at)
         handler = _handler_for(context.projection_key)
         if handler is None:
+            _inc_stat("skipped_total")
+            _set_lifecycle(context=context, status="stale", reason="no_handler")
             skipped.append(
                 ProjectionRefreshResult(
                     projection_key=context.projection_key,
@@ -235,16 +330,47 @@ async def dispatch_demanded_projection_refresh(
                 )
             )
             continue
-        value = handler(context)
-        if inspect.isawaitable(value):
-            value = await value
-        refreshed.append(_result_from_handler_output(context, value))
+        if not _try_begin_refresh(context):
+            _inc_stat("skipped_total")
+            _set_lifecycle(context=context, status="stale", reason="coalesced")
+            skipped.append(
+                ProjectionRefreshResult(
+                    projection_key=context.projection_key,
+                    webspace_id=context.webspace_id,
+                    status="skipped",
+                    reason="coalesced",
+                )
+            )
+            continue
+        try:
+            _set_lifecycle(context=context, status="refreshing", reason="handler_started")
+            value = handler(context)
+            if inspect.isawaitable(value):
+                value = await value
+            result = _result_from_handler_output(context, value)
+            refreshed.append(result)
+            _inc_stat("refreshed_total")
+            _set_lifecycle(context=context, status=str(result.status or "ready"), reason=result.reason)
+        except Exception as exc:
+            _inc_stat("error_total")
+            text = f"{type(exc).__name__}: {exc}"
+            result = ProjectionRefreshResult(
+                projection_key=context.projection_key,
+                webspace_id=context.webspace_id,
+                status="error",
+                reason=text,
+            )
+            errors.append(result)
+            _set_lifecycle(context=context, status="error", reason="handler_error", error=text)
+        finally:
+            _end_refresh(context)
     return ProjectionDispatchReport(
         event_type=envelope.type,
         webspace_ids=target_webspaces,
         selected=selected,
         refreshed=tuple(refreshed),
         skipped=tuple(skipped),
+        errors=tuple(errors),
         started_at=started_at,
         finished_at=time.time(),
     )
@@ -258,6 +384,7 @@ __all__ = [
     "clear_projection_dispatcher",
     "demanded_projection_refresh_contexts",
     "dispatch_demanded_projection_refresh",
+    "projection_dispatcher_snapshot",
     "register_projection_refresh_handler",
     "registered_projection_refresh_handlers",
     "unregister_projection_refresh_handler",
