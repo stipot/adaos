@@ -25,6 +25,11 @@ STATUS_CARD_WILDCARD_HANDLER = f"{STATUS_CARD_PROJECTION_PREFIX}*"
 
 _LOCK = RLock()
 _CARDS: dict[tuple[str, str], StatusCard] = {}
+_STATS: dict[str, int] = {
+    "publish_total": 0,
+    "changed_total": 0,
+    "unchanged_total": 0,
+}
 
 
 def status_card_projection_key(card_id: str) -> str:
@@ -57,6 +62,8 @@ def _registry_key(*, webspace_id: str, card_id: str) -> tuple[str, str]:
 def clear_status_card_registry() -> None:
     with _LOCK:
         _CARDS.clear()
+        for key in list(_STATS):
+            _STATS[key] = 0
 
 
 def publish_status_card(
@@ -93,13 +100,24 @@ def publish_status_card(
             previous=previous,
         )
         _CARDS[key] = card
+        _STATS["publish_total"] = int(_STATS.get("publish_total") or 0) + 1
+        if previous is not None and previous.fingerprint == card.fingerprint:
+            _STATS["unchanged_total"] = int(_STATS.get("unchanged_total") or 0) + 1
+        else:
+            _STATS["changed_total"] = int(_STATS.get("changed_total") or 0) + 1
         return card
 
 
 def write_status_card(card: StatusCard) -> StatusCard:
     key = _registry_key(webspace_id=str(card.webspace_id or ""), card_id=card.id)
     with _LOCK:
+        previous = _CARDS.get(key)
         _CARDS[key] = card
+        _STATS["publish_total"] = int(_STATS.get("publish_total") or 0) + 1
+        if previous is not None and previous.fingerprint == card.fingerprint:
+            _STATS["unchanged_total"] = int(_STATS.get("unchanged_total") or 0) + 1
+        else:
+            _STATS["changed_total"] = int(_STATS.get("changed_total") or 0) + 1
     return card
 
 
@@ -190,11 +208,21 @@ def status_card_registry_snapshot(*, webspace_id: str | None = None, now: float 
         ]
         if record is not None
     ]
+    stale_total = sum(1 for record in records if record.get("status") == ProjectionStatus.STALE.value)
+    with _LOCK:
+        stats = dict(_STATS)
     return {
         "ok": True,
         "webspace_id": str(webspace_id or "").strip() or None,
         "card_total": len(cards),
         "projection_total": len(records),
+        "stale_total": stale_total,
+        "ready_total": sum(1 for record in records if record.get("status") == ProjectionStatus.READY.value),
+        "stats": {
+            **stats,
+            "stale_total": stale_total,
+            "ready_total": sum(1 for record in records if record.get("status") == ProjectionStatus.READY.value),
+        },
         "cards": [card.to_dict() for card in cards],
         "records": records,
         "updated_at": ts,

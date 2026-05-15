@@ -174,7 +174,44 @@ def test_status_card_registry_snapshot_exposes_projection_records() -> None:
 
     assert snapshot["card_total"] == 1
     assert snapshot["projection_total"] == 1
+    assert snapshot["ready_total"] == 1
+    assert snapshot["stale_total"] == 0
+    assert snapshot["stats"]["publish_total"] == 1
+    assert snapshot["stats"]["changed_total"] == 1
     assert snapshot["records"][0]["meta"]["projection_key"] == "status-card:runtime"
+
+
+def test_status_card_registry_snapshot_counts_unchanged_and_stale_cards() -> None:
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        ttl_ms=5000,
+        updated_at=10.0,
+    )
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        ttl_ms=5000,
+        updated_at=11.0,
+    )
+
+    snapshot = status_card_registry_snapshot(webspace_id="desktop", now=20.0)
+
+    assert snapshot["stale_total"] == 1
+    assert snapshot["ready_total"] == 0
+    assert snapshot["stats"]["publish_total"] == 2
+    assert snapshot["stats"]["changed_total"] == 1
+    assert snapshot["stats"]["unchanged_total"] == 1
 
 
 def _run(awaitable):
