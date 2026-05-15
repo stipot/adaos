@@ -49,6 +49,10 @@ from adaos.services.projection_demand import (
     write_client_subscription_record,
 )
 from adaos.services.projection_demand_mapper import build_browser_projection_demand_record
+from adaos.services.projection_dispatcher import (
+    dispatch_demanded_projection_refresh,
+    projection_dispatcher_snapshot,
+)
 from adaos.services.operations import submit_install_operation
 from adaos.services.scenario.webspace_runtime import (
     WebspaceService,
@@ -1139,6 +1143,15 @@ class BrowserProjectionDemandStateRequest(BaseModel):
     updated_at: float | None = None
 
 
+class ProjectionDispatchRequest(BaseModel):
+    type: str = Field(..., min_length=1)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    source: str = "api.node"
+    ts: float | None = None
+    webspace_ids: list[str] | None = None
+    projection_keys: list[str] | None = None
+
+
 def _raise_400(detail: str) -> None:
     raise HTTPException(status_code=400, detail=detail)
 
@@ -1727,6 +1740,32 @@ async def node_projection_demand_delete(
         "deleted": deleted,
         "webspace_id": target_webspace_id,
         "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+    }
+
+
+@router.get("/projection-dispatcher", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_snapshot() -> dict[str, Any]:
+    return projection_dispatcher_snapshot()
+
+
+@router.post("/projection-dispatcher/dispatch", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_dispatch(payload: ProjectionDispatchRequest) -> dict[str, Any]:
+    event = Event(
+        type=payload.type,
+        payload=payload.payload,
+        source=payload.source,
+        ts=float(payload.ts if payload.ts is not None else time.time()),
+    )
+    report = await dispatch_demanded_projection_refresh(
+        event,
+        webspace_ids=payload.webspace_ids,
+        projection_keys=payload.projection_keys,
+    )
+    return {
+        "ok": True,
+        "accepted": True,
+        "report": report.to_dict(),
+        "dispatcher": projection_dispatcher_snapshot(),
     }
 
 
