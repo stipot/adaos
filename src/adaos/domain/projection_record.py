@@ -142,6 +142,7 @@ def make_projection_record(
     status: str | ProjectionStatus = ProjectionStatus.READY,
     node_id: str | None = None,
     version: int | str | None = None,
+    fingerprint: str | None = None,
     source: str | None = None,
     source_authority: str | None = None,
     access: Mapping[str, Any] | None = None,
@@ -154,7 +155,7 @@ def make_projection_record(
     """Build the canonical projection record used by runtime projection writers."""
 
     ts = float(updated_at if updated_at is not None else time.time())
-    fingerprint = projection_fingerprint(data)
+    fingerprint = str(fingerprint or projection_fingerprint(data))
     previous_meta = _coerce_previous_meta(previous)
     meta = ProjectionMeta(
         projection_key=str(projection_key),
