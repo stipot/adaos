@@ -234,7 +234,7 @@ Actions:
 
 #### OEM-002: Lock projection ABI before client/runtime migration
 
-Status: planned.
+Status: helper ABI implemented; runtime registry remains planned.
 
 Actions:
 
@@ -1569,11 +1569,11 @@ Target shape:
 
 Actions:
 
-- [ ] Define status values and normalization rules shared with
+- [x] Define status values and normalization rules shared with
   `CanonicalStatus`.
-- [ ] Define JSON schema or typed dataclass for status cards.
-- [ ] Define staleness semantics when `ttl_ms` expires.
-- [ ] Define how cards map to incidents and active warnings.
+- [x] Define JSON schema or typed dataclass for status cards.
+- [x] Define staleness semantics when `ttl_ms` expires.
+- [x] Define how cards map to incidents and active warnings.
 - [ ] Document examples for core, `infrastate_skill`, `infrascope_skill`, and a
   future third-party skill.
 

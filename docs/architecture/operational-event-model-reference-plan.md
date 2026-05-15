@@ -321,11 +321,11 @@ Use this checklist for every implementation slice touching the event model.
 | --- | --- | --- |
 | Communication prerequisites | Closed for current transport scope | Complete |
 | Event taxonomy | Stable vocabulary | Complete |
-| Shared event envelope | Helpers and compatibility rules | Open |
+| Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
-| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Open |
-| Projection record ABI | Canonical record shape | Open |
-| Browser subscription ABI | Full-overwrite demand records | Open |
+| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code added; emitter registry remains |
+| Projection record ABI | Canonical record shape | Helper code added |
+| Browser subscription ABI | Full-overwrite demand records | Helper code added; runtime registry remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Open |
 | Shared dispatcher | Per-webspace demanded refresh | Open |
