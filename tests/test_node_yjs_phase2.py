@@ -17,6 +17,7 @@ if "ypy_websocket" not in sys.modules:
 from adaos.apps.api import node_api as node_api_module
 from adaos.apps.cli.commands import node as node_cli_module
 from adaos.services.scenario import webspace_runtime as webspace_runtime_module
+from adaos.services.status_card_registry import clear_status_card_registry, status_card_registry_snapshot
 
 
 async def _awaitable(value):
@@ -408,6 +409,7 @@ def test_node_yjs_toggle_install_endpoint_uses_desktop_service(monkeypatch) -> N
 
 
 def test_node_infrastate_snapshot_endpoint_runs_skill_tool(monkeypatch) -> None:
+    clear_status_card_registry()
     captured: list[tuple[str, str, dict[str, object]]] = []
 
     class _FakeSkillManager:
@@ -432,6 +434,10 @@ def test_node_infrastate_snapshot_endpoint_runs_skill_tool(monkeypatch) -> None:
     assert captured == [("infrastate_skill", "get_snapshot", {"webspace_id": "desktop", "project": False})]
     assert result["ok"] is True
     assert result["snapshot"]["summary"]["value"] == "idle"
+    assert result["status_cards"]["card_total"] == 5
+    assert result["status_cards"]["cards"][0]["owner"] == "skill:infrastate_skill"
+    registry = status_card_registry_snapshot(webspace_id="desktop")
+    assert registry["card_total"] == 5
 
 
 def test_node_infrastate_snapshot_endpoint_returns_fallback_on_tool_error(monkeypatch) -> None:

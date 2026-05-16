@@ -59,6 +59,7 @@ from adaos.services.status_card_registry import (
     status_card_projection_record,
     status_card_registry_snapshot,
 )
+from adaos.services.infrastate_status_cards import publish_infrastate_status_cards
 from adaos.services.runtime_status_cards import publish_runtime_status_card
 from adaos.services.operations import submit_install_operation
 from adaos.services.scenario.webspace_runtime import (
@@ -1633,6 +1634,27 @@ async def node_infrastate_snapshot(webspace_id: str | None = None) -> dict[str, 
             return _fallback_snapshot(exc)
 
     snapshot = await anyio.to_thread.run_sync(_load_snapshot)
+    status_cards: dict[str, Any] = {"ok": True, "cards": []}
+    if isinstance(snapshot, dict):
+        try:
+            cards = publish_infrastate_status_cards(snapshot, webspace_id=target_webspace_id)
+            status_cards = {
+                "ok": True,
+                "cards": [card.to_dict() for card in cards],
+                "card_total": len(cards),
+            }
+        except Exception as exc:
+            _log.warning(
+                "node infrastate status-card publish failed webspace=%s",
+                target_webspace_id,
+                exc_info=True,
+            )
+            status_cards = {
+                "ok": False,
+                "cards": [],
+                "card_total": 0,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
     return {
         "ok": True,
         "accepted": True,
@@ -1640,6 +1662,7 @@ async def node_infrastate_snapshot(webspace_id: str | None = None) -> dict[str, 
         "degraded": bool(snapshot.get("fallback")) if isinstance(snapshot, dict) else False,
         "error": (snapshot.get("errors") or [None])[0] if isinstance(snapshot, dict) else None,
         "snapshot": snapshot,
+        "status_cards": status_cards,
     }
 
 
