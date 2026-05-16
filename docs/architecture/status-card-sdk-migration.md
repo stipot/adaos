@@ -88,6 +88,22 @@ receiver.
 - Do not create skill-specific status-card shapes; use the shared
   `StatusCard -> ProjectionRecord` ABI.
 
+## Infrastate first mapping
+
+The first `infrastate` alignment maps the existing compact snapshot into shared
+status cards without removing the legacy snapshot response:
+
+| Card id | Source section | Details target |
+| --- | --- | --- |
+| `infrastate-summary` | `summary` | `/api/node/infrastate/snapshot` |
+| `infrastate-operations` | `operations.active_items` | `infrastate.operations.active` |
+| `infrastate-realtime` | `realtime` | `infrastate.realtime` |
+| `infrastate-yjs` | `reliability.runtime.state_sync` and `yjs_pressure` | `infrastate.yjs.load_mark` |
+| `infrastate-core-update` | `core_update` / update summary | `infrastate.core_update_diagnostics` |
+
+This is intentionally a compatibility bridge. The existing UI can keep reading
+the old snapshot while new status-card consumers read the materialized registry.
+
 ## Verification
 
 After publishing a card, a developer can inspect it through the node API:

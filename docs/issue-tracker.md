@@ -1648,7 +1648,8 @@ Implemented artifacts:
 
 #### STATUS-004: Convert `infrastate_skill` to the shared status plane
 
-Status: planned.
+Status: in progress. First snapshot-to-status-card adapter and Node API
+publication path are implemented.
 
 Current useful pattern:
 
@@ -1661,14 +1662,24 @@ Current useful pattern:
 
 Actions:
 
-- [ ] Identify `infrastate` status cards: runtime, route/realtime, Yjs,
+- [x] Identify `infrastate` status cards: runtime, route/realtime, Yjs,
   operations, core update, marketplace, and skill/scenario registry.
-- [ ] Publish those cards through the shared SDK helpers.
-- [ ] Keep existing stream receivers as `details_ref` targets.
+- [x] Publish those cards through the shared SDK helpers.
+- [x] Keep existing stream receivers as `details_ref` targets.
 - [ ] Remove or reduce duplicated local projection bookkeeping where the shared
   helper covers it.
 - [ ] Confirm existing `infrastate` UI still receives current streams.
-- [ ] Add regression tests around unchanged snapshot/card dedupe.
+- [x] Add regression tests around unchanged snapshot/card dedupe.
+
+Implemented artifacts:
+
+- `adaos.services.infrastate_status_cards` maps compact `infrastate` snapshots
+  into status cards for summary, operations, realtime, Yjs, and core update.
+- `/api/node/infrastate/snapshot` now publishes those cards through
+  `adaos.sdk.status` while keeping the existing snapshot response compatible.
+- Stream-backed sections keep `details_ref` targets such as
+  `infrastate.operations.active`, `infrastate.realtime`,
+  `infrastate.yjs.load_mark`, and `infrastate.core_update_diagnostics`.
 
 #### STATUS-005: Convert `infrascope_skill` to the shared status plane
 

@@ -358,7 +358,8 @@ Use this checklist for every implementation slice touching the event model.
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API and status-card wildcard handler added |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
-| Infrascope migration | Uses shared ABI and dispatcher | Blocked by previous rows |
+| Infrastate alignment | Operational overlay uses shared status-card path | First snapshot-to-card adapter and API publication added |
+| Infrascope migration | Uses shared ABI and dispatcher | Blocked by client adapter and previous heavy-skill inventory |
 
 ## Completion Definition
 
