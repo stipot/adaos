@@ -54,6 +54,7 @@ from adaos.services.projection_dispatcher import (
     projection_dispatcher_snapshot,
 )
 from adaos.services.projection_diagnostics import projection_operator_diagnostics
+from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
     publish_status_card,
@@ -1891,6 +1892,23 @@ async def node_status_card_projection(card_id: str, webspace_id: str | None = No
         "webspace_id": target_webspace_id,
         "record": record.to_dict(),
     }
+
+
+@router.post("/status-cards/{card_id}/details/refresh", dependencies=[Depends(require_token)])
+async def node_status_card_details_refresh(card_id: str, webspace_id: str | None = None) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    try:
+        bus = getattr(get_ctx(), "bus", None)
+    except Exception:
+        bus = None
+    result = request_status_card_details_refresh(
+        card_id=card_id,
+        webspace_id=target_webspace_id,
+        bus=bus,
+    )
+    if result.get("reason") == "status_card_not_found":
+        raise HTTPException(status_code=404, detail="status_card_not_found")
+    return result
 
 
 @router.get("/projection-dispatcher", dependencies=[Depends(require_token)])

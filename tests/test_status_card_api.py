@@ -140,3 +140,78 @@ def test_status_card_api_dispatches_materialized_demand() -> None:
     assert payload["report"]["refreshed"][0]["status"] == "ready"
     assert payload["report"]["refreshed"][0]["record"]["data"]["status"] == "online"
     assert payload["dispatcher"]["stats"]["refreshed_total"] == 1
+
+
+def test_status_card_details_refresh_requests_stream_snapshot(monkeypatch) -> None:
+    client = _make_client()
+    events = []
+
+    class Bus:
+        def publish(self, event):
+            events.append(event)
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "get_ctx", lambda: types.SimpleNamespace(bus=Bus()))
+    client.post(
+        "/api/node/status-cards",
+        json={
+            "id": "infrastate-yjs",
+            "owner": "skill:infrastate_skill",
+            "kind": "yjs",
+            "scope": {"section": "yjs"},
+            "webspace_id": "desktop",
+            "status": "running",
+            "summary": "Yjs state nominal",
+            "details_ref": {
+                "kind": "stream",
+                "receiver": "infrastate.yjs.load_mark",
+                "params": {"webspace_id": "desktop"},
+            },
+        },
+    )
+
+    resp = client.post(
+        "/api/node/status-cards/infrastate-yjs/details/refresh",
+        params={"webspace_id": "desktop"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["accepted"] is True
+    assert payload["details_ref"]["receiver"] == "infrastate.yjs.load_mark"
+    assert payload["requested_event"]["type"] == "webio.stream.snapshot.requested"
+    assert events[0].payload["receiver"] == "infrastate.yjs.load_mark"
+    assert events[0].payload["card_id"] == "infrastate-yjs"
+
+
+def test_status_card_details_refresh_reports_api_details_ref() -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/status-cards",
+        json={
+            "id": "infrastate-summary",
+            "owner": "skill:infrastate_skill",
+            "kind": "infrastate",
+            "scope": {"section": "summary"},
+            "webspace_id": "desktop",
+            "status": "running",
+            "summary": "Infra State",
+            "details_ref": {
+                "kind": "api",
+                "path": "/api/node/infrastate/snapshot",
+                "params": {"webspace_id": "desktop"},
+            },
+        },
+    )
+
+    resp = client.post(
+        "/api/node/status-cards/infrastate-summary/details/refresh",
+        params={"webspace_id": "desktop"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["accepted"] is False
+    assert payload["reason"] == "api_details_ref"
+    assert payload["details_ref"]["path"] == "/api/node/infrastate/snapshot"
