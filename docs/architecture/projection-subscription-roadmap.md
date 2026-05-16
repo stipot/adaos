@@ -189,6 +189,8 @@ Current status:
   projections for summary, operations, realtime, Yjs, and core-update sections
 - `/api/node/projection-diagnostics` now correlates active demand, dispatcher
   handler coverage, and status-card materialization per webspace
+- `/api/node/status-cards/{card_id}/details/refresh` requests lazy stream
+  details for stream-backed status cards without expanding the card payload
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot

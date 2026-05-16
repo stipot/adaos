@@ -359,7 +359,7 @@ Use this checklist for every implementation slice touching the event model.
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` added |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
-| Infrastate alignment | Operational overlay uses shared status-card path | First snapshot-to-card adapter and API publication added |
+| Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by client adapter and previous heavy-skill inventory |
 
 ## Completion Definition

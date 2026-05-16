@@ -1683,6 +1683,9 @@ Implemented artifacts:
 - `/api/node/projection-diagnostics` correlates active browser demand,
   dispatcher handler availability, and materialized status-card records so the
   migration can be inspected per webspace.
+- `/api/node/status-cards/{card_id}/details/refresh` requests lazy stream
+  details for stream-backed cards through `webio.stream.snapshot.requested`
+  without embedding heavy diagnostics into the status-card payload.
 
 #### STATUS-005: Convert `infrascope_skill` to the shared status plane
 
@@ -1742,10 +1745,17 @@ Actions:
 - [ ] Identify the current caller(s) polling
   `/api/node/reliability/summary`.
 - [ ] Replace badge/status polling with thin status snapshot plus updates.
-- [ ] Wire existing webio stream receivers as lazy detail sources.
+- [x] Wire existing webio stream receivers as lazy detail sources.
 - [ ] Add client-side cache keyed by status card version.
 - [ ] Verify the client no longer requests large summary payloads repeatedly
   during the first 3 minutes.
+
+Implemented artifacts:
+
+- Stream-backed status cards can request their existing detail receiver through
+  `/api/node/status-cards/{card_id}/details/refresh`.
+- API-style details references stay declarative and are reported without a
+  synthetic stream request.
 
 #### STATUS-008: Acceptance and observability
 
