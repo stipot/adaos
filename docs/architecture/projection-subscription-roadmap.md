@@ -210,7 +210,8 @@ Current status:
   projections from skills and platform code
 - helpers preserve current skill ownership as `skill:<name>` and support stream
   details through `details_ref`
-- migration notes and first real skill conversion remain pending
+- migration notes are captured in `status-card-sdk-migration.md`; first real
+  skill conversion remains pending
 
 ### 10. Cleanup and Hardening
 

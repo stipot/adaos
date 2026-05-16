@@ -1634,7 +1634,7 @@ Actions:
 - [x] Provide helpers for `details_ref` pointing to webio stream receivers.
 - [x] Add tests showing a skill can publish status without touching Yjs or
   rebuilding a full snapshot.
-- [ ] Add migration notes for skill authors.
+- [x] Add migration notes for skill authors.
 
 Implemented artifacts:
 
@@ -1643,6 +1643,8 @@ Implemented artifacts:
 - `publish_status_many(...)` publishes small batches with shared defaults.
 - `publish_status_stream(...)` stores a `details_ref` to an existing stream or
   tool instead of embedding heavy diagnostics in the card.
+- `docs/architecture/status-card-sdk-migration.md` records first migration
+  rules for skill authors.
 
 #### STATUS-004: Convert `infrastate_skill` to the shared status plane
 
