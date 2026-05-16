@@ -1617,7 +1617,7 @@ Implemented artifacts:
 
 #### STATUS-003: Add skill-facing SDK helpers
 
-Status: in progress. First `adaos.sdk.status` helper layer is implemented.
+Status: implemented for the first shared status-card SDK layer.
 
 Expected API:
 
