@@ -15,6 +15,7 @@ def test_sdk_imports_no_ctx():
         "adaos.sdk.manage",
         "adaos.sdk.data.events",
         "adaos.sdk.data.i18n",
+        "adaos.sdk.status",
     ]
     for name in modules:
         importlib.import_module(name)
