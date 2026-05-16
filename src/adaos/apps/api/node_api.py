@@ -53,6 +53,7 @@ from adaos.services.projection_dispatcher import (
     dispatch_demanded_projection_refresh,
     projection_dispatcher_snapshot,
 )
+from adaos.services.projection_diagnostics import projection_operator_diagnostics
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
     publish_status_card,
@@ -1786,6 +1787,28 @@ async def node_projection_demand_delete(
         "webspace_id": target_webspace_id,
         "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
     }
+
+
+@router.get("/projection-diagnostics", dependencies=[Depends(require_token)])
+async def node_projection_diagnostics(
+    webspace_id: str | None = None,
+    include_runtime: bool = True,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+) -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    if include_runtime:
+        publish_runtime_status_card(
+            webspace_id=target_webspace_id,
+            node_id=_local_node_id(),
+            lifecycle=runtime_lifecycle_snapshot(),
+        )
+    return projection_operator_diagnostics(
+        webspace_id=target_webspace_id,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+    )
 
 
 @router.get("/status-cards", dependencies=[Depends(require_token)])
