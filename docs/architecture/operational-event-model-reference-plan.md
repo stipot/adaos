@@ -356,6 +356,7 @@ Use this checklist for every implementation slice touching the event model.
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API and status-card wildcard handler added |
+| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` added |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | First snapshot-to-card adapter and API publication added |

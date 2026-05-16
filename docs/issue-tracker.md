@@ -1680,6 +1680,9 @@ Implemented artifacts:
 - Stream-backed sections keep `details_ref` targets such as
   `infrastate.operations.active`, `infrastate.realtime`,
   `infrastate.yjs.load_mark`, and `infrastate.core_update_diagnostics`.
+- `/api/node/projection-diagnostics` correlates active browser demand,
+  dispatcher handler availability, and materialized status-card records so the
+  migration can be inspected per webspace.
 
 #### STATUS-005: Convert `infrascope_skill` to the shared status plane
 
@@ -1763,11 +1766,20 @@ Actions:
 
 - [ ] Add log/metric for reliability summary mode, response bytes, and
   unchanged/304 counts.
-- [ ] Add status registry diagnostics to the final soak analysis.
+- [x] Add status registry diagnostics to the final soak analysis.
 - [ ] Run a 180-second acceptance with browser attached.
 - [ ] Record payload size reduction and polling reduction in this tracker.
 - [ ] Close this goal only after logs confirm no large repeated monitoring
   responses during normal UI operation.
+
+Implemented artifacts:
+
+- `adaos.services.projection_diagnostics` builds an operator read model over
+  browser demand, dispatcher handlers, and the materialized status-card
+  registry.
+- `/api/node/projection-diagnostics` exposes active projection totals, missing
+  handlers, missing status cards, stale demand, and per-projection consumers for
+  Swagger/manual verification.
 
 ### TEST-001: Make `test_infrastate_skill_projection.py` hermetic
 

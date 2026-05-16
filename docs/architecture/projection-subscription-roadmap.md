@@ -187,6 +187,8 @@ Current status:
   default, and `/api/node/status-cards/runtime/refresh` refreshes it explicitly
 - `/api/node/infrastate/snapshot` now publishes first `infrastate` status-card
   projections for summary, operations, realtime, Yjs, and core-update sections
+- `/api/node/projection-diagnostics` now correlates active demand, dispatcher
+  handler coverage, and status-card materialization per webspace
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot
@@ -219,7 +221,7 @@ Current status:
 
 - [ ] `cleanup.remove_monolith_paths`: remove monolithic snapshot paths where the new projection contract fully replaces them
 - [ ] `cleanup.remove_inline_debounce`: remove event-specific inline debounce logic that the dispatcher now supersedes
-- [ ] `cleanup.operator_projection_diagnostics`: add operator diagnostics for active projections per webspace
+- [x] `cleanup.operator_projection_diagnostics`: add operator diagnostics for active projections per webspace
 - [ ] `cleanup.test_multi_webspace_and_consumers`: add tests for multi-webspace demand routing and multiple simultaneous consumers
 - [ ] `cleanup.test_access_metadata_and_dev`: add tests for guest-visible access metadata and `dev` audience handling
 - [ ] `cleanup.test_platform_emitters`: add tests for platform-emitted diagnostics and error projections
