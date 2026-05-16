@@ -1617,7 +1617,7 @@ Implemented artifacts:
 
 #### STATUS-003: Add skill-facing SDK helpers
 
-Status: planned.
+Status: in progress. First `adaos.sdk.status` helper layer is implemented.
 
 Expected API:
 
@@ -1629,12 +1629,20 @@ Expected API:
 
 Actions:
 
-- [ ] Add `adaos.sdk.status` or equivalent SDK module.
-- [ ] Preserve current skill identity in status ownership metadata.
-- [ ] Provide helpers for `details_ref` pointing to webio stream receivers.
-- [ ] Add tests showing a skill can publish status without touching Yjs or
+- [x] Add `adaos.sdk.status` or equivalent SDK module.
+- [x] Preserve current skill identity in status ownership metadata.
+- [x] Provide helpers for `details_ref` pointing to webio stream receivers.
+- [x] Add tests showing a skill can publish status without touching Yjs or
   rebuilding a full snapshot.
 - [ ] Add migration notes for skill authors.
+
+Implemented artifacts:
+
+- `publish_status(...)` publishes one compact card and uses the current skill
+  context as `skill:<name>` when `owner` is not provided.
+- `publish_status_many(...)` publishes small batches with shared defaults.
+- `publish_status_stream(...)` stores a `details_ref` to an existing stream or
+  tool instead of embedding heavy diagnostics in the card.
 
 #### STATUS-004: Convert `infrastate_skill` to the shared status plane
 

@@ -201,8 +201,16 @@ Current status:
 
 - [ ] `rollout.monolith_inventory`: identify other browser-facing skills that currently publish monolithic Yjs JSON subtrees
 - [ ] `rollout.migrate_to_shared_contract`: migrate them onto the shared projection/subscription contract
-- [ ] `rollout.shared_helpers`: provide a common helper layer so each skill does not reimplement subscription parsing and dispatch logic
+- [x] `rollout.shared_helpers`: provide a common helper layer so each skill does not reimplement subscription parsing and dispatch logic
 - [ ] `rollout.manifest_rules`: document how scenario manifests and skill manifests declare projection roots without inventing incompatible shapes
+
+Current status:
+
+- `adaos.sdk.status` provides first shared helpers for publishing status-card
+  projections from skills and platform code
+- helpers preserve current skill ownership as `skill:<name>` and support stream
+  details through `details_ref`
+- migration notes and first real skill conversion remain pending
 
 ### 10. Cleanup and Hardening
 
