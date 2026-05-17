@@ -361,7 +361,7 @@ Use this checklist for every implementation slice touching the event model.
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, and telemetry reset added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
-| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter added; client/live-skill hookup remains |
+| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry; client/live-skill hookup remains |
 
 ## Completion Definition
 
