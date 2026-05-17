@@ -1749,6 +1749,49 @@ def test_node_reliability_summary_endpoint_returns_compact_runtime_snapshot(monk
     assert payload["phase0Communication"]["tasks"]["nodeBrowserReady"]["status"] == "done"
 
 
+def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> None:
+    from adaos.apps.api import node_api
+    from adaos.apps.api.node_api import require_token, router
+    from adaos.services.status_card_registry import clear_status_card_registry
+
+    clear_status_card_registry()
+    monkeypatch.setattr(node_api, "_local_node_id", lambda: "node-a")
+    monkeypatch.setattr(
+        node_api,
+        "runtime_lifecycle_snapshot",
+        lambda: {
+            "node_state": "ready",
+            "accepting_new_work": True,
+            "draining": False,
+            "reason": None,
+        },
+    )
+
+    app = FastAPI()
+    app.dependency_overrides[require_token] = lambda: True
+    app.include_router(router, prefix="/api/node")
+    client = TestClient(app)
+
+    first = client.get("/api/node/reliability/summary", params={"webspace_id": "desktop", "mode": "thin"})
+    unchanged = client.get(
+        "/api/node/reliability/summary",
+        params={"webspace_id": "desktop", "mode": "thin", "since_version": 1},
+    )
+
+    assert first.status_code == 200
+    payload = first.json()
+    assert payload["source"] == "api.node.reliability.summary.thin"
+    assert payload["mode"] == "thin"
+    assert payload["cardTotal"] == 1
+    assert payload["maxVersion"] == 1
+    assert payload["cards"][0]["id"] == "runtime"
+    assert payload["cards"][0]["summary"] == "Runtime ready"
+    assert payload["stats"]["last_publish_latency_ms"] is not None
+    assert unchanged.status_code == 200
+    assert unchanged.json()["unchanged"] is True
+    assert unchanged.json()["cards"] == []
+
+
 def test_state_sync_keeps_ready_semantics_for_bounded_replay_maintenance_pressure() -> None:
     snapshot = _state_sync_snapshot(
         {

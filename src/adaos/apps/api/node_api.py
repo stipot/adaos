@@ -375,6 +375,58 @@ def _compact_runtime_reliability_payload(payload: dict[str, Any], *, webspace_id
     }
 
 
+def _numeric_version(value: Any) -> int | None:
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = None) -> dict[str, Any]:
+    publish_runtime_status_card(
+        webspace_id=webspace_id,
+        node_id=_local_node_id(),
+        lifecycle=runtime_lifecycle_snapshot(),
+    )
+    registry = status_card_registry_snapshot(webspace_id=webspace_id)
+    cards = [
+        {
+            "id": card.get("id"),
+            "kind": card.get("kind"),
+            "status": card.get("status"),
+            "severity": card.get("severity"),
+            "summary": card.get("summary"),
+            "version": card.get("version"),
+            "changedAt": card.get("changed_at"),
+            "updatedAt": card.get("updated_at"),
+            "detailsRef": card.get("details_ref"),
+        }
+        for card in registry.get("cards", [])
+        if isinstance(card, Mapping)
+    ]
+    versions = [
+        version
+        for version in (_numeric_version(card.get("version")) for card in registry.get("cards", []) if isinstance(card, Mapping))
+        if version is not None
+    ]
+    max_version = max(versions) if versions else 0
+    unchanged = since_version is not None and max_version <= int(since_version)
+    return {
+        "ok": True,
+        "mode": "thin",
+        "unchanged": bool(unchanged),
+        "source": "api.node.reliability.summary.thin",
+        "webspaceId": webspace_id,
+        "updatedAt": int(time.time() * 1000),
+        "maxVersion": max_version,
+        "cardTotal": int(registry.get("card_total") or 0),
+        "readyTotal": int(registry.get("ready_total") or 0),
+        "staleTotal": int(registry.get("stale_total") or 0),
+        "stats": registry.get("stats") or {},
+        "cards": [] if unchanged else cards,
+    }
+
+
 def _env_flag_enabled(name: str) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -1298,11 +1350,21 @@ async def node_reliability() -> dict[str, Any]:
 
 
 @router.get("/reliability/summary", dependencies=[Depends(require_token)])
-async def node_reliability_summary(webspace_id: str | None = None) -> dict[str, Any]:
+async def node_reliability_summary(
+    webspace_id: str | None = None,
+    mode: str | None = None,
+    since_version: int | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    if str(mode or "").strip().lower() == "thin":
+        return _thin_reliability_summary(
+            webspace_id=target_webspace_id,
+            since_version=since_version,
+        )
     reliability = await _current_reliability_payload_async(webspace_id=webspace_id)
     return _compact_runtime_reliability_payload(
         reliability,
-        webspace_id=webspace_id,
+        webspace_id=target_webspace_id,
     )
 
 
