@@ -60,6 +60,7 @@ from adaos.services.status_card_registry import (
     publish_status_card,
     status_card_projection_record,
     status_card_registry_snapshot,
+    sweep_status_card_registry,
 )
 from adaos.services.infrastate_status_cards import publish_infrastate_status_cards
 from adaos.services.runtime_status_cards import publish_runtime_status_card
@@ -1844,6 +1845,22 @@ async def node_status_cards_refresh_runtime(webspace_id: str | None = None) -> d
         "card": card.to_dict(),
         "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
     }
+
+
+@router.post("/status-cards/sweep", dependencies=[Depends(require_token)])
+async def node_status_cards_sweep(
+    webspace_id: str | None = None,
+    dry_run: bool = False,
+    now: float | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    result = sweep_status_card_registry(
+        webspace_id=target_webspace_id,
+        now=now,
+        dry_run=dry_run,
+    )
+    result["snapshot"] = status_card_registry_snapshot(webspace_id=target_webspace_id, now=now)
+    return result
 
 
 @router.post("/status-cards", dependencies=[Depends(require_token)])

@@ -94,6 +94,41 @@ def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     assert payload["snapshot"]["projection_total"] == 1
 
 
+def test_status_card_api_sweeps_stale_cards() -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/status-cards",
+        json={
+            "id": "runtime",
+            "owner": "core:runtime",
+            "kind": "runtime",
+            "scope": {"node_id": "node-a"},
+            "webspace_id": "desktop",
+            "status": "running",
+            "summary": "Runtime ready",
+            "ttl_ms": 5000,
+            "updated_at": 10.0,
+        },
+    )
+
+    preview_resp = client.post(
+        "/api/node/status-cards/sweep",
+        params={"webspace_id": "desktop", "now": 20.0, "dry_run": "true"},
+    )
+    sweep_resp = client.post(
+        "/api/node/status-cards/sweep",
+        params={"webspace_id": "desktop", "now": 20.0},
+    )
+
+    assert preview_resp.status_code == 200
+    assert preview_resp.json()["removed_total"] == 0
+    assert preview_resp.json()["stale_total"] == 1
+    assert sweep_resp.status_code == 200
+    payload = sweep_resp.json()
+    assert payload["removed_total"] == 1
+    assert payload["snapshot"]["card_total"] == 0
+
+
 def test_status_card_api_dispatches_materialized_demand() -> None:
     client = _make_client()
     client.post(

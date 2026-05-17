@@ -25,10 +25,14 @@ STATUS_CARD_WILDCARD_HANDLER = f"{STATUS_CARD_PROJECTION_PREFIX}*"
 
 _LOCK = RLock()
 _CARDS: dict[tuple[str, str], StatusCard] = {}
-_STATS: dict[str, int] = {
+_STATS: dict[str, float | int | None] = {
     "publish_total": 0,
     "changed_total": 0,
     "unchanged_total": 0,
+    "last_publish_at": None,
+    "last_publish_latency_ms": None,
+    "sweep_total": 0,
+    "swept_total": 0,
 }
 
 
@@ -81,6 +85,7 @@ def publish_status_card(
     details_ref: Mapping[str, Any] | None = None,
     incident_id: str | None = None,
 ) -> StatusCard:
+    started_at = time.perf_counter()
     key = _registry_key(webspace_id=webspace_id, card_id=id)
     with _LOCK:
         previous = _CARDS.get(key)
@@ -100,25 +105,28 @@ def publish_status_card(
             previous=previous,
         )
         _CARDS[key] = card
-        _STATS["publish_total"] = int(_STATS.get("publish_total") or 0) + 1
-        if previous is not None and previous.fingerprint == card.fingerprint:
-            _STATS["unchanged_total"] = int(_STATS.get("unchanged_total") or 0) + 1
-        else:
-            _STATS["changed_total"] = int(_STATS.get("changed_total") or 0) + 1
+        _record_publish_stats(previous=previous, card=card, started_at=started_at)
         return card
 
 
 def write_status_card(card: StatusCard) -> StatusCard:
+    started_at = time.perf_counter()
     key = _registry_key(webspace_id=str(card.webspace_id or ""), card_id=card.id)
     with _LOCK:
         previous = _CARDS.get(key)
         _CARDS[key] = card
-        _STATS["publish_total"] = int(_STATS.get("publish_total") or 0) + 1
-        if previous is not None and previous.fingerprint == card.fingerprint:
-            _STATS["unchanged_total"] = int(_STATS.get("unchanged_total") or 0) + 1
-        else:
-            _STATS["changed_total"] = int(_STATS.get("changed_total") or 0) + 1
+        _record_publish_stats(previous=previous, card=card, started_at=started_at)
     return card
+
+
+def _record_publish_stats(*, previous: StatusCard | None, card: StatusCard, started_at: float) -> None:
+    _STATS["publish_total"] = int(_STATS.get("publish_total") or 0) + 1
+    if previous is not None and previous.fingerprint == card.fingerprint:
+        _STATS["unchanged_total"] = int(_STATS.get("unchanged_total") or 0) + 1
+    else:
+        _STATS["changed_total"] = int(_STATS.get("changed_total") or 0) + 1
+    _STATS["last_publish_at"] = float(time.time())
+    _STATS["last_publish_latency_ms"] = round(max(0.0, time.perf_counter() - started_at) * 1000.0, 3)
 
 
 def get_status_card(*, card_id: str, webspace_id: str) -> StatusCard | None:
@@ -192,6 +200,39 @@ def remove_status_card_dispatcher_handler() -> bool:
     return unregister_projection_refresh_handler(STATUS_CARD_WILDCARD_HANDLER)
 
 
+def sweep_status_card_registry(
+    *,
+    webspace_id: str | None = None,
+    now: float | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    ts = float(now if now is not None else time.time())
+    webspace_token = str(webspace_id or "").strip()
+    with _LOCK:
+        stale_items = [
+            (key, card)
+            for key, card in sorted(_CARDS.items(), key=lambda item: (item[0][0], item[0][1]))
+            if (not webspace_token or key[0] == webspace_token) and is_status_card_stale(card, now=ts)
+        ]
+        if not dry_run:
+            for key, _ in stale_items:
+                _CARDS.pop(key, None)
+            _STATS["sweep_total"] = int(_STATS.get("sweep_total") or 0) + 1
+            _STATS["swept_total"] = int(_STATS.get("swept_total") or 0) + len(stale_items)
+        stats = dict(_STATS)
+    return {
+        "ok": True,
+        "accepted": not dry_run,
+        "dry_run": bool(dry_run),
+        "webspace_id": webspace_token or None,
+        "stale_total": len(stale_items),
+        "removed_total": 0 if dry_run else len(stale_items),
+        "cards": [card.to_dict() for _, card in stale_items],
+        "stats": stats,
+        "updated_at": ts,
+    }
+
+
 def status_card_registry_snapshot(*, webspace_id: str | None = None, now: float | None = None) -> dict[str, Any]:
     ts = float(now if now is not None else time.time())
     cards = list_status_cards(webspace_id=webspace_id)
@@ -243,5 +284,6 @@ __all__ = [
     "status_card_projection_key",
     "status_card_projection_record",
     "status_card_registry_snapshot",
+    "sweep_status_card_registry",
     "write_status_card",
 ]

@@ -14,6 +14,7 @@ from adaos.services.status_card_registry import (
     status_card_projection_key,
     status_card_projection_record,
     status_card_registry_snapshot,
+    sweep_status_card_registry,
 )
 
 
@@ -212,6 +213,48 @@ def test_status_card_registry_snapshot_counts_unchanged_and_stale_cards() -> Non
     assert snapshot["stats"]["publish_total"] == 2
     assert snapshot["stats"]["changed_total"] == 1
     assert snapshot["stats"]["unchanged_total"] == 1
+    assert snapshot["stats"]["last_publish_latency_ms"] is not None
+
+
+def test_status_card_registry_sweeps_expired_cards_per_webspace() -> None:
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        ttl_ms=5000,
+        updated_at=10.0,
+    )
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="dev",
+        status="running",
+        summary="Runtime ready",
+        ttl_ms=5000,
+        updated_at=100.0,
+    )
+
+    preview = sweep_status_card_registry(webspace_id="desktop", now=20.0, dry_run=True)
+    result = sweep_status_card_registry(webspace_id="desktop", now=20.0)
+    desktop_snapshot = status_card_registry_snapshot(webspace_id="desktop", now=20.0)
+    dev_snapshot = status_card_registry_snapshot(webspace_id="dev", now=20.0)
+
+    assert preview["accepted"] is False
+    assert preview["removed_total"] == 0
+    assert preview["stale_total"] == 1
+    assert result["accepted"] is True
+    assert result["removed_total"] == 1
+    assert result["cards"][0]["id"] == "runtime"
+    assert result["stats"]["sweep_total"] == 1
+    assert result["stats"]["swept_total"] == 1
+    assert desktop_snapshot["card_total"] == 0
+    assert dev_snapshot["card_total"] == 1
 
 
 def _run(awaitable):
