@@ -1604,8 +1604,10 @@ def test_node_reliability_endpoint_exposes_model_and_runtime_state(monkeypatch) 
 
 
 def test_node_reliability_summary_endpoint_returns_compact_runtime_snapshot(monkeypatch) -> None:
+    from adaos.apps.api import node_api
     from adaos.apps.api.node_api import require_token, router
 
+    node_api._reset_reliability_summary_metrics_for_tests()
     monkeypatch.setattr(
         "adaos.apps.api.node_api.current_reliability_payload",
         lambda webspace_id=None: {
@@ -1731,6 +1733,7 @@ def test_node_reliability_summary_endpoint_returns_compact_runtime_snapshot(monk
     client = TestClient(app)
 
     response = client.get("/api/node/reliability/summary")
+    telemetry = client.get("/api/node/reliability/summary/telemetry")
     assert response.status_code == 200
     payload = response.json()
 
@@ -1747,6 +1750,15 @@ def test_node_reliability_summary_endpoint_returns_compact_runtime_snapshot(monk
     assert payload["stateSync"]["replay"]["cursor"] == "3/32"
     assert payload["yjsPressure"]["policyState"] == "warn"
     assert payload["phase0Communication"]["tasks"]["nodeBrowserReady"]["status"] == "done"
+    assert telemetry.status_code == 200
+    telemetry_payload = telemetry.json()["telemetry"]
+    assert telemetry_payload["requestTotal"] == 1
+    assert telemetry_payload["statusCodes"] == {"200": 1}
+    assert telemetry_payload["byMode"]["full"]["requestTotal"] == 1
+    assert telemetry_payload["byMode"]["full"]["statusCodes"] == {"200": 1}
+    assert telemetry_payload["last"]["mode"] == "full"
+    assert telemetry_payload["last"]["statusCode"] == 200
+    assert telemetry_payload["last"]["responseBytes"] > 0
 
 
 def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> None:
