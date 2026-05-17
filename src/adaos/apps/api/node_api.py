@@ -404,13 +404,12 @@ def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = N
         for card in registry.get("cards", [])
         if isinstance(card, Mapping)
     ]
-    versions = [
-        version
-        for version in (_numeric_version(card.get("version")) for card in registry.get("cards", []) if isinstance(card, Mapping))
-        if version is not None
-    ]
-    max_version = max(versions) if versions else 0
-    unchanged = since_version is not None and max_version <= int(since_version)
+    registry_version = int(
+        registry.get("registry_version")
+        or _coerce_dict(registry.get("stats")).get("registry_version")
+        or 0
+    )
+    unchanged = since_version is not None and registry_version <= int(since_version)
     return {
         "ok": True,
         "mode": "thin",
@@ -418,7 +417,8 @@ def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = N
         "source": "api.node.reliability.summary.thin",
         "webspaceId": webspace_id,
         "updatedAt": int(time.time() * 1000),
-        "maxVersion": max_version,
+        "maxVersion": registry_version,
+        "registryVersion": registry_version,
         "cardTotal": int(registry.get("card_total") or 0),
         "readyTotal": int(registry.get("ready_total") or 0),
         "staleTotal": int(registry.get("stale_total") or 0),

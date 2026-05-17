@@ -213,7 +213,49 @@ def test_status_card_registry_snapshot_counts_unchanged_and_stale_cards() -> Non
     assert snapshot["stats"]["publish_total"] == 2
     assert snapshot["stats"]["changed_total"] == 1
     assert snapshot["stats"]["unchanged_total"] == 1
+    assert snapshot["registry_version"] == 1
+    assert snapshot["stats"]["registry_version"] == 1
     assert snapshot["stats"]["last_publish_latency_ms"] is not None
+
+
+def test_status_card_registry_version_tracks_meaningful_changes() -> None:
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        updated_at=10.0,
+    )
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        updated_at=11.0,
+    )
+    publish_status_card(
+        id="infrastate-yjs",
+        owner="skill:infrastate_skill",
+        kind="yjs",
+        scope={"section": "yjs"},
+        webspace_id="desktop",
+        status="warning",
+        summary="Yjs pressure warn",
+        updated_at=12.0,
+    )
+
+    snapshot = status_card_registry_snapshot(webspace_id="desktop", now=20.0)
+
+    assert snapshot["card_total"] == 2
+    assert snapshot["stats"]["changed_total"] == 2
+    assert snapshot["stats"]["unchanged_total"] == 1
+    assert snapshot["registry_version"] == 2
 
 
 def test_status_card_registry_sweeps_expired_cards_per_webspace() -> None:
@@ -253,7 +295,9 @@ def test_status_card_registry_sweeps_expired_cards_per_webspace() -> None:
     assert result["cards"][0]["id"] == "runtime"
     assert result["stats"]["sweep_total"] == 1
     assert result["stats"]["swept_total"] == 1
+    assert result["stats"]["registry_version"] == 3
     assert desktop_snapshot["card_total"] == 0
+    assert desktop_snapshot["registry_version"] == 3
     assert dev_snapshot["card_total"] == 1
 
 

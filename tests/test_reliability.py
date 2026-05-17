@@ -1752,7 +1752,7 @@ def test_node_reliability_summary_endpoint_returns_compact_runtime_snapshot(monk
 def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> None:
     from adaos.apps.api import node_api
     from adaos.apps.api.node_api import require_token, router
-    from adaos.services.status_card_registry import clear_status_card_registry
+    from adaos.services.status_card_registry import clear_status_card_registry, publish_status_card
 
     clear_status_card_registry()
     monkeypatch.setattr(node_api, "_local_node_id", lambda: "node-a")
@@ -1777,6 +1777,20 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
         "/api/node/reliability/summary",
         params={"webspace_id": "desktop", "mode": "thin", "since_version": 1},
     )
+    publish_status_card(
+        id="infrastate-yjs",
+        owner="skill:infrastate_skill",
+        kind="yjs",
+        scope={"section": "yjs"},
+        webspace_id="desktop",
+        status="warning",
+        summary="Yjs pressure warn",
+        updated_at=20.0,
+    )
+    changed = client.get(
+        "/api/node/reliability/summary",
+        params={"webspace_id": "desktop", "mode": "thin", "since_version": 1},
+    )
 
     assert first.status_code == 200
     payload = first.json()
@@ -1784,12 +1798,17 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert payload["mode"] == "thin"
     assert payload["cardTotal"] == 1
     assert payload["maxVersion"] == 1
+    assert payload["registryVersion"] == 1
     assert payload["cards"][0]["id"] == "runtime"
     assert payload["cards"][0]["summary"] == "Runtime ready"
     assert payload["stats"]["last_publish_latency_ms"] is not None
     assert unchanged.status_code == 200
     assert unchanged.json()["unchanged"] is True
     assert unchanged.json()["cards"] == []
+    assert changed.status_code == 200
+    assert changed.json()["unchanged"] is False
+    assert changed.json()["registryVersion"] == 2
+    assert {card["id"] for card in changed.json()["cards"]} == {"runtime", "infrastate-yjs"}
 
 
 def test_state_sync_keeps_ready_semantics_for_bounded_replay_maintenance_pressure() -> None:

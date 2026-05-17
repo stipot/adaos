@@ -25,7 +25,8 @@ STATUS_CARD_WILDCARD_HANDLER = f"{STATUS_CARD_PROJECTION_PREFIX}*"
 
 _LOCK = RLock()
 _CARDS: dict[tuple[str, str], StatusCard] = {}
-_STATS: dict[str, float | int | None] = {
+_DEFAULT_STATS: dict[str, float | int | None] = {
+    "registry_version": 0,
     "publish_total": 0,
     "changed_total": 0,
     "unchanged_total": 0,
@@ -34,6 +35,7 @@ _STATS: dict[str, float | int | None] = {
     "sweep_total": 0,
     "swept_total": 0,
 }
+_STATS: dict[str, float | int | None] = dict(_DEFAULT_STATS)
 
 
 def status_card_projection_key(card_id: str) -> str:
@@ -66,8 +68,8 @@ def _registry_key(*, webspace_id: str, card_id: str) -> tuple[str, str]:
 def clear_status_card_registry() -> None:
     with _LOCK:
         _CARDS.clear()
-        for key in list(_STATS):
-            _STATS[key] = 0
+        _STATS.clear()
+        _STATS.update(_DEFAULT_STATS)
 
 
 def publish_status_card(
@@ -125,6 +127,7 @@ def _record_publish_stats(*, previous: StatusCard | None, card: StatusCard, star
         _STATS["unchanged_total"] = int(_STATS.get("unchanged_total") or 0) + 1
     else:
         _STATS["changed_total"] = int(_STATS.get("changed_total") or 0) + 1
+        _STATS["registry_version"] = int(_STATS.get("registry_version") or 0) + 1
     _STATS["last_publish_at"] = float(time.time())
     _STATS["last_publish_latency_ms"] = round(max(0.0, time.perf_counter() - started_at) * 1000.0, 3)
 
@@ -219,6 +222,8 @@ def sweep_status_card_registry(
                 _CARDS.pop(key, None)
             _STATS["sweep_total"] = int(_STATS.get("sweep_total") or 0) + 1
             _STATS["swept_total"] = int(_STATS.get("swept_total") or 0) + len(stale_items)
+            if stale_items:
+                _STATS["registry_version"] = int(_STATS.get("registry_version") or 0) + 1
         stats = dict(_STATS)
     return {
         "ok": True,
@@ -255,6 +260,7 @@ def status_card_registry_snapshot(*, webspace_id: str | None = None, now: float 
     return {
         "ok": True,
         "webspace_id": str(webspace_id or "").strip() or None,
+        "registry_version": int(stats.get("registry_version") or 0),
         "card_total": len(cards),
         "projection_total": len(records),
         "stale_total": stale_total,
