@@ -159,6 +159,79 @@ def _operations_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> Infras
     )
 
 
+def _browser_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> InfrascopeStatusCardSpec:
+    inventory = _mapping(snapshot.get("inventory"))
+    rows = _items(inventory.get("browsers"))
+    total = len(rows)
+    status = _worst_status(rows, empty="unknown") if total else "unknown"
+    return InfrascopeStatusCardSpec(
+        id="infrascope-browsers",
+        kind="browser-runtime",
+        status=status,
+        summary=f"{total} browser session{'s' if total != 1 else ''}",
+        scope={"webspace_id": webspace_id, "section": "browsers", "browser_total": total},
+        details_ref={
+            "kind": "stream",
+            "receiver": "infrascope.inventory.browsers",
+            "params": {"webspace_id": webspace_id},
+        },
+    )
+
+
+def _runtime_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> InfrascopeStatusCardSpec:
+    inventory = _mapping(snapshot.get("inventory"))
+    overview = _mapping(snapshot.get("overview"))
+    rows = _items(inventory.get("runtimes"))
+    active_rows = _items(overview.get("active_runtimes"))
+    total = len(rows)
+    status = _worst_status(rows + active_rows, empty="unknown") if rows or active_rows else "unknown"
+    return InfrascopeStatusCardSpec(
+        id="infrascope-runtimes",
+        kind="runtime",
+        status=status,
+        summary=f"{total} runtime object{'s' if total != 1 else ''}",
+        scope={
+            "webspace_id": webspace_id,
+            "section": "runtimes",
+            "runtime_total": total,
+            "active_runtime_total": len(active_rows),
+        },
+        details_ref={
+            "kind": "stream",
+            "receiver": "infrascope.inventory.runtimes",
+            "params": {"webspace_id": webspace_id},
+        },
+    )
+
+
+def _registry_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> InfrascopeStatusCardSpec:
+    inventory = _mapping(snapshot.get("inventory"))
+    skill_rows = _items(inventory.get("skills"))
+    scenario_rows = _items(inventory.get("scenarios"))
+    total = len(skill_rows) + len(scenario_rows)
+    status = _worst_status(skill_rows + scenario_rows, empty="unknown") if total else "unknown"
+    return InfrascopeStatusCardSpec(
+        id="infrascope-registry",
+        kind="registry",
+        status=status,
+        summary=f"{len(skill_rows)} skill{'s' if len(skill_rows) != 1 else ''} | {len(scenario_rows)} scenario{'s' if len(scenario_rows) != 1 else ''}",
+        scope={
+            "webspace_id": webspace_id,
+            "section": "registry",
+            "skill_total": len(skill_rows),
+            "scenario_total": len(scenario_rows),
+        },
+        details_ref={
+            "kind": "stream",
+            "receiver": "infrascope.inventory.skills",
+            "params": {
+                "webspace_id": webspace_id,
+                "related_receivers": ["infrascope.inventory.scenarios"],
+            },
+        },
+    )
+
+
 def build_infrascope_status_card_specs(
     snapshot: Mapping[str, Any],
     *,
@@ -173,6 +246,9 @@ def build_infrascope_status_card_specs(
         _incidents_spec(data, webspace_id=target_webspace),
         _inventory_spec(data, webspace_id=target_webspace),
         _operations_spec(data, webspace_id=target_webspace),
+        _browser_spec(data, webspace_id=target_webspace),
+        _runtime_spec(data, webspace_id=target_webspace),
+        _registry_spec(data, webspace_id=target_webspace),
     ]
 
 
