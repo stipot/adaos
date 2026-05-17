@@ -526,7 +526,7 @@ def _reliability_summary_metrics_snapshot() -> dict[str, Any]:
         }
 
 
-def _reset_reliability_summary_metrics_for_tests() -> None:
+def _reset_reliability_summary_metrics() -> None:
     with _RELIABILITY_SUMMARY_METRICS_LOCK:
         _RELIABILITY_SUMMARY_METRICS["requestTotal"] = 0
         _RELIABILITY_SUMMARY_METRICS["responseBytesTotal"] = 0
@@ -536,6 +536,10 @@ def _reset_reliability_summary_metrics_for_tests() -> None:
         _RELIABILITY_SUMMARY_METRICS["statusCodes"] = {}
         _RELIABILITY_SUMMARY_METRICS["byMode"] = {}
         _RELIABILITY_SUMMARY_METRICS["last"] = None
+
+
+def _reset_reliability_summary_metrics_for_tests() -> None:
+    _reset_reliability_summary_metrics()
 
 
 def _status_card_registry_etag(*, webspace_id: str, registry_version: int) -> str:
@@ -1599,6 +1603,18 @@ async def node_reliability_summary_telemetry() -> dict[str, Any]:
     return {
         "ok": True,
         "source": "api.node.reliability.summary.telemetry",
+        "telemetry": _reliability_summary_metrics_snapshot(),
+    }
+
+
+@router.post("/reliability/summary/telemetry/reset", dependencies=[Depends(require_token)])
+async def node_reliability_summary_telemetry_reset() -> dict[str, Any]:
+    previous = _reliability_summary_metrics_snapshot()
+    _reset_reliability_summary_metrics()
+    return {
+        "ok": True,
+        "source": "api.node.reliability.summary.telemetry.reset",
+        "previous": previous,
         "telemetry": _reliability_summary_metrics_snapshot(),
     }
 

@@ -1734,6 +1734,7 @@ def test_node_reliability_summary_endpoint_returns_compact_runtime_snapshot(monk
 
     response = client.get("/api/node/reliability/summary")
     telemetry = client.get("/api/node/reliability/summary/telemetry")
+    reset = client.post("/api/node/reliability/summary/telemetry/reset")
     assert response.status_code == 200
     payload = response.json()
 
@@ -1759,6 +1760,10 @@ def test_node_reliability_summary_endpoint_returns_compact_runtime_snapshot(monk
     assert telemetry_payload["last"]["mode"] == "full"
     assert telemetry_payload["last"]["statusCode"] == 200
     assert telemetry_payload["last"]["responseBytes"] > 0
+    assert reset.status_code == 200
+    assert reset.json()["previous"]["requestTotal"] == 1
+    assert reset.json()["telemetry"]["requestTotal"] == 0
+    assert reset.json()["telemetry"]["byMode"] == {}
 
 
 def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> None:
