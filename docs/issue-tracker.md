@@ -1814,6 +1814,8 @@ Implemented artifacts:
 - `/api/node/reliability/summary/telemetry` exposes in-memory counters for
   summary mode, status code, estimated response bytes, unchanged hits, and
   `304 Not Modified` hits.
+- Telemetry includes average response bytes per mode plus a full-vs-thin payload
+  comparison with estimated byte and ratio reduction.
 
 ### TEST-001: Make `test_infrastate_skill_projection.py` hermetic
 

@@ -205,6 +205,8 @@ Current status:
 - `/api/node/reliability/summary/telemetry` records summary mode, status codes,
   estimated response bytes, unchanged hits, and `304 Not Modified` hits for
   acceptance analysis
+- telemetry compares average full and thin payload sizes to make reduction
+  evidence visible without a separate log parser
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot
