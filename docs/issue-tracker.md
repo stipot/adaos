@@ -1816,6 +1816,8 @@ Implemented artifacts:
   `304 Not Modified` hits.
 - Telemetry includes average response bytes per mode plus a full-vs-thin payload
   comparison with estimated byte and ratio reduction.
+- `/api/node/reliability/summary/telemetry/reset` clears the in-memory counters
+  and returns the previous snapshot for clean manual acceptance runs.
 
 ### TEST-001: Make `test_infrastate_skill_projection.py` hermetic
 

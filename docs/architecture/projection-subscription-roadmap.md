@@ -207,6 +207,8 @@ Current status:
   acceptance analysis
 - telemetry compares average full and thin payload sizes to make reduction
   evidence visible without a separate log parser
+- telemetry can be reset through `/api/node/reliability/summary/telemetry/reset`
+  before a clean manual or soak acceptance run
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot

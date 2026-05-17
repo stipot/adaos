@@ -358,7 +358,7 @@ Use this checklist for every implementation slice touching the event model.
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API and status-card wildcard handler added |
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` added |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
-| Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, and payload comparison added |
+| Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, and telemetry reset added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by client adapter and previous heavy-skill inventory |
