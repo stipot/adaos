@@ -215,6 +215,7 @@ Current status:
 
 ### 8. Infrascope Migration Slice
 
+- [x] `infrascope.status_card_adapter_first`: map overview, active incidents, inventory, and operations into shared status cards
 - [ ] `infrascope.split_projection_families`: split `overview`, `inventory`, `inspector`, `topology`, and modal/widget payloads into separate projections
 - [ ] `infrascope.stop_full_inspector_snapshot`: stop pre-materializing all inspectors into one Yjs snapshot
 - [ ] `infrascope.demanded_only_per_webspace`: publish only the projections actively demanded by each webspace

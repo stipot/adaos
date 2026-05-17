@@ -1694,7 +1694,8 @@ Implemented artifacts:
 
 #### STATUS-005: Convert `infrascope_skill` to the shared status plane
 
-Status: planned.
+Status: in progress. First tracked status-card adapter is implemented for
+overview, active incidents, inventory, and operations.
 
 Current useful pattern:
 
@@ -1707,13 +1708,25 @@ Current useful pattern:
 
 Actions:
 
-- [ ] Identify `infrascope` status cards: overview, active incidents,
-  inventory, browser/runtime state, registry, and operations.
-- [ ] Publish cards through the shared SDK helpers.
-- [ ] Keep overview/inventory/inspector streams as details targets.
+- [x] Identify first `infrascope` status cards: overview, active incidents,
+  inventory, and operations.
+- [x] Publish first cards through the shared SDK helpers.
+- [x] Keep overview/inventory/operations streams as details targets.
+- [ ] Extend cards to browser/runtime state and registry sections.
+- [ ] Wire the tracked adapter into the live `infrascope_skill` refresh path.
 - [ ] Ensure inspector data stays lazy and is not embedded in status cards.
 - [ ] Add tests proving the overview badge can update without full inventory
   reconstruction.
+
+Implemented artifacts:
+
+- `adaos.services.infrascope_status_cards` maps Infrascope summary, active
+  incidents, inventory, and operations snapshots into shared status cards.
+- The first adapter preserves stream details references:
+  `infrascope.overview.active_incidents`, `infrascope.inventory.all`, and
+  `infrascope.operations.active`.
+- Unit tests verify shared-registry publication, owner metadata, details refs,
+  and unchanged snapshot dedupe.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
