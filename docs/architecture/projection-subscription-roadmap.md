@@ -193,6 +193,8 @@ Current status:
   details for stream-backed status cards without expanding the card payload
 - `/api/node/status-cards/sweep` previews or removes TTL-expired cards and
   registry stats now include last publish latency plus sweep counters
+- `/api/node/reliability/summary?mode=thin` now reads the materialized
+  status-card registry and supports `since_version` unchanged responses
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot

@@ -1715,7 +1715,8 @@ Actions:
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
-Status: planned.
+Status: in progress. Compatibility mode remains unchanged; `mode=thin` now
+uses the materialized status-card registry.
 
 Expected behavior:
 
@@ -1727,11 +1728,20 @@ Expected behavior:
 Actions:
 
 - [ ] Measure current response size and polling frequency.
-- [ ] Add `mode=thin` or make thin mode the default with a compatibility flag
+- [x] Add `mode=thin` or make thin mode the default with a compatibility flag
   for full mode.
-- [ ] Add `ETag` / `If-None-Match` support or `since_version`.
+- [x] Add `ETag` / `If-None-Match` support or `since_version`.
 - [ ] Keep a migration-safe full snapshot path for existing debug tools.
-- [ ] Add tests for unchanged response behavior and full-mode compatibility.
+- [x] Add tests for unchanged response behavior and full-mode compatibility.
+
+Implemented artifacts:
+
+- `/api/node/reliability/summary?mode=thin` returns status-card backed fields:
+  card totals, stale/ready totals, registry stats, and thin card descriptors.
+- `since_version` returns `unchanged=true` with an empty card list when the
+  materialized status-card versions have not advanced.
+- The existing compatibility summary remains the default response when `mode`
+  is omitted.
 
 #### STATUS-007: Move client monitoring from polling to push/delta
 
