@@ -202,6 +202,9 @@ Current status:
 - thin summary responses expose registry ETags and cache headers, and matching
   `If-None-Match` requests return `304 Not Modified` without the full
   compatibility payload
+- `/api/node/reliability/summary/telemetry` records summary mode, status codes,
+  estimated response bytes, unchanged hits, and `304 Not Modified` hits for
+  acceptance analysis
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot

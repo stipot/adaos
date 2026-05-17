@@ -1795,7 +1795,7 @@ Acceptance criteria:
 
 Actions:
 
-- [ ] Add log/metric for reliability summary mode, response bytes, and
+- [x] Add log/metric for reliability summary mode, response bytes, and
   unchanged/304 counts.
 - [x] Add status registry diagnostics to the final soak analysis.
 - [ ] Run a 180-second acceptance with browser attached.
@@ -1811,6 +1811,9 @@ Implemented artifacts:
 - `/api/node/projection-diagnostics` exposes active projection totals, missing
   handlers, missing status cards, stale demand, and per-projection consumers for
   Swagger/manual verification.
+- `/api/node/reliability/summary/telemetry` exposes in-memory counters for
+  summary mode, status code, estimated response bytes, unchanged hits, and
+  `304 Not Modified` hits.
 
 ### TEST-001: Make `test_infrastate_skill_projection.py` hermetic
 
