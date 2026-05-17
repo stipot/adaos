@@ -195,6 +195,8 @@ Current status:
   registry stats now include last publish latency plus sweep counters
 - `/api/node/reliability/summary?mode=thin` now reads the materialized
   status-card registry and supports `since_version` unchanged responses
+- `since_version` is backed by registry-level `registry_version`, so adding a
+  new card with local version `1` still advances the thin polling token
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot

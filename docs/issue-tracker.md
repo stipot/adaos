@@ -1617,6 +1617,8 @@ Implemented artifacts:
 - `/api/node/status-cards/sweep` can preview or remove TTL-expired cards per
   webspace; registry stats include `last_publish_latency_ms`, `sweep_total`,
   and `swept_total`.
+- Registry snapshots include `registry_version`; it advances on meaningful
+  status-card changes and sweep removals, not on unchanged keepalive publishes.
 
 #### STATUS-003: Add skill-facing SDK helpers
 
@@ -1739,7 +1741,7 @@ Implemented artifacts:
 - `/api/node/reliability/summary?mode=thin` returns status-card backed fields:
   card totals, stale/ready totals, registry stats, and thin card descriptors.
 - `since_version` returns `unchanged=true` with an empty card list when the
-  materialized status-card versions have not advanced.
+  materialized status-card registry version has not advanced.
 - The existing compatibility summary remains the default response when `mode`
   is omitted.
 
