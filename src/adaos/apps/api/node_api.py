@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 import gc
 import os
+import threading
 import time
 import tracemalloc
 from functools import partial
@@ -108,6 +110,17 @@ from adaos.services.yjs.webspace import coerce_webspace_id, default_webspace_id
 
 router = APIRouter()
 _log = logging.getLogger("adaos.api.node_api")
+_RELIABILITY_SUMMARY_METRICS_LOCK = threading.Lock()
+_RELIABILITY_SUMMARY_METRICS: dict[str, Any] = {
+    "requestTotal": 0,
+    "responseBytesTotal": 0,
+    "lastResponseBytes": 0,
+    "unchangedTotal": 0,
+    "notModifiedTotal": 0,
+    "statusCodes": {},
+    "byMode": {},
+    "last": None,
+}
 
 
 def _coerce_dict(value: Any) -> dict[str, Any]:
@@ -380,6 +393,111 @@ def _numeric_version(value: Any) -> int | None:
         return int(value)
     except Exception:
         return None
+
+
+def _estimated_json_response_bytes(payload: Any) -> int:
+    try:
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    except Exception:
+        body = str(payload)
+    return len(body.encode("utf-8"))
+
+
+def _record_reliability_summary_metric(
+    *,
+    mode: str,
+    webspace_id: str,
+    status_code: int,
+    payload: Any | None = None,
+    response_bytes: int | None = None,
+    unchanged: bool = False,
+) -> None:
+    mode_key = str(mode or "full").strip().lower() or "full"
+    if response_bytes is None:
+        response_bytes = 0 if payload is None else _estimated_json_response_bytes(payload)
+    response_bytes = max(0, int(response_bytes))
+    status_key = str(int(status_code))
+    now_ms = int(time.time() * 1000)
+    with _RELIABILITY_SUMMARY_METRICS_LOCK:
+        _RELIABILITY_SUMMARY_METRICS["requestTotal"] += 1
+        _RELIABILITY_SUMMARY_METRICS["responseBytesTotal"] += response_bytes
+        _RELIABILITY_SUMMARY_METRICS["lastResponseBytes"] = response_bytes
+        _RELIABILITY_SUMMARY_METRICS["statusCodes"][status_key] = (
+            int(_RELIABILITY_SUMMARY_METRICS["statusCodes"].get(status_key) or 0) + 1
+        )
+        if unchanged:
+            _RELIABILITY_SUMMARY_METRICS["unchangedTotal"] += 1
+        if int(status_code) == 304:
+            _RELIABILITY_SUMMARY_METRICS["notModifiedTotal"] += 1
+
+        by_mode = _RELIABILITY_SUMMARY_METRICS["byMode"]
+        mode_metrics = by_mode.setdefault(
+            mode_key,
+            {
+                "requestTotal": 0,
+                "responseBytesTotal": 0,
+                "lastResponseBytes": 0,
+                "unchangedTotal": 0,
+                "notModifiedTotal": 0,
+                "statusCodes": {},
+            },
+        )
+        mode_metrics["requestTotal"] += 1
+        mode_metrics["responseBytesTotal"] += response_bytes
+        mode_metrics["lastResponseBytes"] = response_bytes
+        mode_metrics["statusCodes"][status_key] = int(mode_metrics["statusCodes"].get(status_key) or 0) + 1
+        if unchanged:
+            mode_metrics["unchangedTotal"] += 1
+        if int(status_code) == 304:
+            mode_metrics["notModifiedTotal"] += 1
+
+        _RELIABILITY_SUMMARY_METRICS["last"] = {
+            "mode": mode_key,
+            "webspaceId": webspace_id,
+            "statusCode": int(status_code),
+            "responseBytes": response_bytes,
+            "unchanged": bool(unchanged),
+            "at": now_ms,
+        }
+
+
+def _reliability_summary_metrics_snapshot() -> dict[str, Any]:
+    with _RELIABILITY_SUMMARY_METRICS_LOCK:
+        return {
+            "requestTotal": int(_RELIABILITY_SUMMARY_METRICS["requestTotal"]),
+            "responseBytesTotal": int(_RELIABILITY_SUMMARY_METRICS["responseBytesTotal"]),
+            "lastResponseBytes": int(_RELIABILITY_SUMMARY_METRICS["lastResponseBytes"]),
+            "unchangedTotal": int(_RELIABILITY_SUMMARY_METRICS["unchangedTotal"]),
+            "notModifiedTotal": int(_RELIABILITY_SUMMARY_METRICS["notModifiedTotal"]),
+            "statusCodes": dict(_RELIABILITY_SUMMARY_METRICS["statusCodes"]),
+            "byMode": {
+                str(mode): {
+                    "requestTotal": int(metrics.get("requestTotal") or 0),
+                    "responseBytesTotal": int(metrics.get("responseBytesTotal") or 0),
+                    "lastResponseBytes": int(metrics.get("lastResponseBytes") or 0),
+                    "unchangedTotal": int(metrics.get("unchangedTotal") or 0),
+                    "notModifiedTotal": int(metrics.get("notModifiedTotal") or 0),
+                    "statusCodes": dict(metrics.get("statusCodes") or {}),
+                }
+                for mode, metrics in dict(_RELIABILITY_SUMMARY_METRICS["byMode"]).items()
+                if isinstance(metrics, Mapping)
+            },
+            "last": dict(_RELIABILITY_SUMMARY_METRICS["last"] or {})
+            if isinstance(_RELIABILITY_SUMMARY_METRICS.get("last"), Mapping)
+            else None,
+        }
+
+
+def _reset_reliability_summary_metrics_for_tests() -> None:
+    with _RELIABILITY_SUMMARY_METRICS_LOCK:
+        _RELIABILITY_SUMMARY_METRICS["requestTotal"] = 0
+        _RELIABILITY_SUMMARY_METRICS["responseBytesTotal"] = 0
+        _RELIABILITY_SUMMARY_METRICS["lastResponseBytes"] = 0
+        _RELIABILITY_SUMMARY_METRICS["unchangedTotal"] = 0
+        _RELIABILITY_SUMMARY_METRICS["notModifiedTotal"] = 0
+        _RELIABILITY_SUMMARY_METRICS["statusCodes"] = {}
+        _RELIABILITY_SUMMARY_METRICS["byMode"] = {}
+        _RELIABILITY_SUMMARY_METRICS["last"] = None
 
 
 def _status_card_registry_etag(*, webspace_id: str, registry_version: int) -> str:
@@ -1407,13 +1525,44 @@ async def node_reliability_summary(
         response.headers["X-AdaOS-Cache-Key"] = str(cache.get("key") or "")
         response.headers["X-AdaOS-Registry-Version"] = str(cache.get("version") or 0)
         if _if_none_match_matches(if_none_match, response.headers["ETag"]):
+            _record_reliability_summary_metric(
+                mode="thin",
+                webspace_id=target_webspace_id,
+                status_code=304,
+                response_bytes=0,
+                unchanged=True,
+            )
             return Response(status_code=304, headers=dict(response.headers))
+        _record_reliability_summary_metric(
+            mode="thin",
+            webspace_id=target_webspace_id,
+            status_code=200,
+            payload=payload,
+            unchanged=bool(payload.get("unchanged")),
+        )
         return payload
     reliability = await _current_reliability_payload_async(webspace_id=webspace_id)
-    return _compact_runtime_reliability_payload(
+    payload = _compact_runtime_reliability_payload(
         reliability,
         webspace_id=target_webspace_id,
     )
+    _record_reliability_summary_metric(
+        mode="full",
+        webspace_id=target_webspace_id,
+        status_code=200,
+        payload=payload,
+        unchanged=False,
+    )
+    return payload
+
+
+@router.get("/reliability/summary/telemetry", dependencies=[Depends(require_token)])
+async def node_reliability_summary_telemetry() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "source": "api.node.reliability.summary.telemetry",
+        "telemetry": _reliability_summary_metrics_snapshot(),
+    }
 
 
 @router.post("/hub-root/reconnect", dependencies=[Depends(require_token)])

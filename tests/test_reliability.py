@@ -1755,6 +1755,7 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     from adaos.services.status_card_registry import clear_status_card_registry, publish_status_card
 
     clear_status_card_registry()
+    node_api._reset_reliability_summary_metrics_for_tests()
     monkeypatch.setattr(node_api, "_local_node_id", lambda: "node-a")
     monkeypatch.setattr(
         node_api,
@@ -1796,6 +1797,7 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
         "/api/node/reliability/summary",
         params={"webspace_id": "desktop", "mode": "thin", "since_version": 1},
     )
+    telemetry = client.get("/api/node/reliability/summary/telemetry")
 
     assert first.status_code == 200
     payload = first.json()
@@ -1833,6 +1835,18 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert changed.json()["cache"]["version"] == 2
     assert changed.headers["etag"] == 'W/"status-card-registry:desktop:2"'
     assert {card["id"] for card in changed.json()["cards"]} == {"runtime", "infrastate-yjs"}
+    assert telemetry.status_code == 200
+    telemetry_payload = telemetry.json()["telemetry"]
+    assert telemetry_payload["requestTotal"] == 4
+    assert telemetry_payload["statusCodes"] == {"200": 3, "304": 1}
+    assert telemetry_payload["unchangedTotal"] == 2
+    assert telemetry_payload["notModifiedTotal"] == 1
+    assert telemetry_payload["responseBytesTotal"] > 0
+    assert telemetry_payload["byMode"]["thin"]["requestTotal"] == 4
+    assert telemetry_payload["byMode"]["thin"]["statusCodes"] == {"200": 3, "304": 1}
+    assert telemetry_payload["last"]["mode"] == "thin"
+    assert telemetry_payload["last"]["webspaceId"] == "desktop"
+    assert telemetry_payload["last"]["statusCode"] == 200
 
 
 def test_state_sync_keeps_ready_semantics_for_bounded_replay_maintenance_pressure() -> None:
