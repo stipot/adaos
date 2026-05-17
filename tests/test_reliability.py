@@ -1854,11 +1854,50 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert telemetry_payload["unchangedTotal"] == 2
     assert telemetry_payload["notModifiedTotal"] == 1
     assert telemetry_payload["responseBytesTotal"] > 0
+    assert telemetry_payload["averageResponseBytes"] > 0
     assert telemetry_payload["byMode"]["thin"]["requestTotal"] == 4
     assert telemetry_payload["byMode"]["thin"]["statusCodes"] == {"200": 3, "304": 1}
+    assert telemetry_payload["byMode"]["thin"]["averageResponseBytes"] > 0
+    assert telemetry_payload["payloadComparison"] == {
+        "available": False,
+        "reason": "full_and_thin_samples_required",
+    }
     assert telemetry_payload["last"]["mode"] == "thin"
     assert telemetry_payload["last"]["webspaceId"] == "desktop"
     assert telemetry_payload["last"]["statusCode"] == 200
+
+
+def test_reliability_summary_telemetry_compares_full_and_thin_payloads() -> None:
+    from adaos.apps.api import node_api
+
+    node_api._reset_reliability_summary_metrics_for_tests()
+    node_api._record_reliability_summary_metric(
+        mode="full",
+        webspace_id="desktop",
+        status_code=200,
+        response_bytes=1000,
+    )
+    node_api._record_reliability_summary_metric(
+        mode="thin",
+        webspace_id="desktop",
+        status_code=200,
+        response_bytes=250,
+    )
+
+    telemetry = node_api._reliability_summary_metrics_snapshot()
+
+    assert telemetry["averageResponseBytes"] == 625.0
+    assert telemetry["byMode"]["full"]["averageResponseBytes"] == 1000.0
+    assert telemetry["byMode"]["thin"]["averageResponseBytes"] == 250.0
+    assert telemetry["payloadComparison"] == {
+        "available": True,
+        "fullAverageResponseBytes": 1000.0,
+        "thinAverageResponseBytes": 250.0,
+        "estimatedReductionBytes": 750.0,
+        "estimatedReductionRatio": 0.75,
+        "fullLastResponseBytes": 1000,
+        "thinLastResponseBytes": 250,
+    }
 
 
 def test_state_sync_keeps_ready_semantics_for_bounded_replay_maintenance_pressure() -> None:

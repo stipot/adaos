@@ -461,27 +461,65 @@ def _record_reliability_summary_metric(
         }
 
 
+def _average_response_bytes(metrics: Mapping[str, Any]) -> float:
+    request_total = int(metrics.get("requestTotal") or 0)
+    if request_total <= 0:
+        return 0.0
+    return round(float(metrics.get("responseBytesTotal") or 0) / request_total, 3)
+
+
+def _reliability_summary_mode_snapshot(metrics: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "requestTotal": int(metrics.get("requestTotal") or 0),
+        "responseBytesTotal": int(metrics.get("responseBytesTotal") or 0),
+        "lastResponseBytes": int(metrics.get("lastResponseBytes") or 0),
+        "averageResponseBytes": _average_response_bytes(metrics),
+        "unchangedTotal": int(metrics.get("unchangedTotal") or 0),
+        "notModifiedTotal": int(metrics.get("notModifiedTotal") or 0),
+        "statusCodes": dict(metrics.get("statusCodes") or {}),
+    }
+
+
+def _reliability_summary_payload_comparison(by_mode: Mapping[str, Any]) -> dict[str, Any]:
+    full = by_mode.get("full")
+    thin = by_mode.get("thin")
+    if not isinstance(full, Mapping) or not isinstance(thin, Mapping):
+        return {
+            "available": False,
+            "reason": "full_and_thin_samples_required",
+        }
+    full_average = _average_response_bytes(full)
+    thin_average = _average_response_bytes(thin)
+    reduction_bytes = max(0.0, full_average - thin_average)
+    reduction_ratio = round(reduction_bytes / full_average, 6) if full_average > 0 else 0.0
+    return {
+        "available": True,
+        "fullAverageResponseBytes": full_average,
+        "thinAverageResponseBytes": thin_average,
+        "estimatedReductionBytes": round(reduction_bytes, 3),
+        "estimatedReductionRatio": reduction_ratio,
+        "fullLastResponseBytes": int(full.get("lastResponseBytes") or 0),
+        "thinLastResponseBytes": int(thin.get("lastResponseBytes") or 0),
+    }
+
+
 def _reliability_summary_metrics_snapshot() -> dict[str, Any]:
     with _RELIABILITY_SUMMARY_METRICS_LOCK:
+        by_mode = {
+            str(mode): _reliability_summary_mode_snapshot(metrics)
+            for mode, metrics in dict(_RELIABILITY_SUMMARY_METRICS["byMode"]).items()
+            if isinstance(metrics, Mapping)
+        }
         return {
             "requestTotal": int(_RELIABILITY_SUMMARY_METRICS["requestTotal"]),
             "responseBytesTotal": int(_RELIABILITY_SUMMARY_METRICS["responseBytesTotal"]),
             "lastResponseBytes": int(_RELIABILITY_SUMMARY_METRICS["lastResponseBytes"]),
+            "averageResponseBytes": _average_response_bytes(_RELIABILITY_SUMMARY_METRICS),
             "unchangedTotal": int(_RELIABILITY_SUMMARY_METRICS["unchangedTotal"]),
             "notModifiedTotal": int(_RELIABILITY_SUMMARY_METRICS["notModifiedTotal"]),
             "statusCodes": dict(_RELIABILITY_SUMMARY_METRICS["statusCodes"]),
-            "byMode": {
-                str(mode): {
-                    "requestTotal": int(metrics.get("requestTotal") or 0),
-                    "responseBytesTotal": int(metrics.get("responseBytesTotal") or 0),
-                    "lastResponseBytes": int(metrics.get("lastResponseBytes") or 0),
-                    "unchangedTotal": int(metrics.get("unchangedTotal") or 0),
-                    "notModifiedTotal": int(metrics.get("notModifiedTotal") or 0),
-                    "statusCodes": dict(metrics.get("statusCodes") or {}),
-                }
-                for mode, metrics in dict(_RELIABILITY_SUMMARY_METRICS["byMode"]).items()
-                if isinstance(metrics, Mapping)
-            },
+            "byMode": by_mode,
+            "payloadComparison": _reliability_summary_payload_comparison(by_mode),
             "last": dict(_RELIABILITY_SUMMARY_METRICS["last"] or {})
             if isinstance(_RELIABILITY_SUMMARY_METRICS.get("last"), Mapping)
             else None,
