@@ -1742,6 +1742,8 @@ Implemented artifacts:
   card totals, stale/ready totals, registry stats, and thin card descriptors.
 - `since_version` returns `unchanged=true` with an empty card list when the
   materialized status-card registry version has not advanced.
+- Thin responses include cache hints: registry cache key, current registry
+  version, `since_version` parameter name, and per-card cache keys.
 - The existing compatibility summary remains the default response when `mode`
   is omitted.
 
@@ -1761,6 +1763,7 @@ Actions:
   `/api/node/reliability/summary`.
 - [ ] Replace badge/status polling with thin status snapshot plus updates.
 - [x] Wire existing webio stream receivers as lazy detail sources.
+- [x] Expose cache hints for status-card registry and card descriptors.
 - [ ] Add client-side cache keyed by status card version.
 - [ ] Verify the client no longer requests large summary payloads repeatedly
   during the first 3 minutes.
