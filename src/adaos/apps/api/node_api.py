@@ -399,6 +399,7 @@ def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = N
             "version": card.get("version"),
             "changedAt": card.get("changed_at"),
             "updatedAt": card.get("updated_at"),
+            "cacheKey": f"status-card:{webspace_id}:{card.get('id')}",
             "detailsRef": card.get("details_ref"),
         }
         for card in registry.get("cards", [])
@@ -419,6 +420,13 @@ def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = N
         "updatedAt": int(time.time() * 1000),
         "maxVersion": registry_version,
         "registryVersion": registry_version,
+        "cache": {
+            "key": f"status-card-registry:{webspace_id}",
+            "version": registry_version,
+            "sinceParam": "since_version",
+            "modeParam": "mode=thin",
+            "unchanged": bool(unchanged),
+        },
         "cardTotal": int(registry.get("card_total") or 0),
         "readyTotal": int(registry.get("ready_total") or 0),
         "staleTotal": int(registry.get("stale_total") or 0),

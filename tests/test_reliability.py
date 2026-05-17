@@ -1799,7 +1799,15 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert payload["cardTotal"] == 1
     assert payload["maxVersion"] == 1
     assert payload["registryVersion"] == 1
+    assert payload["cache"] == {
+        "key": "status-card-registry:desktop",
+        "version": 1,
+        "sinceParam": "since_version",
+        "modeParam": "mode=thin",
+        "unchanged": False,
+    }
     assert payload["cards"][0]["id"] == "runtime"
+    assert payload["cards"][0]["cacheKey"] == "status-card:desktop:runtime"
     assert payload["cards"][0]["summary"] == "Runtime ready"
     assert payload["stats"]["last_publish_latency_ms"] is not None
     assert unchanged.status_code == 200
@@ -1808,6 +1816,7 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert changed.status_code == 200
     assert changed.json()["unchanged"] is False
     assert changed.json()["registryVersion"] == 2
+    assert changed.json()["cache"]["version"] == 2
     assert {card["id"] for card in changed.json()["cards"]} == {"runtime", "infrastate-yjs"}
 
 
