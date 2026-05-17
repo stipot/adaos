@@ -1744,6 +1744,9 @@ Implemented artifacts:
   materialized status-card registry version has not advanced.
 - Thin responses include cache hints: registry cache key, current registry
   version, `since_version` parameter name, and per-card cache keys.
+- Thin HTTP responses expose `ETag`, `Cache-Control: no-cache`,
+  `X-AdaOS-Cache-Key`, and `X-AdaOS-Registry-Version` headers for future
+  client revalidation.
 - The existing compatibility summary remains the default response when `mode`
   is omitted.
 

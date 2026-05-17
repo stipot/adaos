@@ -199,6 +199,8 @@ Current status:
   new card with local version `1` still advances the thin polling token
 - thin summary responses include cache hints for the registry key, registry
   version, `since_version` parameter, and individual status-card cache keys
+- thin summary responses expose registry ETags and cache headers so clients can
+  revalidate without reading the full compatibility payload
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot
