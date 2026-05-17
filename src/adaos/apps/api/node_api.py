@@ -387,6 +387,26 @@ def _status_card_registry_etag(*, webspace_id: str, registry_version: int) -> st
     return f'W/"status-card-registry:{escaped_webspace_id}:{int(registry_version)}"'
 
 
+def _if_none_match_matches(if_none_match: str | None, etag: str) -> bool:
+    if not if_none_match or not etag:
+        return False
+
+    def _weak_value(value: str) -> str:
+        candidate = value.strip()
+        if candidate.startswith("W/"):
+            candidate = candidate[2:].strip()
+        return candidate
+
+    target = _weak_value(etag)
+    for raw_candidate in if_none_match.split(","):
+        candidate = raw_candidate.strip()
+        if candidate == "*":
+            return True
+        if _weak_value(candidate) == target:
+            return True
+    return False
+
+
 def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = None) -> dict[str, Any]:
     publish_runtime_status_card(
         webspace_id=webspace_id,
@@ -1373,7 +1393,8 @@ async def node_reliability_summary(
     webspace_id: str | None = None,
     mode: str | None = None,
     since_version: int | None = None,
-) -> dict[str, Any]:
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+) -> Any:
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     if str(mode or "").strip().lower() == "thin":
         payload = _thin_reliability_summary(
@@ -1385,6 +1406,8 @@ async def node_reliability_summary(
         response.headers["ETag"] = str(cache.get("etag") or "")
         response.headers["X-AdaOS-Cache-Key"] = str(cache.get("key") or "")
         response.headers["X-AdaOS-Registry-Version"] = str(cache.get("version") or 0)
+        if _if_none_match_matches(if_none_match, response.headers["ETag"]):
+            return Response(status_code=304, headers=dict(response.headers))
         return payload
     reliability = await _current_reliability_payload_async(webspace_id=webspace_id)
     return _compact_runtime_reliability_payload(

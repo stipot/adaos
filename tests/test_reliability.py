@@ -1773,6 +1773,11 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     client = TestClient(app)
 
     first = client.get("/api/node/reliability/summary", params={"webspace_id": "desktop", "mode": "thin"})
+    not_modified = client.get(
+        "/api/node/reliability/summary",
+        params={"webspace_id": "desktop", "mode": "thin"},
+        headers={"If-None-Match": first.headers["etag"]},
+    )
     unchanged = client.get(
         "/api/node/reliability/summary",
         params={"webspace_id": "desktop", "mode": "thin", "since_version": 1},
@@ -1811,6 +1816,10 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert first.headers["etag"] == 'W/"status-card-registry:desktop:1"'
     assert first.headers["x-adaos-cache-key"] == "status-card-registry:desktop"
     assert first.headers["x-adaos-registry-version"] == "1"
+    assert not_modified.status_code == 304
+    assert not_modified.content == b""
+    assert not_modified.headers["etag"] == 'W/"status-card-registry:desktop:1"'
+    assert not_modified.headers["x-adaos-registry-version"] == "1"
     assert payload["cards"][0]["id"] == "runtime"
     assert payload["cards"][0]["cacheKey"] == "status-card:desktop:runtime"
     assert payload["cards"][0]["summary"] == "Runtime ready"
