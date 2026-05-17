@@ -10,7 +10,7 @@ from typing import Any, Mapping, Optional
 
 import anyio
 import requests
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -382,6 +382,11 @@ def _numeric_version(value: Any) -> int | None:
         return None
 
 
+def _status_card_registry_etag(*, webspace_id: str, registry_version: int) -> str:
+    escaped_webspace_id = str(webspace_id).replace("\\", "\\\\").replace('"', '\\"')
+    return f'W/"status-card-registry:{escaped_webspace_id}:{int(registry_version)}"'
+
+
 def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = None) -> dict[str, Any]:
     publish_runtime_status_card(
         webspace_id=webspace_id,
@@ -410,6 +415,10 @@ def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = N
         or _coerce_dict(registry.get("stats")).get("registry_version")
         or 0
     )
+    etag = _status_card_registry_etag(
+        webspace_id=webspace_id,
+        registry_version=registry_version,
+    )
     unchanged = since_version is not None and registry_version <= int(since_version)
     return {
         "ok": True,
@@ -423,6 +432,7 @@ def _thin_reliability_summary(*, webspace_id: str, since_version: int | None = N
         "cache": {
             "key": f"status-card-registry:{webspace_id}",
             "version": registry_version,
+            "etag": etag,
             "sinceParam": "since_version",
             "modeParam": "mode=thin",
             "unchanged": bool(unchanged),
@@ -1359,16 +1369,23 @@ async def node_reliability() -> dict[str, Any]:
 
 @router.get("/reliability/summary", dependencies=[Depends(require_token)])
 async def node_reliability_summary(
+    response: Response,
     webspace_id: str | None = None,
     mode: str | None = None,
     since_version: int | None = None,
 ) -> dict[str, Any]:
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     if str(mode or "").strip().lower() == "thin":
-        return _thin_reliability_summary(
+        payload = _thin_reliability_summary(
             webspace_id=target_webspace_id,
             since_version=since_version,
         )
+        cache = _coerce_dict(payload.get("cache"))
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["ETag"] = str(cache.get("etag") or "")
+        response.headers["X-AdaOS-Cache-Key"] = str(cache.get("key") or "")
+        response.headers["X-AdaOS-Registry-Version"] = str(cache.get("version") or 0)
+        return payload
     reliability = await _current_reliability_payload_async(webspace_id=webspace_id)
     return _compact_runtime_reliability_payload(
         reliability,

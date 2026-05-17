@@ -1802,10 +1802,15 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert payload["cache"] == {
         "key": "status-card-registry:desktop",
         "version": 1,
+        "etag": 'W/"status-card-registry:desktop:1"',
         "sinceParam": "since_version",
         "modeParam": "mode=thin",
         "unchanged": False,
     }
+    assert first.headers["cache-control"] == "no-cache"
+    assert first.headers["etag"] == 'W/"status-card-registry:desktop:1"'
+    assert first.headers["x-adaos-cache-key"] == "status-card-registry:desktop"
+    assert first.headers["x-adaos-registry-version"] == "1"
     assert payload["cards"][0]["id"] == "runtime"
     assert payload["cards"][0]["cacheKey"] == "status-card:desktop:runtime"
     assert payload["cards"][0]["summary"] == "Runtime ready"
@@ -1817,6 +1822,7 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert changed.json()["unchanged"] is False
     assert changed.json()["registryVersion"] == 2
     assert changed.json()["cache"]["version"] == 2
+    assert changed.headers["etag"] == 'W/"status-card-registry:desktop:2"'
     assert {card["id"] for card in changed.json()["cards"]} == {"runtime", "infrastate-yjs"}
 
 
