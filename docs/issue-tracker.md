@@ -1597,8 +1597,8 @@ Actions:
 - [x] Add a core status registry service.
 - [x] Add per-card fingerprinting that ignores volatile fields such as
   `updated_at`, `_age_s`, and `_ago_s`.
-- [ ] Add TTL/staleness sweep.
-- [ ] Add compact registry diagnostics: card count, changed count, stale count,
+- [x] Add TTL/staleness sweep.
+- [x] Add compact registry diagnostics: card count, changed count, stale count,
   and last publish latency.
 - [x] Add unit tests for dedupe, versioning, TTL expiry, and owner scoping.
 
@@ -1614,6 +1614,9 @@ Implemented artifacts:
   materializes the runtime card by default.
 - Missing demanded cards are reported as `unavailable`; expired cards are
   reported as `stale`.
+- `/api/node/status-cards/sweep` can preview or remove TTL-expired cards per
+  webspace; registry stats include `last_publish_latency_ms`, `sweep_total`,
+  and `swept_total`.
 
 #### STATUS-003: Add skill-facing SDK helpers
 

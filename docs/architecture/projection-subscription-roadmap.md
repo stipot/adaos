@@ -191,6 +191,8 @@ Current status:
   handler coverage, and status-card materialization per webspace
 - `/api/node/status-cards/{card_id}/details/refresh` requests lazy stream
   details for stream-backed status cards without expanding the card payload
+- `/api/node/status-cards/sweep` previews or removes TTL-expired cards and
+  registry stats now include last publish latency plus sweep counters
 - missing cards return `unavailable`; TTL-expired cards return `stale`, so the
   operator-visible lifecycle semantics are exercised before the heavy skill
   pilot

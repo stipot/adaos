@@ -350,7 +350,7 @@ Use this checklist for every implementation slice touching the event model.
 | Event taxonomy | Stable vocabulary | Complete |
 | Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
-| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, and runtime card added |
+| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, and TTL sweep added |
 | Projection record ABI | Canonical record shape | Helper code added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
