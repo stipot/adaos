@@ -76,6 +76,8 @@ Target artifacts are service-owned runtime data:
 - `vocab.json`
 - `faiss.index`
 - `examples_manifest.jsonl`
+- `example_index.pt` as the current lazy Torch tensor k-NN cache until FAISS
+  positive/negative indexes replace it
 - `ranker_config.json`
 - `metrics.json`
 

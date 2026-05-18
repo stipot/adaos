@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -353,6 +354,22 @@ class Detector:
                 pass
         return str(model_path.stem or "node-default")
 
+    def _load_model_sha256(self, *, root: Path, metadata: dict[str, Any]) -> str:
+        token = str(metadata.get("model_sha256") or "").strip()
+        if token:
+            return token
+        metrics_path = root / "metrics.json"
+        if metrics_path.exists():
+            try:
+                metrics = _json_load(metrics_path)
+                if isinstance(metrics, dict):
+                    token = str(metrics.get("model_sha256") or "").strip()
+                    if token:
+                        return token
+            except Exception:
+                pass
+        return ""
+
     def _load_neural_engine(self):
         if torch is None or nn is None or F is None or NLUEncoder is None:
             return None
@@ -373,20 +390,97 @@ class Detector:
             model = NLUEncoder(len(vocab), len(labels), self._cfg)
             model.load_state_dict(state)
             model.eval()
+            model_id = self._load_model_id(root=root, metadata=metadata, model_path=model_path)
             engine = {
                 "model": model,
                 "labels": labels,
                 "stoi": {str(ch): idx for idx, ch in enumerate(vocab)},
                 "examples": examples,
                 "example_vectors": None,
-                "model_id": self._load_model_id(root=root, metadata=metadata, model_path=model_path),
+                "example_index_source": None,
+                "model_id": model_id,
+                "model_sha256": self._load_model_sha256(root=root, metadata=metadata),
                 "artifact_root": str(root),
             }
             if examples and os.getenv("ADAOS_NEURAL_DISABLE_EXAMPLE_INDEX", "0").strip().lower() not in {"1", "true", "yes", "on"}:
-                engine["example_vectors"] = self._embed_examples(model, engine["stoi"], examples)
+                vectors, source = self._load_example_index(root=root, model_id=model_id, engine=engine)
+                if vectors is None:
+                    vectors = self._embed_examples(model, engine["stoi"], examples)
+                    source = "built" if vectors is not None else None
+                    if vectors is not None:
+                        self._save_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors)
+                engine["example_vectors"] = vectors
+                engine["example_index_source"] = source
             return engine
         except Exception:
             return None
+
+    def _example_index_path(self, root: Path) -> Path:
+        token = os.getenv("ADAOS_NEURAL_EXAMPLE_INDEX_PATH", "").strip()
+        return Path(token).expanduser().resolve() if token else root / "example_index.pt"
+
+    @staticmethod
+    def _examples_digest(examples: list[ExampleEntry]) -> str:
+        digest = hashlib.sha256()
+        for entry in examples:
+            digest.update(entry.skill.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(entry.masked.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(entry.text.encode("utf-8"))
+            digest.update(b"\0")
+        return digest.hexdigest()
+
+    def _load_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> tuple[Any | None, str | None]:
+        path = self._example_index_path(root)
+        examples: list[ExampleEntry] = engine.get("examples") or []
+        if not path.exists() or not examples:
+            return None, None
+        try:
+            payload = torch.load(str(path), map_location="cpu")
+        except Exception:
+            return None, None
+        if not isinstance(payload, dict):
+            return None, None
+        vectors = payload.get("vectors")
+        if vectors is None or not hasattr(vectors, "shape"):
+            return None, None
+        if int(payload.get("example_count") or -1) != len(examples):
+            return None, None
+        if str(payload.get("examples_digest") or "") != self._examples_digest(examples):
+            return None, None
+        stored_model_id = str(payload.get("model_id") or "").strip()
+        if stored_model_id and stored_model_id != str(model_id):
+            return None, None
+        stored_sha = str(payload.get("model_sha256") or "").strip()
+        current_sha = str(engine.get("model_sha256") or "").strip()
+        if stored_sha and current_sha and stored_sha != current_sha:
+            return None, None
+        return vectors.cpu(), "disk"
+
+    def _save_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> None:
+        if os.getenv("ADAOS_NEURAL_SAVE_EXAMPLE_INDEX", "1").strip().lower() in {"0", "false", "no", "off"}:
+            return
+        examples: list[ExampleEntry] = engine.get("examples") or []
+        if vectors is None or not examples:
+            return
+        path = self._example_index_path(root)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(
+                {
+                    "schema_version": 1,
+                    "backend": "torch_tensor",
+                    "model_id": str(model_id),
+                    "model_sha256": str(engine.get("model_sha256") or ""),
+                    "example_count": len(examples),
+                    "examples_digest": self._examples_digest(examples),
+                    "vectors": vectors.cpu(),
+                },
+                str(path),
+            )
+        except Exception:
+            pass
 
     def _encode_masked(self, masked_text: str, stoi: dict[str, int]) -> list[int]:
         ids = [self._cfg.BOS_IDX]
@@ -513,6 +607,7 @@ class Detector:
                 "evidence": {
                     "backend": "charcnn_bilstm",
                     "ranker": "embedding_knn" if ranked_examples else "softmax",
+                    "example_index": str(engine.get("example_index_source") or "none"),
                     "softmax": clf_prob,
                     "canonicalized_text": model_text,
                     "masked_text": mask.masked,
@@ -596,9 +691,11 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.3",
+            "version": "0.2.4",
             "torch_available": torch is not None,
             "model_loaded": bool(engine),
             "model_id": engine.get("model_id") if engine else None,
+            "examples_total": len(engine.get("examples") or []) if engine else 0,
+            "example_index": engine.get("example_index_source") if engine else None,
             "artifact_root": str(self._artifacts_root()),
         }

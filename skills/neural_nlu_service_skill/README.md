@@ -56,6 +56,7 @@ Preferred node-level layout:
 - `<ADAOS_BASE_DIR>/state/nlu/neural/intents_manifest.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/vocab.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/examples_manifest.jsonl`
+- `<ADAOS_BASE_DIR>/state/nlu/neural/example_index.pt` (lazy Torch tensor k-NN cache)
 - `<ADAOS_BASE_DIR>/state/nlu/neural/ranker_config.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/metrics.json`
 
@@ -88,3 +89,8 @@ The script copies `best_model*.pt` to `model.pt`, builds `labels.json` and
 `examples_manifest.jsonl`, `intents_manifest.json`, `ranker_config.json`, and
 `metrics.json`. It does not require Torch; Torch is needed later when the
 service loads the model for inference.
+
+On first successful model load with examples present, the detector writes a
+lazy `example_index.pt` tensor cache. Subsequent restarts can reuse it instead
+of recomputing all example embeddings. This is a transitional cache until the
+planned FAISS positive/negative indexes are added.

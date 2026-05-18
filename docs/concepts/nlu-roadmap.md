@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **66%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **68%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -149,6 +149,8 @@ but the productionization checklist remains mostly open.
 - [x] Port Char-CNN + BiLSTM model loader.
 - [x] Fix and test special-token compatibility between training and runtime.
 - [x] Port supervised-contrastive embedding projection usage.
+- [x] Persist a lazy Torch tensor positive-example k-NN cache as an
+  intermediate step before FAISS indexes.
 - [ ] Add FAISS positive example index.
 - [ ] Add FAISS negative example indexes.
 - [x] Add weighted ranker over softmax, k-NN similarity, and action/skill
