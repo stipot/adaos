@@ -691,7 +691,7 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.4",
+            "version": "0.2.5",
             "torch_available": torch is not None,
             "model_loaded": bool(engine),
             "model_id": engine.get("model_id") if engine else None,

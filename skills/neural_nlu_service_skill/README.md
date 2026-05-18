@@ -94,3 +94,15 @@ On first successful model load with examples present, the detector writes a
 lazy `example_index.pt` tensor cache. Subsequent restarts can reuse it instead
 of recomputing all example embeddings. This is a transitional cache until the
 planned FAISS positive/negative indexes are added.
+
+To write a golden phrase smoke report for the active artifacts:
+
+```powershell
+.adaos\workspace\skills\.runtime\neural_nlu_service_skill\v0.2\venv\Scripts\python.exe `
+  skills\neural_nlu_service_skill\scripts\evaluate_golden.py `
+  --min-accuracy 0.80
+```
+
+By default the report is written to
+`<ADAOS_BASE_DIR>/state/nlu/neural/golden_report.json`. A custom JSONL can be
+provided with `--cases`; each line should contain `text` and `expected_intent`.

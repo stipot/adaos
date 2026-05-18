@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **68%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **70%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -170,8 +170,8 @@ but the productionization checklist remains mostly open.
 - [x] Add immutable `model_id` and model provenance metadata for prepared
   notebook artifacts.
 - [ ] Add rollback pointer for the node-level active model.
-- [ ] Add golden phrase regression report before model promotion.
-- [ ] Add quality gates using accuracy, macro-F1, abstain rate, and latency.
+- [x] Add golden phrase regression report before model promotion.
+- [ ] Add full quality gates using macro-F1, abstain rate, and latency.
 - [ ] Defer per-locale/webspace/profile models until usage statistics justify
   the added operational complexity.
 

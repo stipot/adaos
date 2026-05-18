@@ -93,6 +93,10 @@ The script copies `best_model*.pt`, derives labels/vocab with the same masking
 and special-token order as the notebook, writes example and intent manifests,
 and records provenance in `metrics.json`.
 
+The active artifacts can be smoke-tested with
+`skills/neural_nlu_service_skill/scripts/evaluate_golden.py`, which writes
+`golden_report.json` and can fail the command with `--min-accuracy`.
+
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class
 can be justified by observed drift, latency, confidence, and fallback patterns.
