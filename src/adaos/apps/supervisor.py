@@ -35,6 +35,7 @@ from adaos.apps.api.auth import require_token
 from adaos.apps.bootstrap import init_ctx
 from adaos.apps.cli.commands.api import _advertise_base, _uvicorn_loop_mode
 from adaos.services.agent_context import get_ctx
+from adaos.services.bootstrap_update import SIDECAR_CONTROLLED_PATHS
 from adaos.services.core_slots import (
     activate_slot,
     active_slot,
@@ -1413,11 +1414,7 @@ class SupervisorManager:
         return None
 
     def _sidecar_controlled_relpaths(self) -> list[Path]:
-        return [
-            Path("src/adaos/services/realtime_sidecar.py"),
-            Path("src/adaos/services/nats_config.py"),
-            Path("src/adaos/services/nats_ws_transport.py"),
-        ]
+        return [Path(rel_path) for rel_path in SIDECAR_CONTROLLED_PATHS]
 
     def _sidecar_validated_slot_source(self) -> dict[str, Any]:
         slot_repo = self._sidecar_active_slot_repo_root()

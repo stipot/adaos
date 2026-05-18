@@ -496,6 +496,13 @@ def _git_text(repo_dir: Path, *args: str) -> str:
 
 
 _PREPARED_SLOT_IMPORT_MODULES: tuple[str, ...] = (
+    "adaos.apps.supervisor",
+    "adaos.services.core_update_policy",
+    "adaos.services.realtime_sidecar",
+    "adaos.services.nats_config",
+    "adaos.services.nats_ws_transport",
+    "adaos.services.runtime_dotenv",
+    "adaos.services.runtime_paths",
     "adaos.services.runtime_refresh",
     "adaos.services.node_display",
     "adaos.services.node_runtime_state",

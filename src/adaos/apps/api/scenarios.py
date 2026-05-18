@@ -11,7 +11,7 @@ from adaos.services.registry.subnet_directory import get_directory
 from adaos.services.scenario.manager import ScenarioManager
 from adaos.services.scenario.webspace_runtime import rebuild_webspace_from_sources
 from adaos.adapters.db import SqliteScenarioRegistry
-from adaos.services.operations import submit_install_operation
+from adaos.services.operations import submit_install_operation, submit_update_operation
 from adaos.services.yjs.webspace import default_webspace_id
 
 
@@ -84,6 +84,12 @@ def _node_label_from_directory(node: Dict[str, Any]) -> str:
 class InstallReq(BaseModel):
     name: str
     pin: Optional[str] = None
+    async_operation: bool = False
+    webspace_id: str | None = None
+
+
+class UpdateReq(BaseModel):
+    name: str
     async_operation: bool = False
     webspace_id: str | None = None
 
@@ -211,6 +217,67 @@ async def install(body: InstallReq, mgr: ScenarioManager = Depends(_get_manager)
             "path": str(getattr(meta, "path", "")),
         },
         "dependency_bootstrap": getattr(mgr, "last_dependency_bootstrap_result", None),
+    }
+
+
+@router.post("/update")
+async def update(body: UpdateReq, mgr: ScenarioManager = Depends(_get_manager)):
+    if body.async_operation:
+        operation = submit_update_operation(
+            target_kind="scenario",
+            target_id=body.name,
+            webspace_id=body.webspace_id,
+        )
+        return {
+            "ok": True,
+            "accepted": True,
+            "operation_id": operation["operation_id"],
+            "operation": operation,
+        }
+    webspace_id = body.webspace_id or default_webspace_id()
+    mgr.sync()
+    try:
+        dependency_bootstrap = mgr.bootstrap_dependencies(body.name, webspace_id=webspace_id)
+    except Exception as exc:
+        dependency_bootstrap = {
+            "ok": False,
+            "scenario_id": body.name,
+            "webspace_id": webspace_id,
+            "required": [],
+            "items": [],
+            "succeeded": [],
+            "failed": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    meta = None
+    try:
+        for item in list(mgr.list_present() or []):
+            if _meta_id(item) == body.name:
+                meta = item
+                break
+    except Exception:
+        meta = None
+    try:
+        mgr.sync_to_yjs(body.name, webspace_id=webspace_id, emit_event=False)
+    except Exception:
+        pass
+    try:
+        await rebuild_webspace_from_sources(
+            webspace_id,
+            action="scenario_update_sync",
+            scenario_id=body.name,
+            source_of_truth="scenario_projection",
+        )
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "scenario": {
+            "id": _meta_id(meta) if meta is not None else body.name,
+            "version": getattr(meta, "version", None),
+            "path": str(getattr(meta, "path", "")),
+        },
+        "dependency_bootstrap": dependency_bootstrap,
     }
 
 

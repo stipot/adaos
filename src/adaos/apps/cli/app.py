@@ -125,7 +125,8 @@ def _should_reexec_repo_venv() -> bool:
 
 
 def _should_reexec_active_slot_venv() -> bool:
-    if os.getenv("ADAOS_CLI_REEXECED") == "1":
+    reexec_reason = str(os.getenv("ADAOS_CLI_REEXEC_REASON") or "").strip()
+    if os.getenv("ADAOS_CLI_REEXECED") == "1" and reexec_reason != "adaos.exe wrapper":
         return False
     if os.getenv("ADAOS_DISABLE_ACTIVE_SLOT_PYTHON_REEXEC") == "1":
         return False
@@ -137,6 +138,7 @@ def _should_reexec_active_slot_venv() -> bool:
 
 def _reexec_preferred_python(reason: str, *, python: str | None = None, extra_env: dict[str, str] | None = None) -> None:
     os.environ["ADAOS_CLI_REEXECED"] = "1"
+    os.environ["ADAOS_CLI_REEXEC_REASON"] = str(reason)
     python = python or _preferred_cli_python()
     if extra_env:
         for key, value in extra_env.items():
@@ -189,6 +191,153 @@ def _apply_active_slot_manifest_environment_if_current() -> bool:
         except Exception:
             pass
     return True
+
+
+_GLOBAL_OPTION_VALUE_FLAGS = {"--base-dir", "--profile"}
+_GLOBAL_OPTION_BOOL_FLAGS = {"--reload", "--help", "-h"}
+_STATE_CHANGING_ROOT_COMMANDS = {"install", "reset", "switch", "update"}
+_STATE_CHANGING_COMMANDS = {
+    ("autostart", "disable"),
+    ("autostart", "enable"),
+    ("autostart", "restart"),
+    ("autostart", "smoke-update"),
+    ("autostart", "update-cancel"),
+    ("autostart", "update-complete"),
+    ("autostart", "update-defer"),
+    ("autostart", "update-promote-root"),
+    ("autostart", "update-restore-root"),
+    ("autostart", "update-rollback"),
+    ("autostart", "update-start"),
+    ("node", "join"),
+    ("node", "member-refresh"),
+    ("node", "member-update"),
+    ("node", "role"),
+    ("scenario", "create"),
+    ("scenario", "install"),
+    ("scenario", "push"),
+    ("scenario", "sync"),
+    ("scenario", "uninstall"),
+    ("skill", "activate"),
+    ("skill", "create"),
+    ("skill", "gc"),
+    ("skill", "install"),
+    ("skill", "migrate"),
+    ("skill", "push"),
+    ("skill", "reconcile-fs-to-db"),
+    ("skill", "rollback"),
+    ("skill", "scaffold"),
+    ("skill", "sync"),
+    ("skill", "uninstall"),
+}
+_STATE_CHANGING_TRIPLE_COMMANDS = {
+    ("node", "yjs", "backup"),
+    ("node", "yjs", "benchmark-scenario"),
+    ("node", "yjs", "create"),
+    ("node", "yjs", "ensure-dev"),
+    ("node", "yjs", "go-home"),
+    ("node", "yjs", "reload"),
+    ("node", "yjs", "reset"),
+    ("node", "yjs", "restore"),
+    ("node", "yjs", "scenario"),
+    ("node", "yjs", "set-home"),
+    ("node", "yjs", "set-home-current"),
+    ("node", "yjs", "update"),
+}
+
+
+def _cli_command_tokens(argv: list[str] | tuple[str, ...] | None = None) -> list[str]:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    tokens: list[str] = []
+    skip_next = False
+    for raw_part in raw:
+        part = str(raw_part or "").strip()
+        if skip_next:
+            skip_next = False
+            continue
+        if not part:
+            continue
+        if part in _GLOBAL_OPTION_VALUE_FLAGS:
+            skip_next = True
+            continue
+        if any(part.startswith(flag + "=") for flag in _GLOBAL_OPTION_VALUE_FLAGS):
+            continue
+        if part in _GLOBAL_OPTION_BOOL_FLAGS:
+            continue
+        if part.startswith("-"):
+            continue
+        tokens.append(part)
+        if len(tokens) >= 3:
+            break
+    return tokens
+
+
+def _is_state_changing_cli_command(argv: list[str] | tuple[str, ...] | None = None) -> bool:
+    tokens = _cli_command_tokens(argv)
+    if not tokens:
+        return False
+    root = tokens[0]
+    if root == "dev":
+        return False
+    if root in _STATE_CHANGING_ROOT_COMMANDS:
+        return True
+    if len(tokens) >= 3 and (tokens[0], tokens[1], tokens[2]) in _STATE_CHANGING_TRIPLE_COMMANDS:
+        return True
+    if len(tokens) < 2:
+        return False
+    return (tokens[0], tokens[1]) in _STATE_CHANGING_COMMANDS
+
+
+def _production_cli_slot_guard_enabled() -> bool:
+    if os.getenv("ADAOS_ALLOW_UNSLOTTED_CLI") == "1":
+        return False
+    if os.getenv("ADAOS_DISABLE_SLOT_CONTEXT_WARNING") == "1":
+        return False
+    env_type = str(os.getenv("ENV_TYPE") or os.getenv("ADAOS_ENV_TYPE") or "prod").strip().lower()
+    return env_type != "dev"
+
+
+def _slot_shell_required_diagnostic(argv: list[str] | tuple[str, ...] | None = None) -> dict[str, str]:
+    if not _production_cli_slot_guard_enabled() or not _is_state_changing_cli_command(argv):
+        return {}
+    preferred, _extra_env, repo_dir = _active_slot_manifest_payload()
+    if not preferred:
+        return {}
+    current_python = str(sys.executable or "")
+    python_matches = _same_executable_path(preferred, current_python)
+    bound = os.getenv("ADAOS_CLI_SLOT_BOUND") == "1"
+    cwd_matches = True
+    if repo_dir:
+        try:
+            cwd_matches = Path.cwd().resolve() == Path(repo_dir).resolve()
+        except Exception:
+            cwd_matches = False
+    if python_matches and bound and cwd_matches:
+        return {}
+    return {
+        "code": "slot_shell_required",
+        "command": " ".join(_cli_command_tokens(argv)),
+        "expected_python": str(preferred),
+        "current_python": current_python,
+        "expected_repo": str(repo_dir or ""),
+        "current_cwd": str(Path.cwd()),
+        "hint": "source tools/slot-shell.sh --cd",
+    }
+
+
+def _warn_if_slot_shell_required(argv: list[str] | tuple[str, ...] | None = None) -> None:
+    diagnostic = _slot_shell_required_diagnostic(argv)
+    if not diagnostic:
+        return
+    hint = diagnostic.get("hint") or "source tools/slot-shell.sh --cd"
+    try:
+        typer.secho(
+            "[AdaOS] warning: state-changing production CLI command is not running from the active slot context.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        typer.echo(f"[AdaOS] diagnostic: {diagnostic.get('code')}; run `{hint}` before retrying.", err=True)
+    except Exception:
+        pass
 
 
 _maybe_reexec_windows_wrapper()
@@ -356,6 +505,7 @@ def main(
     # 4) автоподготовка окружения
     if ctx.invoked_subcommand != "reset":
         ensure_environment()
+    _warn_if_slot_shell_required()
 
 
 # -------- команды обслуживания --------

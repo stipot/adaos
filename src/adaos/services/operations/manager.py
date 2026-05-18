@@ -522,14 +522,34 @@ def get_operation_manager(ctx: AgentContext | None = None) -> OperationManager:
         return manager
 
 
-def _operation_scope(*, target_kind: str, target_id: str) -> list[str]:
+def _operation_scope(*, target_kind: str, target_id: str, action: str = "install") -> list[str]:
     normalized_kind = str(target_kind or "").strip()
     normalized_id = str(target_id or "").strip()
+    normalized_action = str(action or "install").strip() or "install"
     return [
         "global",
-        f"{normalized_kind}.install",
+        f"{normalized_kind}.{normalized_action}",
         f"{normalized_kind}:{normalized_id}",
     ]
+
+
+def _meta_identifier(meta: Any, *, fallback: str = "") -> str:
+    if meta is None:
+        return str(fallback or "").strip()
+    mid = getattr(meta, "id", None)
+    if mid is not None:
+        return str(getattr(mid, "value", mid) or fallback).strip()
+    return str(getattr(meta, "name", "") or fallback).strip()
+
+
+def _find_present_scenario_meta(mgr: ScenarioManager, target_id: str) -> Any | None:
+    try:
+        for item in list(mgr.list_present() or []):
+            if _meta_identifier(item, fallback=target_id) == target_id:
+                return item
+    except Exception:
+        _log.debug("failed to resolve present scenario metadata id=%s", target_id, exc_info=True)
+    return None
 
 
 def submit_install_operation(
@@ -539,22 +559,24 @@ def submit_install_operation(
     webspace_id: str | None = None,
     initiator: dict[str, Any] | None = None,
     ctx: AgentContext | None = None,
+    action: str = "install",
 ) -> dict[str, Any]:
     runtime = ctx or get_ctx()
     manager = get_operation_manager(runtime)
     ws = str(webspace_id or "").strip() or default_webspace_id()
+    operation_action = str(action or "install").strip().lower() or "install"
     operation = manager.create_operation(
-        kind=f"{target_kind}.install",
+        kind=f"{target_kind}.{operation_action}",
         target_kind=target_kind,
         target_id=target_id,
         webspace_id=ws,
         initiator=initiator or {"kind": "user", "id": "local"},
-        scope=_operation_scope(target_kind=target_kind, target_id=target_id),
-        message=f"Accepted {target_kind} install",
+        scope=_operation_scope(target_kind=target_kind, target_id=target_id, action=operation_action),
+        message=f"Accepted {target_kind} {operation_action}",
     )
 
     async def _worker(handle: OperationHandle) -> None:
-        if _use_subprocess_install():
+        if operation_action == "install" and _use_subprocess_install():
             timeout_name = (
                 "ADAOS_SKILL_INSTALL_PROCESS_TIMEOUT_S"
                 if target_kind == "skill"
@@ -650,8 +672,14 @@ def submit_install_operation(
                 )
             return warnings
 
-        handle.running(progress=5, message="Preparing install", current_step="prepare")
+        handle.running(progress=5, message=f"Preparing {operation_action}", current_step="prepare")
         if target_kind == "skill":
+            if operation_action != "install":
+                handle.failed(
+                    message=f"unsupported skill operation: {operation_action}",
+                    error={"type": "UnsupportedOperation", "message": f"unsupported skill operation: {operation_action}"},
+                )
+                return
             mgr = SkillManager(
                 repo=runtime.skills_repo,
                 registry=SqliteSkillRegistry(runtime.sql),
@@ -727,8 +755,18 @@ def submit_install_operation(
         warnings: list[str] = []
         handle.update(progress=15, message="Syncing scenarios workspace", current_step="workspace.sync")
         await asyncio.to_thread(mgr.sync)
-        handle.update(progress=45, message="Installing scenario", current_step="scenario.install")
-        meta = await asyncio.to_thread(partial(mgr.install, target_id, pin=None))
+        if operation_action == "install":
+            handle.update(progress=45, message="Installing scenario", current_step="scenario.install")
+            meta = await asyncio.to_thread(partial(mgr.install, target_id, pin=None))
+        elif operation_action == "update":
+            handle.update(progress=45, message="Updating scenario source", current_step="scenario.update")
+            meta = await asyncio.to_thread(partial(_find_present_scenario_meta, mgr, target_id))
+        else:
+            handle.failed(
+                message=f"unsupported scenario operation: {operation_action}",
+                error={"type": "UnsupportedOperation", "message": f"unsupported scenario operation: {operation_action}"},
+            )
+            return
         dependency_bootstrap: dict[str, Any] | None = None
         handle.update(
             progress=65,
@@ -805,7 +843,7 @@ def submit_install_operation(
             await asyncio.wait_for(
                 _best_effort_rebuild_webspace(
                     webspace_id=ws,
-                    action="scenario_install_sync",
+                    action=f"scenario_{operation_action}_sync",
                     scenario_id=target_id,
                     source_of_truth="scenario_projection",
                 ),
@@ -822,6 +860,7 @@ def submit_install_operation(
         payload = {
             "target_kind": "scenario",
             "target_id": target_id,
+            "action": operation_action,
             "version": getattr(meta, "version", None),
             "path": str(getattr(meta, "path", "")),
             "webspace_id": ws,
@@ -830,10 +869,29 @@ def submit_install_operation(
             payload["dependency_bootstrap"] = dependency_bootstrap
         if warnings:
             payload["warnings"] = warnings
+        done_verb = "Updated" if operation_action == "update" else "Installed"
         handle.succeeded(
             result=payload,
-            message=f"Installed scenario {target_id}" + (" with warnings" if warnings else ""),
+            message=f"{done_verb} scenario {target_id}" + (" with warnings" if warnings else ""),
         )
 
     manager.launch(operation.operation_id, _worker)
     return operation.to_dict()
+
+
+def submit_update_operation(
+    *,
+    target_kind: str,
+    target_id: str,
+    webspace_id: str | None = None,
+    initiator: dict[str, Any] | None = None,
+    ctx: AgentContext | None = None,
+) -> dict[str, Any]:
+    return submit_install_operation(
+        target_kind=target_kind,
+        target_id=target_id,
+        webspace_id=webspace_id,
+        initiator=initiator,
+        ctx=ctx,
+        action="update",
+    )

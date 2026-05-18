@@ -124,6 +124,11 @@ source tools/slot-shell.sh --cd
 . .\tools\slot-shell.ps1 -Cd
 ```
 
+State-changing production CLI commands try to re-exec into the active slot
+automatically. If the current process is still outside the active slot context,
+the CLI emits `slot_shell_required`; run `source tools/slot-shell.sh --cd`
+or `. .\tools\slot-shell.ps1 -Cd` before retrying.
+
 Benchmark
 
 ```

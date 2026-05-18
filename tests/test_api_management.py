@@ -130,6 +130,23 @@ class _FakeScenarioManager:
         }
         return _Meta(id=type("Id", (), {"value": name})(), name=name, version="0.1.0", path=f"/scenarios/{name}")
 
+    def bootstrap_dependencies(self, name: str, *, webspace_id: str | None = None):
+        self.calls.append(f"bootstrap_dependencies:{name}:{webspace_id}")
+        self.last_dependency_bootstrap_result = {
+            "ok": True,
+            "scenario_id": name,
+            "webspace_id": webspace_id,
+            "required": ["demo"],
+            "items": [{"name": "demo", "ok": True}],
+            "succeeded": ["demo"],
+            "failed": [],
+        }
+        return self.last_dependency_bootstrap_result
+
+    def sync_to_yjs(self, name: str, *, webspace_id: str | None = None, emit_event: bool = True):
+        self.calls.append(f"sync_to_yjs:{name}:{webspace_id}:{int(bool(emit_event))}")
+        return _Meta(id=type("Id", (), {"value": name})(), name=name, version="0.1.0", path=f"/scenarios/{name}")
+
     def uninstall(self, name: str) -> None:
         self.calls.append(f"uninstall:{name}")
 
@@ -228,6 +245,13 @@ def test_scenario_api_matches_service_surface() -> None:
         "target_kind": kwargs["target_kind"],
         "status": "accepted",
     }
+    scenarios.submit_update_operation = lambda **kwargs: {
+        "operation_id": "op-scenario-update",
+        "target_id": kwargs["target_id"],
+        "target_kind": kwargs["target_kind"],
+        "kind": "scenario.update",
+        "status": "accepted",
+    }
     async def _rebuild(webspace_id: str, *, action: str = "rebuild", scenario_id: str | None = None, source_of_truth: str = "workspace"):
         rebuilds.append((webspace_id, action, source_of_truth, scenario_id))
     scenarios.rebuild_webspace_from_sources = _rebuild
@@ -252,6 +276,20 @@ def test_scenario_api_matches_service_surface() -> None:
     assert resp.status_code == 200
     assert resp.json()["accepted"] is True
     assert resp.json()["operation"]["target_id"] == "scene"
+
+    resp = client.post("/api/scenarios/update", json={"name": "scene", "webspace_id": "desktop"})
+    assert resp.status_code == 200
+    assert resp.json()["scenario"]["id"] == "scene"
+    assert resp.json()["dependency_bootstrap"]["ok"] is True
+    assert resp.json()["dependency_bootstrap"]["succeeded"] == ["demo"]
+    assert "bootstrap_dependencies:scene:desktop" in scenario_mgr.calls
+    assert "sync_to_yjs:scene:desktop:0" in scenario_mgr.calls
+    assert ("desktop", "scenario_update_sync", "scenario_projection", "scene") in rebuilds
+
+    resp = client.post("/api/scenarios/update", json={"name": "scene", "async_operation": True, "webspace_id": "default"})
+    assert resp.status_code == 200
+    assert resp.json()["accepted"] is True
+    assert resp.json()["operation"]["kind"] == "scenario.update"
 
     assert client.post("/api/scenarios/uninstall", json={"name": "scene", "webspace_id": "desktop"}).status_code == 200
     assert ("desktop", "scenario_uninstall_sync", "scenario_projection", None) in rebuilds

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import os
 import shutil
@@ -489,11 +490,53 @@ def test_bootstrap_critical_paths_are_shared_with_core_update_service() -> None:
     assert core_mod.BOOTSTRAP_CRITICAL_PATHS is BOOTSTRAP_CRITICAL_PATHS
 
 
+def _top_level_adaos_import_paths(module_path: str) -> set[str]:
+    repo_root = Path(__file__).resolve().parents[1]
+    src_root = repo_root / "src"
+    path = repo_root / module_path
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    imported_paths: set[str] = set()
+    for node in tree.body:
+        modules: list[str] = []
+        if isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            modules = [node.module or ""]
+        for module in modules:
+            if not module.startswith("adaos."):
+                continue
+            module_root = src_root / Path(*module.split("."))
+            candidates = (module_root.with_suffix(".py"), module_root / "__init__.py")
+            for candidate in candidates:
+                if candidate.exists():
+                    imported_paths.add(candidate.relative_to(repo_root).as_posix())
+                    break
+    return imported_paths
+
+
+def test_bootstrap_critical_paths_cover_supervisor_and_sidecar_import_surface() -> None:
+    from adaos.services.bootstrap_update import BOOTSTRAP_CRITICAL_PATHS, SIDECAR_CONTROLLED_PATHS
+
+    critical = set(BOOTSTRAP_CRITICAL_PATHS)
+    supervisor_paths = {
+        "src/adaos/apps/supervisor.py",
+        *_top_level_adaos_import_paths("src/adaos/apps/supervisor.py"),
+    }
+    sidecar_paths = {
+        "src/adaos/services/realtime_sidecar.py",
+        *_top_level_adaos_import_paths("src/adaos/services/realtime_sidecar.py"),
+    }
+
+    assert not sorted((supervisor_paths | sidecar_paths) - critical)
+    assert not sorted(sidecar_paths - set(SIDECAR_CONTROLLED_PATHS))
+
+
 def test_bootstrap_critical_paths_include_runtime_projection_helpers() -> None:
     from adaos.services.bootstrap_update import BOOTSTRAP_CRITICAL_PATHS
 
     critical = set(BOOTSTRAP_CRITICAL_PATHS)
 
+    assert "src/adaos/services/core_update_policy.py" in critical
     assert "src/adaos/services/runtime_refresh.py" in critical
     assert "src/adaos/services/node_display.py" in critical
     assert "src/adaos/services/node_runtime_state.py" in critical

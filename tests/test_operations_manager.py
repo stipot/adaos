@@ -258,6 +258,17 @@ def test_submit_scenario_install_operation_rebuilds_target_webspace(monkeypatch)
             calls.append(f"install:{name}:{pin}")
             return SimpleNamespace(version="0.1.0", path=f"/scenarios/{name}")
 
+        def list_present(self):
+            calls.append("list_present")
+            return [
+                SimpleNamespace(
+                    id=SimpleNamespace(value="demo_scene"),
+                    name="demo_scene",
+                    version="0.2.0",
+                    path="/scenarios/demo_scene",
+                )
+            ]
+
         def bootstrap_dependencies(self, name: str, *, webspace_id: str | None = None):
             calls.append(f"bootstrap_dependencies:{name}:{webspace_id}")
             return {
@@ -302,6 +313,85 @@ def test_submit_scenario_install_operation_rebuilds_target_webspace(monkeypatch)
     assert result["result"]["dependency_bootstrap"]["succeeded"] == ["demo_skill"]
     assert result["result"]["dependency_bootstrap"]["items"][0]["version"] == "1.2.3"
     assert rebuilds == [("default", "scenario_install_sync", "scenario_projection", "demo_scene")]
+
+
+def test_submit_scenario_update_operation_reports_dependency_bootstrap(monkeypatch) -> None:
+    docs: dict[str, _FakeYDoc] = {}
+    calls: list[str] = []
+    rebuilds: list[tuple[str, str, str, str | None]] = []
+
+    @contextmanager
+    def _get_ydoc(webspace_id: str):
+        yield docs.setdefault(webspace_id, _FakeYDoc())
+
+    @asynccontextmanager
+    async def _async_get_ydoc(webspace_id: str):
+        yield docs.setdefault(webspace_id, _FakeYDoc())
+
+    class _FakeScenarioManager:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def sync(self) -> None:
+            calls.append("sync")
+
+        def list_present(self):
+            calls.append("list_present")
+            return [
+                SimpleNamespace(
+                    id=SimpleNamespace(value="demo_scene"),
+                    name="demo_scene",
+                    version="0.2.0",
+                    path="/scenarios/demo_scene",
+                )
+            ]
+
+        def bootstrap_dependencies(self, name: str, *, webspace_id: str | None = None):
+            calls.append(f"bootstrap_dependencies:{name}:{webspace_id}")
+            return {
+                "ok": True,
+                "scenario_id": name,
+                "webspace_id": webspace_id,
+                "required": ["demo_skill"],
+                "items": [{"name": "demo_skill", "ok": True, "version": "1.2.4", "slot": "A"}],
+                "succeeded": ["demo_skill"],
+                "failed": [],
+            }
+
+        def sync_to_yjs(self, name: str, *, webspace_id: str | None = None, emit_event: bool = True):
+            calls.append(f"sync_to_yjs:{name}:{webspace_id}:{int(bool(emit_event))}")
+            return SimpleNamespace(version="0.2.0", path=f"/scenarios/{name}")
+
+    async def _rebuild(webspace_id: str, *, action: str = "rebuild", scenario_id: str | None = None, source_of_truth: str = "workspace"):
+        rebuilds.append((webspace_id, action, source_of_truth, scenario_id))
+
+    monkeypatch.setattr(operations_manager, "get_ydoc", _get_ydoc)
+    monkeypatch.setattr(operations_manager, "async_get_ydoc", _async_get_ydoc)
+    monkeypatch.setattr(operations_manager, "WebToastService", _FakeToastService)
+    monkeypatch.setattr(operations_manager, "ScenarioManager", _FakeScenarioManager)
+    monkeypatch.setattr(operations_manager, "SqliteScenarioRegistry", lambda sql: object())
+    monkeypatch.setattr(operations_manager, "_MANAGERS", {})
+    monkeypatch.setattr(operations_manager, "rebuild_webspace_from_sources", _rebuild)
+
+    ctx = _make_ctx()
+    result = operations_manager.submit_update_operation(
+        target_kind="scenario",
+        target_id="demo_scene",
+        webspace_id="default",
+        ctx=ctx,
+    )
+
+    assert result["kind"] == "scenario.update"
+    assert result["target_id"] == "demo_scene"
+    assert "sync" in calls
+    assert "list_present" in calls
+    assert "bootstrap_dependencies:demo_scene:default" in calls
+    assert "sync_to_yjs:demo_scene:default:0" in calls
+    assert result["result"]["action"] == "update"
+    assert result["result"]["version"] == "0.2.0"
+    assert result["result"]["dependency_bootstrap"]["ok"] is True
+    assert result["result"]["dependency_bootstrap"]["items"][0]["version"] == "1.2.4"
+    assert rebuilds == [("default", "scenario_update_sync", "scenario_projection", "demo_scene")]
 
 
 def test_submit_install_operation_uses_isolated_subprocess_when_enabled(monkeypatch) -> None:

@@ -544,7 +544,7 @@ Implementation notes:
 
 Status: in progress.
 
-Progress: 35%.
+Progress: 45%.
 
 Actions:
 
@@ -559,7 +559,7 @@ Actions:
   API payloads.
 - [x] Include dependent skill lifecycle results in async scenario install
   operation payloads.
-- [ ] Include dependent skill lifecycle results in async scenario update
+- [x] Include dependent skill lifecycle results in async scenario update
   operation payloads.
 - [ ] Surface dependency lifecycle failures in Infrastructure State and
   Operations details only when they affect active scenarios.
@@ -572,6 +572,9 @@ Implementation notes:
 - Async scenario install operations now persist the structured
   `dependency_bootstrap` result in the operation result payload, matching the
   synchronous scenario install API surface.
+- Sync and async scenario update operations now run dependency bootstrap before
+  Yjs projection rebuild and include the same `dependency_bootstrap` payload in
+  the operation/result surface.
 - Dependency bootstrap timeout/exception paths produce explicit
   `dependency_bootstrap.ok=false` diagnostics instead of dropping dependency
   lifecycle visibility from the operation result.
@@ -580,7 +583,7 @@ Implementation notes:
 
 Status: in progress.
 
-Progress: 20%.
+Progress: 50%.
 
 Actions:
 
@@ -588,18 +591,29 @@ Actions:
   run from the active core slot venv and code.
 - [x] Apply active slot manifest env/cwd when the CLI is already running under
   the slot Python but `tools/slot-shell.sh` was not sourced.
-- [ ] Refuse or warn for state-changing production commands when the current
+- [x] Refuse or warn for state-changing production commands when the current
   interpreter, repo root, or package path does not match the active slot
   manifest.
-- [ ] Keep root checkout drift acceptable for production when only supervisor
+- [x] Keep root checkout drift acceptable for production when only supervisor
   and sidecar are launched from root and the updater controls those processes.
 - [ ] Keep `.adaos/dev` development commands explicit and separate from
   production slot-bound commands.
-- [ ] Add a `slot_shell_required` diagnostic only when command context is unsafe,
+- [x] Add a `slot_shell_required` diagnostic only when command context is unsafe,
   not as normal Infrastructure State noise.
 - [x] Add tests for the forgotten `tools/slot-shell.sh` case.
-- [ ] Add tests for unsafe state-changing command refusal and allowed dev
+- [x] Add tests for unsafe state-changing command warning and allowed dev
   override.
+
+Implementation notes:
+
+- `adaos.exe` wrapper re-exec no longer blocks the second active-slot re-exec,
+  so normal production CLI use lands in the active slot automatically.
+- If automatic binding is disabled or mismatched, state-changing production
+  commands emit a `slot_shell_required` diagnostic; read-only commands and
+  `adaos dev ...` remain quiet.
+- Root-launched supervisor/sidecar paths now share one bootstrap-critical path
+  list, and tests assert that the top-level supervisor/sidecar import surface is
+  covered before root promotion.
 
 #### RCMS-006: Sync catalog snapshots from hub/root to members
 
