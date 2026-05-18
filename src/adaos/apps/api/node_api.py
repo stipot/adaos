@@ -151,6 +151,38 @@ async def _read_infrascope_snapshot_for_status_cards(webspace_id: str) -> dict[s
     return snapshot or None
 
 
+async def _refresh_infrascope_status_cards(
+    *,
+    webspace_id: str,
+    snapshot: Mapping[str, Any] | None = None,
+    source: str = "data/infrascope",
+) -> dict[str, Any]:
+    effective_snapshot = _coerce_mapping_dict(snapshot)
+    effective_source = source
+    if not effective_snapshot:
+        effective_source = "data/infrascope"
+        effective_snapshot = await _read_infrascope_snapshot_for_status_cards(webspace_id) or {}
+    if not effective_snapshot:
+        return {
+            "source": effective_source,
+            "card_total": 0,
+            "cards": [],
+            "skipped": True,
+            "reason": "infrascope_snapshot_not_found",
+        }
+    cards = publish_infrascope_status_cards(
+        effective_snapshot,
+        webspace_id=webspace_id,
+        updated_at=time.time(),
+    )
+    return {
+        "source": effective_source,
+        "card_total": len(cards),
+        "cards": [card.to_dict() for card in cards],
+        "skipped": False,
+    }
+
+
 def _coerce_optional_int(value: Any) -> int | None:
     if value is None:
         return None
@@ -2154,16 +2186,23 @@ async def node_projection_diagnostics(
 async def node_status_cards_snapshot(
     webspace_id: str | None = None,
     include_runtime: bool = True,
+    include_infrascope: bool = False,
 ) -> dict[str, Any]:
     ensure_status_card_dispatcher_handler()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    refreshes: dict[str, Any] = {}
     if include_runtime:
         publish_runtime_status_card(
             webspace_id=target_webspace_id,
             node_id=_local_node_id(),
             lifecycle=runtime_lifecycle_snapshot(),
         )
-    return status_card_registry_snapshot(webspace_id=target_webspace_id)
+    if include_infrascope:
+        refreshes["infrascope"] = await _refresh_infrascope_status_cards(webspace_id=target_webspace_id)
+    snapshot = status_card_registry_snapshot(webspace_id=target_webspace_id)
+    if refreshes:
+        snapshot["refreshes"] = refreshes
+    return snapshot
 
 
 @router.post("/status-cards/runtime/refresh", dependencies=[Depends(require_token)])
@@ -2238,25 +2277,20 @@ async def node_status_cards_refresh_infrascope(
     ensure_status_card_dispatcher_handler()
     request_payload = payload or InfrascopeStatusCardsRefreshRequest()
     target_webspace_id = _coerce_node_webspace_id(request_payload.webspace_id or webspace_id)
-    source = "request"
-    snapshot = _coerce_mapping_dict(request_payload.snapshot)
-    if not snapshot:
-        source = "data/infrascope"
-        snapshot = await _read_infrascope_snapshot_for_status_cards(target_webspace_id) or {}
-    if not snapshot:
-        raise HTTPException(status_code=404, detail="infrascope_snapshot_not_found")
-    cards = publish_infrascope_status_cards(
-        snapshot,
+    refresh = await _refresh_infrascope_status_cards(
         webspace_id=target_webspace_id,
-        updated_at=time.time(),
+        snapshot=request_payload.snapshot,
+        source="request",
     )
+    if refresh["skipped"]:
+        raise HTTPException(status_code=404, detail="infrascope_snapshot_not_found")
     return {
         "ok": True,
         "accepted": True,
-        "source": source,
+        "source": refresh["source"],
         "webspace_id": target_webspace_id,
-        "card_total": len(cards),
-        "cards": [card.to_dict() for card in cards],
+        "card_total": refresh["card_total"],
+        "cards": refresh["cards"],
         "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
     }
 

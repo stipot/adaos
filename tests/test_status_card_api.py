@@ -119,6 +119,42 @@ def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     assert payload["snapshot"]["projection_total"] == 1
 
 
+def test_status_card_api_snapshot_can_include_infrascope_cards_from_yjs(monkeypatch) -> None:
+    client = _make_client()
+
+    class FakeYDoc:
+        def get_map(self, name):
+            assert name == "data"
+            return {"infrascope": _sample_infrascope_snapshot()}
+
+    class FakeReadContext:
+        async def __aenter__(self):
+            return FakeYDoc()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "async_read_ydoc", lambda _webspace_id: FakeReadContext())
+
+    resp = client.get(
+        "/api/node/status-cards",
+        params={"webspace_id": "desktop", "include_infrascope": "true"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["refreshes"]["infrascope"]["source"] == "data/infrascope"
+    assert payload["refreshes"]["infrascope"]["card_total"] == 7
+    assert payload["card_total"] == 8
+    assert {card["id"] for card in payload["cards"]} >= {
+        "runtime",
+        "infrascope-overview",
+        "infrascope-registry",
+    }
+
+
 def test_status_card_api_refreshes_infrascope_cards_from_request() -> None:
     client = _make_client()
 
