@@ -11,6 +11,7 @@ async def test_neural_bridge_passes_canonicalization_evidence(monkeypatch):
 
     emitted = []
     posted = {}
+    usage = []
 
     class Supervisor:
         async def refresh_discovered(self, force=False):
@@ -41,6 +42,7 @@ async def test_neural_bridge_passes_canonicalization_evidence(monkeypatch):
     monkeypatch.setattr(bridge, "_http_post_json", fake_post)
     monkeypatch.setattr(bridge, "get_ctx", lambda: SimpleNamespace(bus=object()))
     monkeypatch.setattr(bridge, "bus_emit", lambda _bus, et, payload, source=None: emitted.append((et, payload, source)))
+    monkeypatch.setattr(bridge, "record_neural_usage", lambda **kwargs: usage.append(kwargs))
     monkeypatch.setattr(
         bridge,
         "build_entity_trace_stage",
@@ -73,6 +75,11 @@ async def test_neural_bridge_passes_canonicalization_evidence(monkeypatch):
     detected = [payload for event_type, payload, _ in emitted if event_type == "nlp.intent.detected"][0]
     assert detected["intent"] == "weather.get"
     assert detected["via"] == "neural"
+    assert usage[-1]["status"] == "accepted"
+    assert usage[-1]["intent"] == "weather.get"
+    assert usage[-1]["confidence"] == 0.91
+    assert usage[-1]["fallback_to_rasa"] is False
+    assert usage[-1]["entity_resolution"]["normalized_text"] == "open weather on {device}"
 
 
 @pytest.mark.anyio
@@ -81,6 +88,7 @@ async def test_neural_bridge_falls_back_without_hot_path_install(monkeypatch):
 
     emitted = []
     calls = []
+    usage = []
 
     class Supervisor:
         async def refresh_discovered(self, force=False):
@@ -96,6 +104,7 @@ async def test_neural_bridge_falls_back_without_hot_path_install(monkeypatch):
     monkeypatch.setattr(bridge, "get_service_supervisor", lambda: Supervisor())
     monkeypatch.setattr(bridge, "get_ctx", lambda: SimpleNamespace(bus=object()))
     monkeypatch.setattr(bridge, "bus_emit", lambda _bus, et, payload, source=None: emitted.append((et, payload, source)))
+    monkeypatch.setattr(bridge, "record_neural_usage", lambda **kwargs: usage.append(kwargs))
 
     await bridge._on_nlp_intent_detect_neural({"text": "unmatched", "webspace_id": "desktop", "request_id": "rid-2"})
 
@@ -107,4 +116,6 @@ async def test_neural_bridge_falls_back_without_hot_path_install(monkeypatch):
         event_type == "nlu.trace.stage" and payload["reason"] == "neural_base_url_unresolved"
         for event_type, payload, _ in emitted
     )
-
+    assert usage[-1]["status"] == "unavailable"
+    assert usage[-1]["reason"] == "neural_base_url_unresolved"
+    assert usage[-1]["fallback_to_rasa"] is True

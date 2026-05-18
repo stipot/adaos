@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **58%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **62%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -48,10 +48,10 @@ but the productionization checklist remains mostly open.
 - [ ] Trace UI should show `voice text -> regex/neural/rasa -> intent -> action`.
 - [ ] Add latency per stage and service timing.
 - [ ] Add golden phrase regression reports.
-- [ ] Add neural usage statistics: request count, latency, confidence
+- [x] Add neural usage statistics: request count, latency, confidence
   histogram, accept/abstain/reject counts, fallback ratio, and per-intent
-  confusion evidence.
-- [ ] Add named-entity canonicalization statistics: hit/miss/ambiguity counts
+  status evidence.
+- [x] Add named-entity canonicalization statistics: hit/miss/ambiguity counts
   and unresolved spans.
 
 ## Human Verification Gates
@@ -171,12 +171,15 @@ but the productionization checklist remains mostly open.
 
 ### Usage Statistics
 
-- [ ] Record neural request count and latency per stage.
-- [ ] Record confidence distributions and threshold bands.
-- [ ] Record accept/abstain/reject counts per intent.
-- [ ] Record fallback ratio `neural -> Rasa -> Teacher`.
-- [ ] Record canonicalization hit/miss/ambiguity counts for neural requests.
-- [ ] Record abstained/rejected samples for Teacher review and retraining.
+- [x] Record neural request count and latency per stage.
+- [x] Record confidence distributions and threshold bands.
+- [x] Record accept/abstain/reject counts per intent.
+- [x] Record fallback ratio `neural -> Rasa`.
+- [x] Record canonicalization hit/miss/ambiguity/unresolved counts for neural
+  requests.
+- [x] Record abstained/rejected samples for Teacher review and retraining.
+- [ ] Link final Rasa miss/low-confidence outcomes back to the neural fallback
+  sample so `neural -> Rasa -> Teacher` can be measured end to end.
 
 ### Training Data Feedback
 
@@ -195,8 +198,8 @@ but the productionization checklist remains mostly open.
    layout; the current runtime has a Torch in-memory k-NN ranker fallback.
 2. Define the system action catalog for core/client commands and include it in
    NLU authoring context.
-3. Add neural usage statistics and stage latency before making rollout
-   decisions about per-locale/webspace/profile models.
+3. Link neural usage samples to downstream Rasa/Teacher outcomes and expose the
+   aggregate stats in operator diagnostics.
 4. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
 5. Add "save correct example" backend action with skill/scenario/system-action
@@ -213,4 +216,6 @@ but the productionization checklist remains mostly open.
 - Rasa export writes native lookup tables and `data/lookup_tables.json`; lookup summary is included in the training fingerprint.
 - Runtime emits stage trace events for regex, pipeline delegation, Rasa, and dispatcher actions/rejects.
 - Trace items are persisted to `data.nlu_trace.items[]` for the future UI timeline.
+- Neural bridge records node-local aggregate usage stats in `state/nlu/neural_usage.json`, including latency,
+  confidence bands, accept/abstain/reject counts, fallback ratio, canonicalization buckets, and review samples.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

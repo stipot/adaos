@@ -5,6 +5,7 @@ import functools
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, Mapping
 from urllib.request import Request, urlopen
 
@@ -13,6 +14,7 @@ from adaos.services.agent_context import get_ctx
 from adaos.services.eventbus import emit as bus_emit
 from adaos.services.skill.service_supervisor import get_service_supervisor
 from .entity_resolver_runtime import build_entity_trace_stage
+from .neural_usage_stats import record_neural_usage
 
 _log = logging.getLogger("adaos.nlu.neural")
 
@@ -151,6 +153,38 @@ def _emit_stage(
         pass
 
 
+def _record_usage_safe(
+    *,
+    status: str,
+    reason: str | None,
+    text: str,
+    webspace_id: str | None,
+    request_id: str | None,
+    intent: str | None = None,
+    confidence: float | None = None,
+    latency_ms: float | None = None,
+    model_id: str | None = None,
+    entity_resolution: Mapping[str, Any] | None = None,
+    fallback_to_rasa: bool = False,
+) -> None:
+    try:
+        record_neural_usage(
+            status=status,
+            reason=reason,
+            text=text,
+            webspace_id=webspace_id,
+            request_id=request_id,
+            intent=intent,
+            confidence=confidence,
+            latency_ms=latency_ms,
+            model_id=model_id,
+            entity_resolution=entity_resolution,
+            fallback_to_rasa=fallback_to_rasa,
+        )
+    except Exception:
+        _log.debug("failed to record neural usage stats", exc_info=True)
+
+
 def _entity_resolution_for_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     existing = payload.get("entity_resolution") or payload.get("entities")
     if isinstance(existing, Mapping):
@@ -181,6 +215,7 @@ async def _ensure_neural_service_base_url(supervisor: Any) -> str | None:
 
 @subscribe("nlp.intent.detect.neural")
 async def _on_nlp_intent_detect_neural(evt: Any) -> None:
+    started_at = time.perf_counter()
     payload = _payload(evt)
     text = payload.get("text") or payload.get("utterance")
     if not isinstance(text, str) or not text.strip():
@@ -193,6 +228,39 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
     locale = _request_locale(payload)
     preferred_locales = _preferred_locales(payload)
     ctx = get_ctx()
+    entity_resolution = _entity_resolution_for_payload(
+        {
+            **dict(payload),
+            "text": text,
+            "webspace_id": webspace_id,
+            "request_id": request_id,
+            "request_locale": locale,
+            "preferred_locales": preferred_locales,
+        }
+    )
+
+    def record_usage(
+        *,
+        status: str,
+        reason: str | None,
+        intent: str | None = None,
+        confidence: float | None = None,
+        model_id: str | None = None,
+        fallback_to_rasa: bool = False,
+    ) -> None:
+        _record_usage_safe(
+            status=status,
+            reason=reason,
+            text=text,
+            webspace_id=webspace_id,
+            request_id=request_id,
+            intent=intent,
+            confidence=confidence,
+            latency_ms=(time.perf_counter() - started_at) * 1000.0,
+            model_id=model_id,
+            entity_resolution=entity_resolution,
+            fallback_to_rasa=fallback_to_rasa,
+        )
 
     supervisor = get_service_supervisor()
 
@@ -200,6 +268,7 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
         base_url = await _ensure_neural_service_base_url(supervisor)
     except KeyError:
         _log.debug("neural service is not installed; fallback to rasa")
+        record_usage(status="unavailable", reason="neural_service_not_installed", fallback_to_rasa=True)
         _emit_stage(
             ctx=ctx,
             text=text,
@@ -220,6 +289,7 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
         return
     except Exception:
         _log.warning("failed to start neural_nlu_service_skill", exc_info=True)
+        record_usage(status="error", reason="neural_start_failed", fallback_to_rasa=True)
         _emit_stage(
             ctx=ctx,
             text=text,
@@ -240,6 +310,7 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
         return
 
     if not base_url:
+        record_usage(status="unavailable", reason="neural_base_url_unresolved", fallback_to_rasa=True)
         _emit_stage(
             ctx=ctx,
             text=text,
@@ -269,16 +340,6 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
             req_payload["request_locale"] = locale
         if preferred_locales:
             req_payload["preferred_locales"] = list(preferred_locales)
-        entity_resolution = _entity_resolution_for_payload(
-            {
-                **dict(payload),
-                "text": text,
-                "webspace_id": webspace_id,
-                "request_id": request_id,
-                "request_locale": locale,
-                "preferred_locales": preferred_locales,
-            }
-        )
         if entity_resolution:
             req_payload["entities"] = entity_resolution
             normalized = entity_resolution.get("normalized_text")
@@ -298,6 +359,7 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
             data = await asyncio.wait_for(future, timeout=_PARSE_TIMEOUT_S)
     except Exception:
         _log.debug("neural parse failed; fallback to rasa", exc_info=True)
+        record_usage(status="error", reason="neural_parse_failed", fallback_to_rasa=True)
         _emit_stage(
             ctx=ctx,
             text=text,
@@ -325,6 +387,13 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
     confidence = result.get("confidence")
 
     if not isinstance(top_intent, str) or not top_intent.strip():
+        record_usage(
+            status="abstained",
+            reason="neural_abstained",
+            confidence=float(confidence) if isinstance(confidence, (int, float)) else None,
+            model_id=result.get("model_id") if isinstance(result.get("model_id"), str) else None,
+            fallback_to_rasa=True,
+        )
         _emit_stage(
             ctx=ctx,
             text=text,
@@ -348,6 +417,14 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
     confidence_val = float(confidence) if isinstance(confidence, (int, float)) else 0.0
     if confidence_val < _ACCEPT_CONFIDENCE:
         reason = "neural_rejected" if confidence_val < _REJECT_CONFIDENCE else "neural_low_confidence"
+        record_usage(
+            status="rejected" if confidence_val < _REJECT_CONFIDENCE else "low_confidence",
+            reason=reason,
+            intent=top_intent.strip(),
+            confidence=confidence_val,
+            model_id=result.get("model_id") if isinstance(result.get("model_id"), str) else None,
+            fallback_to_rasa=True,
+        )
         _emit_stage(
             ctx=ctx,
             text=text,
@@ -373,6 +450,14 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
 
     slots_raw = result.get("slots")
     slots = dict(slots_raw) if isinstance(slots_raw, Mapping) else {}
+    record_usage(
+        status="accepted",
+        reason="neural_accepted",
+        intent=top_intent.strip(),
+        confidence=confidence_val,
+        model_id=result.get("model_id") if isinstance(result.get("model_id"), str) else None,
+        fallback_to_rasa=False,
+    )
 
     out: Dict[str, Any] = {
         "intent": top_intent.strip(),

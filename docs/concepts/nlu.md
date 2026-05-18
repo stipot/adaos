@@ -50,6 +50,9 @@ Implemented now:
 - Neural `/parse` contract with `top_intent`, `confidence`, `alternatives`,
   `slots`, `model_id`, `evidence`, canonicalized text, and named-entity
   evidence.
+- Neural usage statistics in `state/nlu/neural_usage.json`: request/fallback
+  counts, latency summary, confidence bands, accept/abstain/reject counts,
+  per-intent status counts, canonicalization buckets, and review samples.
 - Rasa NLU service-skill isolation from the hub Python environment.
 - Dry-run probe API for safe phrase checks:
   - `POST /api/nlu/teacher/{webspace_id}/probe`
@@ -103,6 +106,9 @@ long-term fallback.
    - default deployment uses one active model per node, with usage telemetry
      collected so later per-locale/webspace/profile splits can be justified by
      evidence.
+   - aggregate neural usage telemetry is persisted under
+     `state/nlu/neural_usage.json` for operator diagnostics and retraining
+     review.
    - on high confidence -> emits `nlp.intent.detected { via: "neural" }`
    - on abstain/error -> falls back to `nlp.intent.detect.rasa`
 6. Rasa bridge:

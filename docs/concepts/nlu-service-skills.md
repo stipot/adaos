@@ -82,6 +82,11 @@ Target artifacts are service-owned runtime data:
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class
 can be justified by observed drift, latency, confidence, and fallback patterns.
+The bridge persists those node-local aggregates in
+`state/nlu/neural_usage.json`: request and fallback counts, latency summary,
+confidence bands, accept/abstain/reject counts, per-intent status counts,
+canonicalization hit/miss/ambiguity/unresolved buckets, and bounded samples for
+Teacher review.
 
 The intended detector algorithm is the full research-notebook approach:
 

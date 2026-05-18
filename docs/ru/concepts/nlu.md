@@ -33,6 +33,10 @@ This document describes the current production MVP direction for intent detectio
      - `<ADAOS_BASE_DIR>/state/nlu/neural/model.pt`
      - `<ADAOS_BASE_DIR>/state/nlu/neural/labels.json`
      - `<ADAOS_BASE_DIR>/state/nlu/neural/vocab.json`
+   - node-local usage statistics are written to
+     `<ADAOS_BASE_DIR>/state/nlu/neural_usage.json` (request/fallback counts,
+     latency summary, confidence bands, accept/abstain/reject counts,
+     canonicalization buckets, and review samples)
    - on high confidence -> emits `nlp.intent.detected { via: "neural" }`
    - on abstain/error -> falls back to `nlp.intent.detect.rasa`
 5. If an intent is found:
