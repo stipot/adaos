@@ -46,10 +46,13 @@ def _active_slot_manifest_payload() -> tuple[str | None, dict[str, str], str | N
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
             return None, {}, None
+        slot_dir = manifest_path.parent.resolve()
         venv_dir = str(manifest.get("venv_dir") or "").strip()
         repo_dir = str(manifest.get("repo_dir") or manifest.get("cwd") or "").strip()
         env_map = manifest.get("env") if isinstance(manifest.get("env"), dict) else {}
         merged_env = {str(key): str(value) for key, value in env_map.items()}
+        merged_env.setdefault("ADAOS_ACTIVE_CORE_SLOT", active_slot)
+        merged_env.setdefault("ADAOS_ACTIVE_CORE_SLOT_DIR", str(slot_dir))
         if repo_dir:
             merged_env.setdefault("ADAOS_SLOT_REPO_ROOT", repo_dir)
             src_dir = Path(repo_dir) / "src"
@@ -111,6 +114,8 @@ def _should_reexec_windows_wrapper(argv0: str | None = None) -> bool:
 def _should_reexec_repo_venv() -> bool:
     if os.getenv("ADAOS_CLI_REEXECED") == "1":
         return False
+    if os.getenv("ADAOS_CLI_SLOT_BOUND") == "1":
+        return False
     if os.getenv("ADAOS_DISABLE_PREFERRED_PYTHON_REEXEC") == "1":
         return False
     preferred = _repo_venv_python()
@@ -169,8 +174,26 @@ def _maybe_reexec_active_slot_venv():
     _reexec_preferred_python("active slot .venv", python=preferred, extra_env=extra_env)
 
 
+def _apply_active_slot_manifest_environment_if_current() -> bool:
+    if os.getenv("ADAOS_DISABLE_ACTIVE_SLOT_ENV_APPLY") == "1":
+        return False
+    preferred, extra_env, repo_dir = _active_slot_manifest_payload()
+    if not preferred or not _same_executable_path(preferred, sys.executable):
+        return False
+    for key, value in extra_env.items():
+        os.environ[str(key)] = str(value)
+    os.environ["ADAOS_CLI_SLOT_BOUND"] = "1"
+    if repo_dir and os.getenv("ADAOS_DISABLE_ACTIVE_SLOT_CHDIR") != "1":
+        try:
+            os.chdir(repo_dir)
+        except Exception:
+            pass
+    return True
+
+
 _maybe_reexec_windows_wrapper()
 _maybe_reexec_active_slot_venv()
+_apply_active_slot_manifest_environment_if_current()
 _maybe_reexec_repo_venv()
 
 load_dotenv(find_dotenv())

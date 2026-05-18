@@ -186,9 +186,11 @@ runtime_pid = 26718 runtime_process.pid
 /root/adaos/.adaos/state/core_slots/slots/B/venv/bin/python -m pip install 'websockets>=13,<16'
 /root/.adaos/state/core_slots/slots/B/venv/bin/py-spy dump --pid 26718
 
-# Web client debug 
+# Web client URL parameters:
+# Full list: src/adaos/integrations/adaos-client/README.md#client-url-parameters
+# https://myinimatic.web.app/?zone=ru&mode=login&auto_login=1
 # https://myinimatic.web.app/?boot_debug=1
-# 
+# https://myinimatic.web.app/?runtime_debug=0
 # https://myinimatic.web.app/?yjs_persist=0
 
 ```

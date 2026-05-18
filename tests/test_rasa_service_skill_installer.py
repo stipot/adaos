@@ -1,4 +1,5 @@
 from pathlib import Path
+import types
 
 import yaml
 
@@ -55,21 +56,75 @@ def test_ensure_rasa_service_skill_installed_refreshes_managed_files():
 
 def test_ensure_rasa_service_skill_installed_respects_disabled_flag(monkeypatch):
     from adaos.services.agent_context import get_ctx
-    from adaos.services.nlu.rasa_skill_installer import ensure_rasa_service_skill_installed
+    from adaos.services.nlu import rasa_skill_installer as installer
 
     monkeypatch.setenv("ADAOS_NLU_RASA", "0")
+    monkeypatch.setattr(
+        installer,
+        "_ensure_rasa_port_submodule_checkout",
+        lambda ctx: (_ for _ in ()).throw(AssertionError("disabled Rasa must not touch rasa-port")),
+    )
     ctx = get_ctx()
     target = Path(ctx.paths.skills_dir()) / "rasa_nlu_service_skill"
 
-    assert ensure_rasa_service_skill_installed() is None
+    assert installer.ensure_rasa_service_skill_installed() is None
     assert not target.exists()
+
+
+def test_rasa_port_dependency_initializes_declared_submodule(monkeypatch, tmp_path):
+    from adaos.services.nlu import rasa_skill_installer as installer
+
+    repo = tmp_path / "repo"
+    submodule = repo / "src" / "adaos" / "integrations" / "rasa-port"
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".gitmodules").write_text(
+        """
+[submodule "src/adaos/integrations/rasa-port"]
+    path = src/adaos/integrations/rasa-port
+    url = https://github.com/stipot-com/rasa-port.git
+""".strip(),
+        encoding="utf-8",
+    )
+    package_dir = repo / "src" / "adaos"
+    package_dir.mkdir(parents=True)
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        if "status" in cmd:
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout="-7352542dcb3b484d7787ec70447d9240e83ce092 src/adaos/integrations/rasa-port\n",
+                stderr="",
+            )
+        (submodule / "adaos_rasa_nlu").mkdir(parents=True)
+        (submodule / "rasa").mkdir()
+        (submodule / "pyproject.toml").write_text("[project]\nname = 'adaos-rasa-nlu'\n", encoding="utf-8")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(installer.shutil, "which", lambda name: "git" if name == "git" else None)
+    monkeypatch.setattr(installer.subprocess, "run", fake_run)
+
+    ctx = types.SimpleNamespace(paths=types.SimpleNamespace(package_dir=package_dir, repo_root=lambda: repo))
+
+    deps = installer._rasa_port_dependency_args(ctx)
+
+    assert calls
+    cmd = next(call[0] for call in calls if "update" in call[0])
+    assert cmd[:4] == ["git", "-C", str(repo), "submodule"]
+    assert cmd[-1] == "src/adaos/integrations/rasa-port"
+    assert deps[:2] == ["--no-deps", "-e"]
+    assert deps[2].startswith("file:")
+    assert "rasa-port" in deps[2]
 
 
 def test_rasa_port_dependency_falls_back_to_git_requirement(monkeypatch):
     from adaos.services.agent_context import get_ctx
     from adaos.services.nlu import rasa_skill_installer as installer
 
-    monkeypatch.setattr(installer, "_local_rasa_port_path", lambda ctx: None)
+    monkeypatch.setattr(installer, "_ensure_rasa_port_submodule_checkout", lambda ctx: None)
     deps = installer._rasa_port_dependency_args(get_ctx())
 
     assert deps == [

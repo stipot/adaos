@@ -48,6 +48,8 @@ class _Meta:
 class _FakeSkillManager:
     def __init__(self) -> None:
         self.calls: List[str] = []
+        self.active_slot = "A"
+        self.active_version = "1.0.0"
 
     def list_installed(self) -> list[_Record]:
         self.calls.append("list_installed")
@@ -70,7 +72,7 @@ class _FakeSkillManager:
 
     def runtime_status(self, name: str):
         self.calls.append(f"runtime_status:{name}")
-        return {"active_slot": "A", "version": "1.0.0"}
+        return {"active_slot": self.active_slot, "version": self.active_version}
 
     def runtime_update(self, name: str, *, space: str = "workspace"):
         self.calls.append(f"runtime_update:{name}:{space}")
@@ -82,6 +84,8 @@ class _FakeSkillManager:
 
     def activate_for_space(self, name: str, *, version: str | None = None, slot: str | None = None, space: str = "default", webspace_id: str = "default"):
         self.calls.append(f"activate_for_space:{name}:{version}:{slot}:{webspace_id}")
+        self.active_version = version or self.active_version
+        self.active_slot = slot or self.active_slot
         return slot or "B"
 
     def uninstall(self, name: str, **kwargs: Any) -> None:
@@ -96,6 +100,7 @@ class _FakeSkillManager:
 class _FakeScenarioManager:
     def __init__(self) -> None:
         self.calls: List[str] = []
+        self.last_dependency_bootstrap_result: dict[str, Any] | None = None
 
     def list_installed(self) -> list[_Record]:
         self.calls.append("list_installed")
@@ -114,6 +119,15 @@ class _FakeScenarioManager:
 
     def install_with_deps(self, name: str, *, pin: str | None = None, webspace_id: str | None = None):
         self.calls.append(f"install_with_deps:{name}:{pin}:{webspace_id}")
+        self.last_dependency_bootstrap_result = {
+            "ok": True,
+            "scenario_id": name,
+            "webspace_id": webspace_id,
+            "required": ["demo"],
+            "items": [{"name": "demo", "ok": True}],
+            "succeeded": ["demo"],
+            "failed": [],
+        }
         return _Meta(id=type("Id", (), {"value": name})(), name=name, version="0.1.0", path=f"/scenarios/{name}")
 
     def uninstall(self, name: str) -> None:
@@ -230,6 +244,8 @@ def test_scenario_api_matches_service_surface() -> None:
     resp = client.post("/api/scenarios/install", json={"name": "scene"})
     assert resp.status_code == 200
     assert resp.json()["scenario"]["id"] == "scene"
+    assert resp.json()["dependency_bootstrap"]["ok"] is True
+    assert resp.json()["dependency_bootstrap"]["succeeded"] == ["demo"]
     assert ("desktop", "scenario_install_sync", "scenario_projection", "scene") in rebuilds
 
     resp = client.post("/api/scenarios/install", json={"name": "scene", "async_operation": True, "webspace_id": "default"})
@@ -284,10 +300,70 @@ def test_skill_update_refreshes_runtime_when_source_version_changed(monkeypatch)
 
     resp = client.post("/api/skills/update", json={"name": "demo", "webspace_id": "default"})
     assert resp.status_code == 200
-    assert resp.json()["updated"] is True
+    payload = resp.json()
+    refresh = payload["runtime_refresh"]
+    assert payload["updated"] is True
     assert "runtime_update:demo:workspace" in skill_mgr.calls
     assert "prepare_runtime:demo" in skill_mgr.calls
     assert any(call.startswith("activate_for_space:demo:2.0.0:B:default") for call in skill_mgr.calls)
+    assert refresh["ok"] is True
+    assert refresh["prepared_version"] == "2.0.0"
+    assert refresh["prepared_slot"] == "B"
+    assert refresh["activated_slot"] == "B"
+    assert refresh["failed_stage"] == ""
+    assert refresh["failure_reason"] == ""
+    assert [stage["stage"] for stage in refresh["lifecycle_stages"]] == [
+        "runtime_update",
+        "prepare",
+        "activate",
+        "converge",
+    ]
+
+
+def test_skill_update_fails_when_active_runtime_does_not_converge(monkeypatch) -> None:
+    skill_mgr = _FakeSkillManager()
+    scenario_mgr = _FakeScenarioManager()
+    client = _make_client(skill_mgr, scenario_mgr)
+    bus_events: list[tuple[str, dict[str, Any], str]] = []
+    rebuilds: list[dict[str, Any]] = []
+
+    class _Service:
+        def __init__(self, ctx) -> None:
+            self.ctx = ctx
+
+        def request_update(self, skill_id: str, *, dry_run: bool = False):
+            return SimpleNamespace(updated=True, version="2.0.0")
+
+    def _activate_without_state_change(
+        name: str,
+        *,
+        version: str | None = None,
+        slot: str | None = None,
+        space: str = "default",
+        webspace_id: str = "default",
+    ):
+        skill_mgr.calls.append(f"activate_for_space:{name}:{version}:{slot}:{webspace_id}")
+        return slot or "B"
+
+    monkeypatch.setattr(skill_mgr, "activate_for_space", _activate_without_state_change)
+    monkeypatch.setattr(skills, "SkillUpdateService", _Service)
+    monkeypatch.setattr(skills, "_get_manager", lambda ctx: skill_mgr)
+    monkeypatch.setattr(skills, "bus_emit", lambda bus, typ, payload, source: bus_events.append((typ, payload, source)))
+    monkeypatch.setattr(skills, "_schedule_webspace_rebuild", lambda **kwargs: rebuilds.append(dict(kwargs)))
+
+    resp = client.post("/api/skills/update", json={"name": "demo", "webspace_id": "default"})
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert "did not converge" in detail["message"]
+    assert detail["runtime_refresh"]["failed_stage"] == "converge"
+    assert "did not converge" in detail["runtime_refresh"]["failure_reason"]
+    assert detail["runtime_refresh"]["prepared_version"] == "2.0.0"
+    assert detail["runtime_refresh"]["prepared_slot"] == "B"
+    assert "runtime_update:demo:workspace" in skill_mgr.calls
+    assert "prepare_runtime:demo" in skill_mgr.calls
+    assert bus_events == []
+    assert rebuilds == []
 
 
 def test_skill_update_can_defer_webspace_rebuild_until_batch_finalize(monkeypatch) -> None:

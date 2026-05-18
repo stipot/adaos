@@ -9,6 +9,19 @@ General service-skill docs: `docs/concepts/service-skills.md`.
 - Isolate heavy dependencies per component.
 - Uniform lifecycle: install -> start -> health -> restart -> observe.
 
+## Provider packaging boundary
+
+NLU engines are providers, not core package data. The AdaOS core owns event
+contracts, confidence policy, tracing, named-entity canonicalization, and
+fallback orchestration. Concrete engines such as Neural NLU and Rasa are normal
+workspace/registry service skills.
+
+Provider source trees, Torch/FAISS/Rasa dependencies, model weights, indexes,
+and training artifacts must not be bundled under `src/adaos/interpreter_data`.
+That package is treated as an early experiment to retire. A runtime bridge may
+discover and start an installed service skill, but it must not create workspace
+skills or prepare A/B slots on the hot parse path.
+
 ## Event interface
 
 The hub NLU pipeline uses:
@@ -16,6 +29,59 @@ The hub NLU pipeline uses:
 - `nlp.intent.detect.request { text, webspace_id, request_id, _meta }`
 - `nlp.intent.detected { intent, confidence, slots, text, webspace_id, request_id, via }`
 - `nlp.intent.not_obtained { reason, text, webspace_id, request_id, via }`
+
+## Neural NLU service skill
+
+Target skill:
+
+- Skill: `.adaos/workspace/skills/neural_nlu_service_skill`
+- Active source: `.adaos/workspace/skills/.runtime/neural_nlu_service_skill/v<major>.<minor>/slots/<A|B>/src/skills/neural_nlu_service_skill`
+- Supervisor: `src/adaos/services/skill/service_supervisor.py`
+- Bridge: `src/adaos/services/nlu/neural_service_bridge.py`
+
+Target install policy:
+
+- `adaos install` prepares Neural NLU by default.
+- `--no-neural-nlu` or `ADAOS_NLU_NEURAL=0` may disable the stage on weak
+  devices.
+- The bridge starts only an already installed/active service skill.
+- If the service skill is missing or unhealthy, the bridge falls back to Rasa.
+
+Runtime / environment:
+
+- `runtime.kind: service`
+- `runtime.env.mode: venv` by default for Torch/FAISS isolation
+- dependencies are declared by the skill, not by the hub root venv
+
+HTTP API:
+
+- `GET /health`
+- `POST /parse` `{ "text": "...", "webspace_id": "...", "locale": "ru", "entities": {...} }`
+- optional `POST /reindex`
+- optional `POST /train` or an offline artifact build command
+
+Target artifacts are service-owned runtime data:
+
+- `model.pt`
+- `labels.json` / `intents_manifest.json`
+- `vocab.json`
+- `faiss.index`
+- `examples_manifest.jsonl`
+- `ranker_config.json`
+- `metrics.json`
+
+The first production policy is one active model per node. The service records
+usage statistics so later splits by locale, webspace, profile, or hardware class
+can be justified by observed drift, latency, confidence, and fallback patterns.
+
+The intended detector algorithm is the full research-notebook approach:
+
+- named-entity canonicalization before model inference;
+- entity masking for model-facing text;
+- Char-CNN + BiLSTM encoder;
+- supervised-contrastive embedding projection;
+- FAISS positive and negative example retrieval;
+- weighted ranker over softmax, k-NN similarity, and skill/action priors.
 
 ## Rasa NLU service skill
 

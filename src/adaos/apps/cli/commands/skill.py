@@ -18,8 +18,11 @@ from adaos.apps.cli.git_status import (
     compute_path_status,
     ensure_remote,
     fetch_remote,
+    list_changed_paths,
+    ref_exists,
     render_diff,
     resolve_base_ref,
+    read_path_divergence,
     render_noindex_diff,
     unzip_b64_to_dir,
 )
@@ -170,20 +173,111 @@ def _resolve_list_skill_git_flags(
         workspace_root,
         workspace_skills_root,
     )
+    base_ref = resolve_base_ref(source_workdir) if source_kind in {"workspace", "repo_workspace_fallback"} else None
     try:
         path_status = compute_path_status(
             workdir=source_workdir,
             path=source_path,
-            base_ref="HEAD" if source_kind == "workspace" else None,
+            base_ref=base_ref,
         )
     except Exception:
         return []
+    return _git_path_flags(path_status)
+
+
+def _status_value(status: object, key: str, default: object = None) -> object:
+    if isinstance(status, dict):
+        return status.get(key, default)
+    return getattr(status, key, default)
+
+
+def _positive_int(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
+    except Exception:
+        return 0
+
+
+def _git_path_flags(status: object) -> list[str]:
     flags: list[str] = []
-    if path_status.dirty:
-        flags.append("dirty")
-    if path_status.changed_vs_base:
-        flags.append("diff")
+    error = str(_status_value(status, "error", "") or "").strip()
+    if error:
+        flags.append("git-error")
+    dirty = bool(_status_value(status, "dirty", False))
+    changed = bool(_status_value(status, "changed_vs_base", False))
+    ahead = _positive_int(_status_value(status, "ahead_count", 0))
+    behind = _positive_int(_status_value(status, "behind_count", 0))
+    if dirty:
+        flags.append("git-dirty")
+    if changed and ahead:
+        flags.append("git-ahead")
+    if changed and behind:
+        flags.append("git-behind")
+    if changed and not ahead and not behind:
+        flags.append("git-different")
     return flags
+
+
+def _compare_versions(left: str | None, right: str | None) -> int | None:
+    left_text = str(left or "").strip()
+    right_text = str(right or "").strip()
+    if not left_text or not right_text:
+        return None
+    try:
+        from packaging.version import Version
+
+        left_version = Version(left_text)
+        right_version = Version(right_text)
+    except Exception:
+        left_parts = _simple_version_parts(left_text)
+        right_parts = _simple_version_parts(right_text)
+        if left_parts is None or right_parts is None:
+            return None
+        max_len = max(len(left_parts), len(right_parts))
+        left_parts = left_parts + (0,) * (max_len - len(left_parts))
+        right_parts = right_parts + (0,) * (max_len - len(right_parts))
+        if left_parts > right_parts:
+            return 1
+        if left_parts < right_parts:
+            return -1
+        return 0
+    if left_version > right_version:
+        return 1
+    if left_version < right_version:
+        return -1
+    return 0
+
+
+def _simple_version_parts(value: str) -> tuple[int, ...] | None:
+    text = str(value or "").strip().removeprefix("v").removeprefix("V")
+    if not text:
+        return None
+    parts: list[int] = []
+    for segment in text.split("."):
+        digits: list[str] = []
+        for char in segment:
+            if not char.isdigit():
+                break
+            digits.append(char)
+        if not digits:
+            return None
+        parts.append(int("".join(digits)))
+    return tuple(parts)
+
+
+def _runtime_version_flags(
+    workspace_version: str | None,
+    runtime_version: str | None,
+    version_drift: bool,
+) -> list[str]:
+    if not version_drift:
+        return []
+    order = _compare_versions(workspace_version, runtime_version)
+    if order is None or order == 0:
+        return ["runtime-different"]
+    if order > 0:
+        return ["runtime-behind"]
+    return ["runtime-ahead"]
 
 
 def _resolve_workspace_skill_versions(
@@ -198,8 +292,206 @@ def _resolve_workspace_skill_versions(
     runtime_version = None
     if isinstance(runtime_state, dict):
         runtime_version = _clean_version_text(runtime_state.get("version"))
-    version_drift = bool(workspace_version and runtime_version and workspace_version != runtime_version)
+    version_drift = False
+    if workspace_version and runtime_version:
+        order = _compare_versions(workspace_version, runtime_version)
+        version_drift = (workspace_version != runtime_version) if order is None else order != 0
     return workspace_version, runtime_version, version_drift
+
+
+def _resolve_list_skill_flags(
+    *,
+    ctx,
+    skill_name: str,
+    row_version: object | None,
+    runtime_state: dict[str, object] | None = None,
+    workspace_root: Path,
+    workspace_skills_root: Path,
+    registry_meta: dict[str, object] | None,
+) -> list[str]:
+    _source_workdir, source_path, _source_kind = _resolve_workspace_skill_source(
+        ctx,
+        skill_name,
+        workspace_root,
+        workspace_skills_root,
+    )
+    if runtime_state is None and _clean_version_text(row_version):
+        runtime_state = {"version": row_version}
+    workspace_version, runtime_version, version_drift = _resolve_workspace_skill_versions(
+        runtime_state=runtime_state,
+        registry_meta=registry_meta,
+        source_path=source_path,
+    )
+    return [
+        *_runtime_version_flags(workspace_version, runtime_version, version_drift),
+        *_resolve_list_skill_git_flags(
+            ctx=ctx,
+            skill_name=skill_name,
+            workspace_root=workspace_root,
+            workspace_skills_root=workspace_skills_root,
+        ),
+    ]
+
+
+def _skill_names_from_paths(paths: list[str]) -> list[str]:
+    names: set[str] = set()
+    for path in paths:
+        parts = str(path or "").replace("\\", "/").split("/")
+        if len(parts) >= 2 and parts[0] == "skills" and parts[1]:
+            names.add(parts[1])
+    return sorted(names)
+
+
+def _default_skill_release_message(skill_name: str) -> str:
+    safe_name = str(skill_name or "skill").strip() or "skill"
+    return f"chore({safe_name}): release workspace changes"
+
+
+def _registry_release_reasons(
+    *,
+    source_path: Path,
+    registry_meta: dict[str, object] | None,
+) -> list[str]:
+    reasons: list[str] = []
+    workspace_version = _read_local_artifact_version("skills", source_path)
+    registry_version = _clean_version_text((registry_meta or {}).get("version") if isinstance(registry_meta, dict) else None)
+    if workspace_version:
+        if not registry_version:
+            reasons.append("registry-missing")
+        elif workspace_version != registry_version:
+            reasons.append("registry-version")
+    return reasons
+
+
+def _collect_skill_release_candidates(
+    *,
+    skill_name: str | None = None,
+    remote: str = "origin",
+) -> dict[str, object]:
+    ctx = get_ctx()
+    workspace_root = Path(ctx.paths.workspace_dir())
+    if not (workspace_root / ".git").exists():
+        raise RuntimeError("Skills workspace repo is not initialized. Run `adaos skill sync` once.")
+
+    mgr = _mgr()
+    caps = getattr(mgr, "caps", None)
+    if caps is not None:
+        caps.require("core", "skills.manage", "git.write", "net.git")
+
+    if skill_name:
+        _resolve_skill_path(skill_name)
+
+    base_ref = resolve_base_ref(workspace_root, remote=remote)
+    if base_ref and not ref_exists(workspace_root, base_ref):
+        base_ref = None
+
+    ahead: int | None = 0
+    behind: int | None = 0
+    if base_ref:
+        ahead, behind = read_path_divergence(workspace_root, base_ref=base_ref, path="skills")
+    ahead_count = _positive_int(ahead)
+    behind_count = _positive_int(behind)
+    reasons_by_skill: dict[str, set[str]] = {}
+
+    if base_ref:
+        changed_paths = list_changed_paths(workspace_root, base_ref=base_ref, path="skills")
+        for name in _skill_names_from_paths(changed_paths):
+            reasons_by_skill.setdefault(name, set()).add("git-ahead")
+
+    try:
+        dirty_paths = list(ctx.git.changed_files(str(workspace_root), subpath="skills"))
+    except Exception:
+        dirty_paths = []
+    for name in _skill_names_from_paths(dirty_paths):
+        reasons_by_skill.setdefault(name, set()).add("git-dirty")
+
+    workspace_skills_root = workspace_root / "skills"
+    registry_by_name: dict[str, dict[str, object]] = {}
+    try:
+        registry_items = list_workspace_registry_entries(workspace_root, kind="skills", fallback_to_scan=True)
+    except Exception:
+        registry_items = []
+    for item in registry_items:
+        if not isinstance(item, dict):
+            continue
+        item_name = str(item.get("name") or item.get("id") or "").strip()
+        if item_name:
+            registry_by_name[item_name] = item
+
+    release_names = set(registry_by_name)
+    release_names.update(_workspace_child_names(workspace_skills_root))
+    if skill_name:
+        release_names = {skill_name}
+    for name in sorted(release_names):
+        source_path = workspace_skills_root / name
+        if not source_path.exists():
+            continue
+        for reason in _registry_release_reasons(
+            source_path=source_path,
+            registry_meta=registry_by_name.get(name),
+        ):
+            reasons_by_skill.setdefault(name, set()).add(reason)
+
+    if skill_name:
+        reasons_by_skill = {skill_name: reasons for name, reasons in reasons_by_skill.items() if name == skill_name}
+
+    candidates = [
+        {"name": name, "reasons": sorted(reasons)}
+        for name, reasons in sorted(reasons_by_skill.items())
+        if reasons
+    ]
+    return {
+        "base_ref": base_ref,
+        "ahead_count": ahead_count,
+        "behind_count": behind_count,
+        "skills": candidates,
+    }
+
+
+def _release_changed_skills(
+    *,
+    skill_name: str | None = None,
+    remote: str = "origin",
+    signoff: bool = False,
+) -> dict[str, object]:
+    candidates = _collect_skill_release_candidates(skill_name=skill_name, remote=remote)
+    candidate_items = [item for item in candidates.get("skills") or [] if isinstance(item, dict)]
+
+    if skill_name and not candidate_items:
+        return {
+            "pushed": False,
+            "reason": "skill-no-release-changes",
+            **candidates,
+        }
+    if not candidate_items:
+        return {
+            "pushed": False,
+            "reason": "nothing-to-release",
+            **candidates,
+        }
+
+    mgr = _mgr()
+    released: list[dict[str, object]] = []
+    for item in candidate_items:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        message = _default_skill_release_message(name)
+        revision = mgr.push(name, message, signoff=signoff)
+        released.append(
+            {
+                "name": name,
+                "revision": revision,
+                "message": message,
+                "reasons": list(item.get("reasons") or []),
+            }
+        )
+
+    return {
+        "pushed": True,
+        **candidates,
+        "released": released,
+    }
 
 
 def _resolve_skill_display_version(
@@ -667,6 +959,17 @@ def list_cmd(
         if item_name:
             workspace_registry_by_name[item_name] = item
 
+    def _list_runtime_state(skill_name: str, row_version: object | None) -> dict[str, object] | None:
+        try:
+            state = mgr.runtime_status(skill_name)
+        except Exception:
+            state = None
+        if isinstance(state, dict):
+            return state
+        if _clean_version_text(row_version):
+            return {"version": row_version}
+        return None
+
     if json_output:
         payload = {
             "skills": [
@@ -681,11 +984,14 @@ def list_cmd(
                         workspace_skills_root=workspace_skills_root,
                         registry_meta=workspace_registry_by_name.get(r.name),
                     ),
-                    "flags": _resolve_list_skill_git_flags(
+                    "flags": _resolve_list_skill_flags(
                         ctx=ctx,
                         skill_name=r.name,
+                        row_version=getattr(r, "active_version", None),
+                        runtime_state=_list_runtime_state(r.name, getattr(r, "active_version", None)),
                         workspace_root=workspace_root,
                         workspace_skills_root=workspace_skills_root,
+                        registry_meta=workspace_registry_by_name.get(r.name),
                     ),
                 }
                 for r in rows
@@ -710,11 +1016,14 @@ def list_cmd(
                 workspace_skills_root=workspace_skills_root,
                 registry_meta=workspace_registry_by_name.get(r.name),
             )
-            flags = _resolve_list_skill_git_flags(
+            flags = _resolve_list_skill_flags(
                 ctx=ctx,
                 skill_name=r.name,
+                row_version=getattr(r, "active_version", None),
+                runtime_state=_list_runtime_state(r.name, getattr(r, "active_version", None)),
                 workspace_root=workspace_root,
                 workspace_skills_root=workspace_skills_root,
+                registry_meta=workspace_registry_by_name.get(r.name),
             )
             suffix = f" [{' '.join(flags)}]" if flags else ""
             typer.echo(f'{_("cli.skill.list.item", name=r.name, version=av)}{suffix}')
@@ -807,13 +1116,14 @@ def reconcile_fs_to_db():
 @app.command("push", context_settings={"allow_extra_args": True, "ignore_unknown_options": False})
 def push_command(
     ctx: typer.Context,
-    skill_name: str = typer.Argument(..., help=_("cli.skill.push.name_help")),
+    skill_name: Optional[str] = typer.Argument(None, help=_("cli.skill.push.name_help")),
     message: Optional[str] = typer.Option(None, "--message", "-m", help=_("cli.commit_message.help")),
     signoff: bool = typer.Option(False, "--signoff", help=_("cli.option.signoff")),
+    remote: str = typer.Option("origin", "--remote", help="workspace git remote for release candidate comparison"),
 ):
     """
-    Закоммитить изменения ТОЛЬКО внутри подпапки навыка и выполнить git push.
-    Защищён политиками: skills.manage + git.write + net.git.
+    Release workspace skill changes through manifest version bump, registry
+    update, commit, and push.
     """
     extra = [str(item) for item in getattr(ctx, "args", []) or []]
     if extra:
@@ -822,12 +1132,35 @@ def push_command(
         message = " ".join([part for part in ([message] if message else []) + extra if str(part).strip()]).strip() or None
 
     if message is None:
-        typer.secho(
-            "Root publishing via 'adaos skill push' has moved to 'adaos dev skill push'.",
-            fg=typer.colors.YELLOW,
-        )
-        typer.echo("Use --message/-m to push commits or run 'adaos dev skill push <name>'.")
-        raise typer.Exit(1)
+        try:
+            result = _release_changed_skills(skill_name=skill_name, remote=remote, signoff=signoff)
+        except Exception as exc:
+            typer.secho(f"push failed: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(1) from exc
+        if not bool(result.get("pushed")):
+            reason = str(result.get("reason") or "nothing-to-release")
+            if reason == "skill-no-release-changes" and skill_name:
+                typer.echo(f"skill {skill_name} has no release changes to push.")
+            else:
+                typer.echo("No skill release changes to push.")
+            return
+        released = [item for item in result.get("released") or [] if isinstance(item, dict)]
+        skill_names = ", ".join(str(item.get("name") or "") for item in released if str(item.get("name") or "").strip()) or "(unknown)"
+        base_ref = str(result.get("base_ref") or "(none)")
+        ahead = _positive_int(result.get("ahead_count"))
+        behind = _positive_int(result.get("behind_count"))
+        typer.echo(f"released skill changes: {skill_names} (base={base_ref}, ahead={ahead}, behind={behind})")
+        for item in released:
+            name = str(item.get("name") or "").strip()
+            revision = str(item.get("revision") or "").strip()
+            reasons = ", ".join(str(reason) for reason in item.get("reasons") or [])
+            suffix = f" [{reasons}]" if reasons else ""
+            typer.echo(f"- {name}: {revision}{suffix}")
+        return
+
+    if not skill_name:
+        typer.secho("skill name is required when --message/-m is used", fg=typer.colors.RED)
+        raise typer.Exit(2)
 
     _resolve_skill_path(skill_name)
     mgr = _mgr()
@@ -1268,16 +1601,24 @@ def status(
 
     if space == "workspace":
         # Ensure expected remote exists; allow user override via --remote/--ref.
+        using_default_registry_ref = False
         if remote == "origin" and not ref:
             ensure_remote(workspace_root, name=REGISTRY_REMOTE, url=REGISTRY_URL)
             remote = REGISTRY_REMOTE
             ref = f"{REGISTRY_REMOTE}/{REGISTRY_BRANCH}"
+            using_default_registry_ref = True
         if fetch:
             err = fetch_remote(workspace_root, remote=remote)
             if err:
                 typer.secho(f"git fetch failed: {err}", fg=typer.colors.YELLOW)
 
         base_ref = (ref or "").strip() or resolve_base_ref(workspace_root, remote=remote)
+        if using_default_registry_ref and base_ref and not ref_exists(workspace_root, base_ref):
+            base_ref = (
+                resolve_base_ref(workspace_root, remote=REGISTRY_REMOTE)
+                or resolve_base_ref(workspace_root, remote="origin")
+                or base_ref
+            )
     else:
         # Dev: compare local dev folder with the Root backend draft state (API).
         base_ref = None
@@ -1370,6 +1711,7 @@ def status(
                 workspace_version=workspace_version,
                 runtime_version=runtime_version,
             )
+            runtime_flags = _runtime_version_flags(workspace_version, runtime_version, version_drift)
             path_status = compute_path_status(
                 workdir=source_workdir,
                 path=source_path,
@@ -1389,12 +1731,16 @@ def status(
                 "runtime_version": runtime_version,
                 "display_version": display_version,
                 "version_drift": version_drift,
+                "runtime_flags": runtime_flags,
                 "git": {
                     "path": path_status.path,
                     "exists": path_status.exists,
                     "dirty": path_status.dirty,
+                    "flags": _git_path_flags(path_status),
                     "base_ref": path_status.base_ref,
                     "changed_vs_base": path_status.changed_vs_base,
+                    "ahead_count": path_status.ahead_count,
+                    "behind_count": path_status.behind_count,
                     "local_last_commit": (
                         {
                             "sha": path_status.local_last_commit.sha,
@@ -1504,6 +1850,7 @@ def status(
         reg = entry.get("workspace_registry") or {}
         display_version = str(entry.get("display_version") or "").strip()
         runtime_version = str(entry.get("runtime_version") or "").strip()
+        runtime_flags = [str(flag) for flag in (entry.get("runtime_flags") or []) if str(flag).strip()]
         typer.echo(f"skill: {entry.get('name')}")
         typer.echo(f"space: {entry.get('space')}")
         if space == "workspace" and display_version and display_version != "n/a":
@@ -1526,6 +1873,8 @@ def status(
                 typer.echo(f"active slot: {st.get('active_slot')}")
                 if entry.get("version_drift") and runtime_version:
                     typer.echo(f"runtime version: {runtime_version}")
+                if runtime_flags:
+                    typer.echo("runtime status: " + ", ".join(runtime_flags))
             if st.get("installed") is False or state in {"draft", "runtime-missing"}:
                 typer.echo("resolved manifest: (not installed)")
             elif st.get("ready", True):
@@ -1556,12 +1905,12 @@ def status(
             if g.get("error"):
                 typer.secho(f"git: {g.get('error')}", fg=typer.colors.YELLOW)
             else:
-                flags: list[str] = []
-                if g.get("dirty"):
-                    flags.append("dirty")
-                if g.get("changed_vs_base"):
-                    flags.append("diff")
+                flags = _git_path_flags(g)
                 typer.echo("git status: " + (", ".join(flags) if flags else "clean"))
+                ahead = _positive_int(g.get("ahead_count"))
+                behind = _positive_int(g.get("behind_count"))
+                if ahead or behind:
+                    typer.echo(f"git divergence: ahead={ahead} behind={behind}")
                 if g.get("local_last_commit"):
                     lc = g["local_last_commit"]
                     typer.echo(f"last local: {lc.get('sha')} {lc.get('iso') or lc.get('timestamp')} {lc.get('subject')}")
@@ -1607,13 +1956,9 @@ def status(
                 flags.append("draft")
             elif state == "runtime-missing":
                 flags.append("runtime-missing")
-            if entry.get("version_drift"):
-                flags.append("version-drift")
+            flags.extend(str(flag) for flag in (entry.get("runtime_flags") or []) if str(flag).strip())
         if space == "workspace":
-            if g.get("dirty"):
-                flags.append("dirty")
-            if g.get("changed_vs_base"):
-                flags.append("diff")
+            flags.extend(_git_path_flags(g))
         else:
             dc = entry.get("dev_compare") or {}
             if dc.get("changed_vs_base"):

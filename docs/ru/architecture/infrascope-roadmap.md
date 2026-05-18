@@ -304,6 +304,35 @@ Checkpoint status:
 - dry-run и impact simulation перед отправкой предложения
 - review и approval flow для изменений, предложенных LLM
 - recommendation и anomaly layers поверх структурированных projections
+- LLM-assisted conflict resolution для git/workspace merge conflicts: нода
+  обнаруживает конфликт, через root запрашивает LLM-резолв, передает
+  ограниченный набор артефактов и принимает результат только как проверяемый
+  patch/action proposal
+
+### Перспективная задача: LLM Conflict Resolution
+
+Для workflows вроде `skill push`, обновления workspace registry и других
+управляемых git-операций нужен отдельный conflict-resolution контур. Если
+нода обнаруживает merge/rebase conflict, она не должна пытаться бесконтрольно
+чинить рабочее дерево локальной эвристикой. Целевой flow:
+
+1. Нода фиксирует конфликт как runtime incident и собирает `conflict_pack`:
+   `git status`, список conflicted paths, base/ours/theirs версии, фрагменты с
+   conflict markers, commit metadata, intended operation и policy context.
+2. Нода отправляет `conflict_pack` через root-managed LLM endpoint, не раскрывая
+   секреты, токены и персональные данные из workspace.
+3. LLM возвращает не произвольную команду shell, а структурированный
+   `resolution_proposal`: объяснение, patch или file replacements, confidence,
+   affected paths, risk notes и список проверок.
+4. Нода применяет proposal во временном/изолированном рабочем дереве, запускает
+   JSON/schema/tests/dry-run проверки и строит impact summary.
+5. Только после успешной валидации и, где требуется, operator approval,
+   изменения попадают в реальный rebase/merge flow через существующие git
+   адаптеры.
+
+Первые безопасные кандидаты: конфликты `registry.json` при `skill push` /
+`scenario push`, где LLM может сопоставить remote additions с локальным bump
+версии, сохранить оба набора изменений и обновить metadata без потери entries.
 
 ### Точки опоры
 

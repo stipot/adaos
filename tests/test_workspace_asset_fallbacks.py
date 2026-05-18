@@ -400,6 +400,91 @@ def test_skill_manager_activate_runtime_prepares_repo_workspace_when_missing(tmp
     assert "repo-workspace-handler" in runtime_handler.read_text(encoding="utf-8")
 
 
+def test_skill_manager_activate_runtime_refreshes_when_workspace_version_changed(tmp_path: Path, monkeypatch) -> None:
+    runtime_base = tmp_path / "runtime"
+    repo_root = tmp_path / "repo"
+
+    repo_skill = repo_root / ".adaos" / "workspace" / "skills" / "infrastate_skill"
+    (repo_skill / "handlers").mkdir(parents=True, exist_ok=True)
+    (repo_skill / "handlers" / "main.py").write_text(
+        'MARKER = "runtime-v1"\n'
+        'def handle(payload=None):\n'
+        '    return payload or {}\n',
+        encoding="utf-8",
+    )
+    (repo_skill / "skill.yaml").write_text(
+        "name: infrastate_skill\nversion: '1.0.0'\nentry: handlers/main.py\n",
+        encoding="utf-8",
+    )
+
+    fake_ctx = SimpleNamespace(
+        paths=_PathsStub(base_dir=runtime_base, repo_root=repo_root),
+        caps=SimpleNamespace(),
+        bus=None,
+        settings=SimpleNamespace(
+            default_wall_time_sec=30.0,
+            default_max_rss_mb=None,
+            default_cpu_time_sec=None,
+        ),
+    )
+    monkeypatch.setattr(skill_manager_module, "get_ctx", lambda: fake_ctx)
+    monkeypatch.setattr(skill_manager_module, "install_skill_in_capacity", lambda *args, **kwargs: None)
+
+    manager = skill_manager_module.SkillManager(
+        git=SimpleNamespace(),
+        paths=fake_ctx.paths,
+        caps=fake_ctx.caps,
+        settings=fake_ctx.settings,
+        registry=None,
+        repo=None,
+        bus=None,
+    )
+
+    first_slot = manager.activate_runtime("infrastate_skill")
+    assert first_slot in {"A", "B"}
+    assert manager.runtime_status("infrastate_skill")["version"] == "1.0.0"
+
+    (repo_skill / "handlers" / "main.py").write_text(
+        'MARKER = "runtime-v2"\n'
+        'def handle(payload=None):\n'
+        '    return payload or {}\n',
+        encoding="utf-8",
+    )
+    (repo_skill / "skill.yaml").write_text(
+        "name: infrastate_skill\nversion: '1.1.0'\nentry: handlers/main.py\n",
+        encoding="utf-8",
+    )
+
+    second_slot = manager.activate_runtime("infrastate_skill")
+    status = manager.runtime_status("infrastate_skill")
+    env = SkillRuntimeEnvironment(skills_root=runtime_base / "workspace" / "skills", skill_name="infrastate_skill")
+    runtime_handler = env.ensure_current_link("1.1.0") / "src" / "skills" / "infrastate_skill" / "handlers" / "main.py"
+
+    assert second_slot in {"A", "B"}
+    assert status["version"] == "1.1.0"
+    assert "runtime-v2" in runtime_handler.read_text(encoding="utf-8")
+
+    (repo_skill / "handlers" / "main.py").write_text(
+        'MARKER = "runtime-v3"\n'
+        'def handle(payload=None):\n'
+        '    return payload or {}\n',
+        encoding="utf-8",
+    )
+    (repo_skill / "skill.yaml").write_text(
+        "name: infrastate_skill\nversion: '1.1.1'\nentry: handlers/main.py\n",
+        encoding="utf-8",
+    )
+    env.active_version_marker().write_text("1.1.1", encoding="utf-8")
+
+    third_slot = manager.activate_runtime("infrastate_skill")
+    status = manager.runtime_status("infrastate_skill")
+    runtime_handler = env.ensure_current_link("1.1.1") / "src" / "skills" / "infrastate_skill" / "handlers" / "main.py"
+
+    assert third_slot in {"A", "B"}
+    assert status["version"] == "1.1.1"
+    assert "runtime-v3" in runtime_handler.read_text(encoding="utf-8")
+
+
 def test_skills_loader_imports_repo_workspace_handler_when_workspace_missing(tmp_path: Path, monkeypatch) -> None:
     runtime_base = tmp_path / "runtime"
     repo_root = tmp_path / "repo"

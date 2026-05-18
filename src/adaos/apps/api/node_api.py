@@ -867,8 +867,11 @@ def _runtime_debug_slice(runtime: Mapping[str, Any] | None) -> dict[str, Any]:
         },
         "transport": {
             "active_yws_connections": int(transport.get("active_yws_connections") or 0),
+            "active_clients": list(transport.get("active_clients") or []),
             "recent_open_10s": int(transport.get("recent_open_10s") or 0),
+            "recent_open_60s": int(transport.get("recent_open_60s") or 0),
             "storm_detected": bool(transport.get("storm_detected")),
+            "guard": dict(transport.get("guard") or {}) if isinstance(transport.get("guard"), Mapping) else {},
             "room_total": int(transport.get("room_total") or 0),
             "active_room_total": int(transport.get("active_room_total") or 0),
             "room_reset_total": int(transport.get("room_reset_total") or 0),

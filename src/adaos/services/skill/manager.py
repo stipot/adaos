@@ -64,11 +64,92 @@ def _payload_webspace_id(payload: Mapping[str, Any] | None) -> str:
     return _default_webspace_id()
 
 
-def _admit_skill_tool_yjs_work(name: str, tool: str, payload: Mapping[str, Any] | None) -> dict[str, Any]:
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "write", "mutate"}
+
+
+def _mapping_or_empty(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _skill_tool_yjs_governance(tool_spec: Mapping[str, Any] | None) -> dict[str, Any]:
+    spec = _mapping_or_empty(tool_spec)
+    governance = dict(_mapping_or_empty(spec.get("yjs_governance") or spec.get("yjs")))
+    side_effects = (
+        governance.get("side_effects")
+        or spec.get("side_effects")
+        or spec.get("sideEffects")
+        or spec.get("effects")
+        or spec.get("effect")
+        or ""
+    )
+    if side_effects:
+        governance["side_effects"] = str(side_effects).strip().lower()
+    if "read_only" not in governance:
+        governance["read_only"] = bool(spec.get("read_only") or spec.get("readonly"))
+    return governance
+
+
+def _skill_tool_yjs_root_names(tool_spec: Mapping[str, Any] | None) -> list[str]:
+    governance = _skill_tool_yjs_governance(tool_spec)
+    raw = governance.get("root_names") or governance.get("roots") or []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    roots: list[str] = []
+    for item in raw:
+        token = str(item or "").strip()
+        if token and token not in roots:
+            roots.append(token)
+    return roots
+
+
+def _skill_tool_yjs_read_only(tool: str, payload: Mapping[str, Any] | None, tool_spec: Mapping[str, Any] | None) -> bool:
+    body = payload if isinstance(payload, Mapping) else {}
+    governance = _skill_tool_yjs_governance(tool_spec)
+    side_effects = str(governance.get("side_effects") or "").strip().lower()
+    declared_read_only = bool(governance.get("read_only")) or side_effects in {
+        "none",
+        "read",
+        "read-only",
+        "read_only",
+        "readonly",
+    }
+    mutating_keys = governance.get("mutating_payload_keys")
+    if not isinstance(mutating_keys, (list, tuple)):
+        mutating_keys = ("project", "write", "mutate", "apply")
+    if declared_read_only:
+        return not any(_truthy(body.get(str(key))) for key in mutating_keys)
+
+    # Backward-compatible diagnostic convention for existing resolved manifests
+    # that predate explicit side_effects metadata.
+    token = str(tool or "").strip().lower()
+    if token in {"get_snapshot", "snapshot", "status", "diagnostics"} or token.startswith(("get_", "list_", "read_", "inspect_")):
+        return not any(_truthy(body.get(key)) for key in ("project", "write", "mutate", "apply"))
+    return False
+
+
+def _admit_skill_tool_yjs_work(
+    name: str,
+    tool: str,
+    payload: Mapping[str, Any] | None,
+    tool_spec: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     try:
         from adaos.services.yjs.owner_guard import admit_skill_tool
 
-        return admit_skill_tool(skill_name=name, tool=tool, payload=payload)
+        return admit_skill_tool(
+            skill_name=name,
+            tool=tool,
+            payload=payload,
+            read_only=_skill_tool_yjs_read_only(tool, payload, tool_spec),
+            root_names=_skill_tool_yjs_root_names(tool_spec),
+        )
     except Exception:
         _log.debug("failed to apply YJS owner guard for skill=%s tool=%s", name, tool, exc_info=True)
         return {"allowed": True, "governed": False, "reason": "owner_guard_unavailable"}
@@ -764,7 +845,18 @@ class SkillManager:
             if not isinstance(entry, dict):
                 continue
             tool_name = entry.get("name")
-            if not tool_name or tool_name in tools:
+            if not tool_name:
+                continue
+            if tool_name in tools:
+                existing = tools.get(tool_name)
+                if isinstance(existing, dict):
+                    changed = False
+                    for meta_key in ("side_effects", "read_only", "yjs_governance"):
+                        if meta_key in entry and existing.get(meta_key) != entry.get(meta_key):
+                            existing[meta_key] = entry.get(meta_key)
+                            changed = True
+                    if changed:
+                        added.append(tool_name)
                 continue
             raw_entry = entry.get("entry") or ""
             if ":" not in raw_entry:
@@ -785,6 +877,9 @@ class SkillManager:
                 "permissions": base_permissions,
                 "secrets": base_secrets,
             }
+            for meta_key in ("side_effects", "read_only", "yjs_governance"):
+                if meta_key in entry:
+                    tools[tool_name][meta_key] = entry.get(meta_key)
             added.append(tool_name)
 
         if added:
@@ -1420,13 +1515,26 @@ class SkillManager:
         previous_active_version = env.resolve_active_version()
         previous_active_slot = env.read_active_slot(previous_active_version) if previous_active_version else None
         previous_deactivation = env.read_deactivation()
+        source_version = ""
         try:
             candidate, _source_kind = self._resolve_runtime_update_source(name, space="workspace")
             if candidate.exists():
                 source_path = candidate
+                try:
+                    source_manifest = self._load_manifest(source_path)
+                except FileNotFoundError:
+                    source_manifest = {}
+                source_version = str(source_manifest.get("version") or "").strip()
         except Exception:
             source_path = None
-        target_version = version or self._latest_prepared_version(env) or env.resolve_active_version()
+            source_version = ""
+        prepared_version = self._latest_prepared_version(env)
+        if version:
+            target_version = version
+        elif source_version:
+            target_version = source_version
+        else:
+            target_version = prepared_version or previous_active_version
         if not target_version:
             if source_path is None:
                 raise RuntimeError("no installed versions")
@@ -1442,7 +1550,17 @@ class SkillManager:
         slot_meta = metadata.get("slots", {}).get(target_slot, {})
         manifest_path = Path(slot_meta.get("resolved_manifest") or slot_paths.resolved_manifest)
         target_manifest: dict[str, Any] = {}
-        if not manifest_path.exists():
+        slot_version = str(slot_meta.get("version") or "").strip()
+        needs_prepare = not manifest_path.exists()
+        if (
+            not needs_prepare
+            and source_path is not None
+            and source_version
+            and source_version == str(target_version or "").strip()
+            and slot_version != str(target_version or "").strip()
+        ):
+            needs_prepare = True
+        if needs_prepare:
             if source_path is None:
                 raise RuntimeError(
                     f"slot {target_slot} of version {target_version} is not prepared; "
@@ -2137,7 +2255,7 @@ class SkillManager:
         prev_memory = os.environ.get("ADAOS_SKILL_MEMORY_PATH")
         prev_secrets = ctx.secrets
         execution_timeout = timeout or tool_spec.get("timeout_seconds")
-        admission = _admit_skill_tool_yjs_work(name, target_tool, payload)
+        admission = _admit_skill_tool_yjs_work(name, target_tool, payload, tool_spec)
         if not bool(admission.get("allowed", True)):
             event = _skill_quarantine_event(name=name, tool=target_tool, payload=payload, admission=admission)
             _append_skill_quarantine_log(skill_memory_path, event)
@@ -2309,7 +2427,7 @@ class SkillManager:
         prev_memory = os.environ.get("ADAOS_SKILL_MEMORY_PATH")
         prev_secrets = ctx.secrets
         execution_timeout = timeout or tool_spec.get("timeout_seconds")
-        admission = _admit_skill_tool_yjs_work(name, target_tool, payload)
+        admission = _admit_skill_tool_yjs_work(name, target_tool, payload, tool_spec)
         if not bool(admission.get("allowed", True)):
             event = _skill_quarantine_event(name=name, tool=target_tool, payload=payload, admission=admission)
             _append_skill_quarantine_log(skill_memory_path, event)
@@ -3579,6 +3697,9 @@ class SkillManager:
                 "permissions": item.get("permissions") or manifest.get("permissions"),
                 "secrets": self._preserve_secret_placeholders(item.get("secrets", [])),
             }
+            for meta_key in ("side_effects", "read_only", "yjs_governance"):
+                if meta_key in item:
+                    tools[tool_name][meta_key] = item.get(meta_key)
 
         if not default_tool and len(tools) == 1:
             default_tool = next(iter(tools))

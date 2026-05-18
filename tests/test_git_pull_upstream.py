@@ -107,3 +107,50 @@ def test_pull_reports_divergence_hint(tmp_path):
     with pytest.raises(GitError) as ei:
         git.pull(b)
     assert "Non fast-forward pull detected." in str(ei.value)
+
+
+@pytest.mark.skipif(not _git_available(), reason="git is not available")
+def test_push_aborts_rebase_conflict_and_leaves_worktree_clean(tmp_path):
+    git = CliGitClient(depth=0)
+    remote = tmp_path / "remote.git"
+    seed = tmp_path / "seed"
+    workspace = tmp_path / ".adaos" / "workspace"
+
+    _run(["git", "init", "--bare", str(remote)], cwd=tmp_path)
+    _run(["git", "clone", str(remote), str(seed)], cwd=tmp_path)
+    workspace.parent.mkdir(parents=True, exist_ok=True)
+    _run(["git", "clone", str(remote), str(workspace)], cwd=tmp_path)
+
+    env = dict(**__import__("os").environ)
+    env.setdefault("GIT_AUTHOR_NAME", "adaos")
+    env.setdefault("GIT_AUTHOR_EMAIL", "adaos@example.local")
+    env.setdefault("GIT_COMMITTER_NAME", env["GIT_AUTHOR_NAME"])
+    env.setdefault("GIT_COMMITTER_EMAIL", env["GIT_AUTHOR_EMAIL"])
+
+    (seed / "registry.json").write_text('{"version":"base"}\n', encoding="utf-8")
+    _run(["git", "add", "."], cwd=seed, env=env)
+    _run(["git", "commit", "-m", "init"], cwd=seed, env=env)
+    _run(["git", "branch", "-M", "main"], cwd=seed, env=env)
+    _run(["git", "push", "-u", "origin", "main"], cwd=seed, env=env)
+
+    _run(["git", "fetch", "origin", "main"], cwd=workspace, env=env)
+    _run(["git", "checkout", "-B", "main", "origin/main"], cwd=workspace, env=env)
+    _run(["git", "branch", "--set-upstream-to=origin/main", "main"], cwd=workspace, env=env)
+
+    (workspace / "registry.json").write_text('{"version":"local"}\n', encoding="utf-8")
+    _run(["git", "add", "."], cwd=workspace, env=env)
+    _run(["git", "commit", "-m", "local"], cwd=workspace, env=env)
+
+    (seed / "registry.json").write_text('{"version":"remote"}\n', encoding="utf-8")
+    _run(["git", "add", "."], cwd=seed, env=env)
+    _run(["git", "commit", "-m", "remote"], cwd=seed, env=env)
+    _run(["git", "push"], cwd=seed, env=env)
+
+    with pytest.raises(GitError) as ei:
+        git.push(workspace, branch="main")
+
+    assert "workspace is back at the local commit" in str(ei.value)
+    assert _run(["git", "status", "--porcelain"], cwd=workspace, env=env) == ""
+    assert not (workspace / ".git" / "rebase-merge").exists()
+    assert not (workspace / ".git" / "rebase-apply").exists()
+    assert (workspace / "registry.json").read_text(encoding="utf-8") == '{"version":"local"}\n'

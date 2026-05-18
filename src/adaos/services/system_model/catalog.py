@@ -178,6 +178,19 @@ def _browser_session_payloads() -> list[dict[str, Any]]:
         if not device_id:
             continue
         merged[device_id] = {**merged.get(device_id, {}), **item}
+    try:
+        from adaos.services.access_links import browser_snapshot
+
+        link_entries = list(browser_snapshot() or [])
+    except Exception:
+        link_entries = []
+    for item in link_entries:
+        if not isinstance(item, dict):
+            continue
+        device_id = str(item.get("device_id") or item.get("id") or "").strip()
+        if not device_id or device_id not in merged:
+            continue
+        merged[device_id] = {**item, **merged[device_id]}
     return [merged[key] for key in sorted(merged)]
 
 

@@ -165,7 +165,20 @@ class MemberLinkClient:
         return parts or ["io.out.", "ui."]
 
     def is_connected(self) -> bool:
-        return self._connected.is_set()
+        if not self._connected.is_set():
+            return False
+        last_activity_at = max(
+            float(self._last_pong_at or 0.0),
+            float(self._last_message_at or 0.0),
+            float(self._connected_at or 0.0),
+        )
+        if last_activity_at <= 0.0:
+            return False
+        try:
+            stale_after_s = self._pong_stale_after_s()
+        except Exception:
+            stale_after_s = 35.0
+        return (time.time() - last_activity_at) <= max(15.0, stale_after_s)
 
     def snapshot(self) -> dict[str, Any]:
         now = time.time()
@@ -316,7 +329,7 @@ class MemberLinkClient:
         try:
             from adaos.services.scenario.webspace_runtime import build_local_desktop_catalog_snapshot
 
-            desktop_catalog = build_local_desktop_catalog_snapshot(mode="workspace")
+            desktop_catalog = build_local_desktop_catalog_snapshot(mode="workspace", include_remote=False)
         except Exception:
             desktop_catalog = {"apps": [], "widgets": []}
         return self._compose_local_node_snapshot(desktop_catalog=desktop_catalog)
@@ -325,7 +338,7 @@ class MemberLinkClient:
         try:
             from adaos.services.scenario.webspace_runtime import build_local_desktop_catalog_snapshot_async
 
-            desktop_catalog = await build_local_desktop_catalog_snapshot_async(mode="workspace")
+            desktop_catalog = await build_local_desktop_catalog_snapshot_async(mode="workspace", include_remote=False)
         except Exception:
             desktop_catalog = {"apps": [], "widgets": []}
         return self._compose_local_node_snapshot(desktop_catalog=desktop_catalog)
@@ -493,8 +506,9 @@ class MemberLinkClient:
         self._queue_node_snapshot()
 
     async def start(self) -> None:
-        if self._task is not None:
+        if self._task is not None and not self._task.done():
             return
+        self._stop.clear()
         self._task = asyncio.create_task(self._run(), name="subnet-link-client")
 
     async def stop(self) -> None:

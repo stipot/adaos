@@ -231,6 +231,22 @@ def test_canonical_object_from_browser_session_tracks_workspace_and_channels() -
     assert obj["runtime"]["incoming_video_tracks"] == 1
 
 
+def test_canonical_object_from_browser_session_uses_metadata_draft_title() -> None:
+    obj = canonical_object_from_browser_session(
+        {
+            "device_id": "dev_68e58ce1-2e6b-4615-9b0d-0e8cb46eccbb",
+            "webspace_id": "desk",
+            "connection_state": "connected",
+            "browser_family": "Chrome",
+            "os_name": "Windows",
+            "form_factor": "Desktop",
+        }
+    ).to_dict()
+
+    assert obj["id"] == "browser:dev_68e58ce1-2e6b-4615-9b0d-0e8cb46eccbb"
+    assert obj["title"] == "Chrome on Windows"
+
+
 def test_browser_session_catalog_unions_yws_and_webrtc_snapshots(monkeypatch) -> None:
     sys.modules.setdefault("nats", SimpleNamespace())
     sys.modules.setdefault(
@@ -287,12 +303,37 @@ def test_browser_session_catalog_unions_yws_and_webrtc_snapshots(monkeypatch) ->
             ]
         }
     )
+    access_links_mod = SimpleNamespace(
+        browser_snapshot=lambda: [
+            {
+                "id": "browser-yws",
+                "display_name": "",
+                "browser_family": "Chrome",
+                "os_name": "Windows",
+                "form_factor": "Desktop",
+            },
+            {
+                "id": "browser-both",
+                "display_name": "Dev Browser",
+                "browser_family": "Firefox",
+                "os_name": "Linux",
+            },
+            {
+                "id": "offline-browser",
+                "display_name": "Offline Browser",
+                "browser_family": "Safari",
+                "os_name": "macOS",
+            },
+        ]
+    )
     monkeypatch.setitem(sys.modules, "adaos.services.yjs.gateway_ws", yws_mod)
     monkeypatch.setitem(sys.modules, "adaos.services.webrtc.peer", webrtc_mod)
+    monkeypatch.setitem(sys.modules, "adaos.services.access_links", access_links_mod)
 
     objects = [item.to_dict() for item in catalog.browser_session_objects()]
 
     assert [item["id"] for item in objects] == ["browser:browser-both", "browser:browser-yws"]
+    assert [item["title"] for item in objects] == ["Dev Browser", "Chrome on Windows"]
     assert objects[0]["runtime"]["incoming_video_tracks"] == 2
     assert objects[1]["health"]["yjs_channel"] == "reachable"
 

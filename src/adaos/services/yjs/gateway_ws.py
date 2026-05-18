@@ -67,6 +67,17 @@ _ACTIVE_YWS_CONNECTIONS: dict[str, list[WebSocket]] = {}
 _ACTIVE_YWS_CLIENTS: dict[str, dict[str, int]] = {}
 _YWS_OPEN_HISTORY: deque[float] = deque(maxlen=512)
 _YWS_CLIENT_OPEN_HISTORY: dict[str, deque[float]] = {}
+_YWS_GUARD_QUARANTINE_UNTIL: dict[str, float] = {}
+_YWS_GUARD_LAST_LOG_AT: dict[str, float] = {}
+_YWS_GUARD_LAST_NOTIFY_AT: dict[str, float] = {}
+_YWS_GUARD_INCIDENTS: dict[str, dict[str, float]] = {}
+_YWS_GUARD_DIAG: dict[str, Any] = {
+    "reject_total": 0,
+    "last_reject_at": 0.0,
+    "last_reject_reason": "",
+    "last_reject_webspace_id": "",
+    "last_reject_dev_id": "",
+}
 _YROOM_LIFECYCLE_LOCK = threading.RLock()
 _YROOM_LIFECYCLE: dict[str, dict[str, Any]] = {}
 _WS_EVENT_SUBSCRIPTIONS_LOCK = threading.RLock()
@@ -169,6 +180,14 @@ _YWS_ROOM_READY_POLL_S = _env_float("ADAOS_YWS_ROOM_READY_POLL_S", 1.0, minimum=
 _YWS_ROOM_BOOTSTRAP_STEP_TIMEOUT_S = _env_float("ADAOS_YWS_ROOM_BOOTSTRAP_STEP_TIMEOUT_S", 20.0, minimum=0.0)
 _YWS_ROOM_STALE_RECOVERY_TIMEOUT_S = _env_float("ADAOS_YWS_ROOM_STALE_RECOVERY_TIMEOUT_S", 3.0, minimum=0.25)
 _YWS_FIRST_MESSAGE_TIMEOUT_S = _env_float("ADAOS_YWS_FIRST_MESSAGE_TIMEOUT_S", 12.0, minimum=0.0)
+_YWS_MAX_ACTIVE_PER_WEBSPACE = _env_int("ADAOS_YWS_MAX_ACTIVE_PER_WEBSPACE", 6, minimum=1)
+_YWS_MAX_ACTIVE_PER_CLIENT = _env_int("ADAOS_YWS_MAX_ACTIVE_PER_CLIENT", 1, minimum=1)
+_YWS_GUARD_RECENT_OPEN_10S = _env_int("ADAOS_YWS_GUARD_RECENT_OPEN_10S", 8, minimum=1)
+_YWS_GUARD_CLIENT_OPEN_15S = _env_int("ADAOS_YWS_GUARD_CLIENT_OPEN_15S", 4, minimum=1)
+_YWS_GUARD_COOLDOWN_S = _env_float("ADAOS_YWS_GUARD_COOLDOWN_S", 300.0, minimum=0.0)
+_YWS_GUARD_MAX_COOLDOWN_S = _env_float("ADAOS_YWS_GUARD_MAX_COOLDOWN_S", 1800.0, minimum=0.0)
+_YWS_GUARD_ESCALATION_WINDOW_S = _env_float("ADAOS_YWS_GUARD_ESCALATION_WINDOW_S", 3600.0, minimum=1.0)
+_YWS_GUARD_NOTIFY_INTERVAL_S = _env_float("ADAOS_YWS_GUARD_NOTIFY_INTERVAL_S", 30.0, minimum=1.0)
 _YROOM_DIAG_LOG_INTERVAL_SEC = _env_float("ADAOS_YJS_ROOM_DIAG_LOG_INTERVAL_SEC", 5.0, minimum=0.0)
 _YROOM_DIAG_BUFFER_WARN = _env_int("ADAOS_YJS_ROOM_DIAG_BUFFER_WARN", 32, minimum=1)
 _YROOM_DIAG_PENDING_WARN = _env_int("ADAOS_YJS_ROOM_DIAG_PENDING_WARN", 32, minimum=1)
@@ -1403,6 +1422,21 @@ def _cancel_idle_room_reset(webspace_id: str) -> bool:
     return True
 
 
+def _trim_allocator_after_yjs_room_reset() -> bool:
+    if not _env_flag("ADAOS_YJS_ROOM_RESET_MALLOC_TRIM", True):
+        return False
+    try:
+        import ctypes  # pylint: disable=import-outside-toplevel
+
+        libc = ctypes.CDLL("libc.so.6")
+        trim = getattr(libc, "malloc_trim", None)
+        if not callable(trim):
+            return False
+        return bool(trim(0))
+    except Exception:
+        return False
+
+
 def _active_webrtc_peer_total_for_webspace(webspace_id: str) -> int:
     key = str(webspace_id or "").strip() or "default"
     try:
@@ -1454,7 +1488,12 @@ def _schedule_idle_room_reset(webspace_id: str, *, reason: str = "idle_room_evic
                 if _active_yws_connection_total_for_webspace(key) <= 0:
                     _schedule_idle_room_reset(key, reason=reason)
                 return
-            await reset_live_webspace_room(key, close_reason=reason)
+            await reset_live_webspace_room(
+                key,
+                close_reason=reason,
+                reset_route_runtime=False,
+                prewarm_after_reset=False,
+            )
         except asyncio.CancelledError:
             return
         except Exception:
@@ -1690,7 +1729,13 @@ def _request_webio_stream_snapshots(topics: set[str], *, transport: str) -> None
             _ylog.debug("failed to request webio stream snapshot topic=%s", token, exc_info=True)
 
 
-def _publish_webio_stream_subscription_change(topics: set[str], *, action: str, transport: str) -> None:
+def _publish_webio_stream_subscription_change(
+    topics: set[str],
+    *,
+    action: str,
+    transport: str,
+    connection_id: str | None = None,
+) -> None:
     for topic in topics:
         token = str(topic or "").strip()
         prefix = "webio.stream."
@@ -1725,6 +1770,9 @@ def _publish_webio_stream_subscription_change(topics: set[str], *, action: str, 
                 "transport": str(transport or "ws"),
                 "action": str(action or "").strip() or "subscribed",
             }
+            if connection_id:
+                payload["connection_id"] = str(connection_id)
+                payload["subscription_id"] = f"{transport}:{connection_id}:{token}"
             if node_id:
                 payload["node_id"] = node_id
                 payload["target_node_id"] = node_id
@@ -1782,7 +1830,12 @@ def _register_ws_event_subscriptions(
         added = set(topics) - set(tracked)
         tracked.update(topics)
     if added:
-        _publish_webio_stream_subscription_change(added, action="subscribed", transport="ws")
+        _publish_webio_stream_subscription_change(
+            added,
+            action="subscribed",
+            transport="ws",
+            connection_id=str(id(websocket)),
+        )
     return added
 
 
@@ -1791,7 +1844,12 @@ def _unregister_ws_event_subscriptions(websocket: WebSocket) -> None:
         entry = _WS_EVENT_SUBSCRIBERS.pop(id(websocket), None)
     topics = set(entry.get("topics") or []) if isinstance(entry, dict) else set()
     if topics:
-        _publish_webio_stream_subscription_change(topics, action="unsubscribed", transport="ws")
+        _publish_webio_stream_subscription_change(
+            topics,
+            action="unsubscribed",
+            transport="ws",
+            connection_id=str(id(websocket)),
+        )
 
 
 def _unregister_ws_event_subscription_topics(websocket: WebSocket, raw_topics: Any) -> set[str]:
@@ -1808,7 +1866,12 @@ def _unregister_ws_event_subscription_topics(websocket: WebSocket, raw_topics: A
         if not tracked:
             _WS_EVENT_SUBSCRIBERS.pop(id(websocket), None)
     if removed:
-        _publish_webio_stream_subscription_change(removed, action="unsubscribed", transport="ws")
+        _publish_webio_stream_subscription_change(
+            removed,
+            action="unsubscribed",
+            transport="ws",
+            connection_id=str(id(websocket)),
+        )
     return removed
 
 
@@ -1856,6 +1919,101 @@ def _track_yws_connection(webspace_id: str, websocket: WebSocket, *, device_id: 
         clients[device_key] = int(clients.get(device_key) or 0) + 1
 
 
+def _websocket_device_id(websocket: WebSocket) -> str:
+    try:
+        params = getattr(websocket, "query_params", {}) or {}
+        return str(params.get("dev") or "unknown").strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _active_yws_connection_total_for_client(webspace_id: str, dev_id: str) -> int:
+    key = str(webspace_id or "").strip() or "default"
+    device_key = str(dev_id or "").strip() or "unknown"
+    with _ACTIVE_YWS_LOCK:
+        clients = _ACTIVE_YWS_CLIENTS.get(key)
+        if isinstance(clients, dict):
+            return max(0, int(clients.get(device_key) or 0))
+        return sum(
+            1
+            for websocket in list(_ACTIVE_YWS_CONNECTIONS.get(key) or [])
+            if _websocket_device_id(websocket) == device_key
+        )
+
+
+def _active_yws_connection_total_for_device(dev_id: str) -> int:
+    device_key = str(dev_id or "").strip() or "unknown"
+    if not device_key or device_key == "unknown":
+        return 0
+    total = 0
+    with _ACTIVE_YWS_LOCK:
+        for clients in _ACTIVE_YWS_CLIENTS.values():
+            if isinstance(clients, dict):
+                total += max(0, int(clients.get(device_key) or 0))
+    return total
+
+
+def _should_mark_yws_browser_session_offline(dev_id: str) -> bool:
+    return _active_yws_connection_total_for_device(dev_id) <= 0
+
+
+def _active_yws_client_rows() -> list[dict[str, Any]]:
+    with _ACTIVE_YWS_LOCK:
+        clients = {
+            webspace_id: dict(device_counts)
+            for webspace_id, device_counts in _ACTIVE_YWS_CLIENTS.items()
+            if isinstance(device_counts, dict)
+        }
+    rows: list[dict[str, Any]] = []
+    for webspace_id, device_counts in clients.items():
+        for device_id, count in sorted(device_counts.items()):
+            rows.append(
+                {
+                    "webspace_id": str(webspace_id or "").strip() or "default",
+                    "dev_id": str(device_id or "").strip() or "unknown",
+                    "session_count": max(0, int(count or 0)),
+                }
+            )
+    rows.sort(key=lambda item: (-int(item.get("session_count") or 0), str(item.get("dev_id") or "")))
+    return rows
+
+
+async def _close_existing_yws_client_connections(webspace_id: str, dev_id: str) -> int:
+    key = str(webspace_id or "").strip() or "default"
+    device_key = str(dev_id or "").strip() or "unknown"
+    if not device_key or device_key == "unknown":
+        return 0
+    with _ACTIVE_YWS_LOCK:
+        sockets = [
+            websocket
+            for websocket in list(_ACTIVE_YWS_CONNECTIONS.get(key) or [])
+            if _websocket_device_id(websocket) == device_key
+        ]
+    if len(sockets) < _YWS_MAX_ACTIVE_PER_CLIENT:
+        return 0
+    closed = 0
+    for websocket in sockets:
+        try:
+            await websocket.close(code=1012, reason="replaced_by_new_yws_session")
+            closed += 1
+        except Exception:
+            pass
+    if closed:
+        _YWS_GUARD_DIAG["last_replaced_at"] = time.time()
+        _YWS_GUARD_DIAG["last_replaced_webspace_id"] = key
+        _YWS_GUARD_DIAG["last_replaced_dev_id"] = device_key
+        _YWS_GUARD_DIAG["replaced_total"] = int(_YWS_GUARD_DIAG.get("replaced_total") or 0) + closed
+        _ylog.warning(
+            "yws guard replaced stale client sessions webspace=%s dev=%s closed=%s max_active_per_client=%s",
+            key,
+            device_key,
+            closed,
+            _YWS_MAX_ACTIVE_PER_CLIENT,
+        )
+        await asyncio.sleep(0)
+    return closed
+
+
 def _record_yws_open(webspace_id: str, dev_id: str) -> None:
     now = time.time()
     key = f"{str(webspace_id or '').strip() or 'default'}::{str(dev_id or '').strip() or 'unknown'}"
@@ -1882,10 +2040,169 @@ def _record_yws_open(webspace_id: str, dev_id: str) -> None:
         )
 
 
+def _yws_guard_quarantine_key(webspace_id: str, dev_id: str | None = None) -> str:
+    webspace_key = str(webspace_id or "").strip() or "default"
+    dev_key = str(dev_id or "").strip() or "*"
+    return f"{webspace_key}::{dev_key}"
+
+
+def _set_yws_guard_quarantine_locked(key: str, now: float) -> tuple[float, float, int]:
+    incident = _YWS_GUARD_INCIDENTS.get(key) or {}
+    last_at = float(incident.get("last_at") or 0.0)
+    count = int(incident.get("count") or 0)
+    if last_at <= 0.0 or now - last_at > _YWS_GUARD_ESCALATION_WINDOW_S:
+        count = 0
+    count += 1
+    base_ttl = max(0.0, float(_YWS_GUARD_COOLDOWN_S))
+    max_ttl = max(base_ttl, float(_YWS_GUARD_MAX_COOLDOWN_S))
+    ttl = min(max_ttl, base_ttl * float(2 ** max(0, count - 1))) if base_ttl > 0.0 else 0.0
+    until = now + ttl
+    _YWS_GUARD_INCIDENTS[key] = {
+        "count": float(count),
+        "last_at": now,
+        "last_ttl_s": ttl,
+        "until": until,
+    }
+    _YWS_GUARD_QUARANTINE_UNTIL[key] = until
+    _YWS_GUARD_DIAG["last_quarantine_ttl_s"] = ttl
+    _YWS_GUARD_DIAG["last_quarantine_incident_count"] = count
+    return until, ttl, count
+
+
+def _yws_guard_log(
+    *,
+    webspace_id: str,
+    dev_id: str,
+    reason: str,
+    active_total: int,
+    recent_10s: int,
+    client_15s: int,
+    cooldown_s: float | None = None,
+    incident_count: int | None = None,
+) -> None:
+    now = time.time()
+    log_key = f"{webspace_id}:{dev_id}:{reason}"
+    with _YWS_STORM_LOCK:
+        last = float(_YWS_GUARD_LAST_LOG_AT.get(log_key) or 0.0)
+        if now - last < 5.0:
+            return
+        _YWS_GUARD_LAST_LOG_AT[log_key] = now
+    _ylog.warning(
+        "yws guard rejected connection webspace=%s dev=%s reason=%s active=%s recent_open_10s=%s client_open_15s=%s cooldown_s=%.1f incident=%s",
+        webspace_id,
+        dev_id,
+        reason,
+        active_total,
+        recent_10s,
+        client_15s,
+        float(cooldown_s if cooldown_s is not None else _YWS_GUARD_COOLDOWN_S),
+        incident_count,
+    )
+
+
+def _yws_guard_should_notify(*, webspace_id: str, dev_id: str, reason: str) -> bool:
+    now = time.time()
+    notify_key = f"{str(webspace_id or '').strip() or 'default'}:{str(dev_id or '').strip() or 'unknown'}:{str(reason or '').strip() or 'guard'}"
+    with _YWS_STORM_LOCK:
+        last = float(_YWS_GUARD_LAST_NOTIFY_AT.get(notify_key) or 0.0)
+        if now - last < _YWS_GUARD_NOTIFY_INTERVAL_S:
+            return False
+        _YWS_GUARD_LAST_NOTIFY_AT[notify_key] = now
+    return True
+
+
+def _yws_guard_reject_reason(webspace_id: str, dev_id: str) -> tuple[str, dict[str, Any]]:
+    webspace_key = str(webspace_id or "").strip() or "default"
+    dev_key = str(dev_id or "").strip() or "unknown"
+    now = time.time()
+    active_total = _active_yws_connection_total_for_webspace(webspace_key)
+    reason = ""
+    recent_10s = 0
+    client_15s = 0
+    quarantine_until = 0.0
+    quarantine_ttl_s: float | None = None
+    quarantine_incident_count: int | None = None
+    with _YWS_STORM_LOCK:
+        cutoff_60 = now - 60.0
+        while _YWS_OPEN_HISTORY and _YWS_OPEN_HISTORY[0] < cutoff_60:
+            _YWS_OPEN_HISTORY.popleft()
+        stale_keys: list[str] = []
+        for client_key, queue in _YWS_CLIENT_OPEN_HISTORY.items():
+            while queue and queue[0] < cutoff_60:
+                queue.popleft()
+            if not queue:
+                stale_keys.append(client_key)
+        for client_key in stale_keys:
+            _YWS_CLIENT_OPEN_HISTORY.pop(client_key, None)
+        for key0 in list(_YWS_GUARD_QUARANTINE_UNTIL.keys()):
+            if float(_YWS_GUARD_QUARANTINE_UNTIL.get(key0) or 0.0) <= now:
+                _YWS_GUARD_QUARANTINE_UNTIL.pop(key0, None)
+        recent_10s = sum(1 for ts in _YWS_OPEN_HISTORY if ts >= now - 10.0)
+        client_key = _yws_guard_quarantine_key(webspace_key, dev_key)
+        client_queue = _YWS_CLIENT_OPEN_HISTORY.get(client_key) or deque()
+        client_15s = sum(1 for ts in client_queue if ts >= now - 15.0)
+        quarantine_until = max(
+            float(_YWS_GUARD_QUARANTINE_UNTIL.get(client_key) or 0.0),
+            float(_YWS_GUARD_QUARANTINE_UNTIL.get(_yws_guard_quarantine_key(webspace_key)) or 0.0),
+        )
+        if quarantine_until > now:
+            reason = "quarantined"
+        elif active_total >= _YWS_MAX_ACTIVE_PER_WEBSPACE:
+            reason = "active_limit"
+        elif client_15s >= _YWS_GUARD_CLIENT_OPEN_15S:
+            reason = "client_reconnect_storm"
+            quarantine_until, quarantine_ttl_s, quarantine_incident_count = _set_yws_guard_quarantine_locked(
+                client_key,
+                now,
+            )
+        elif recent_10s >= _YWS_GUARD_RECENT_OPEN_10S:
+            reason = "webspace_reconnect_storm"
+            quarantine_until, quarantine_ttl_s, quarantine_incident_count = _set_yws_guard_quarantine_locked(
+                _yws_guard_quarantine_key(webspace_key),
+                now,
+            )
+        if reason:
+            _YWS_GUARD_DIAG["reject_total"] = int(_YWS_GUARD_DIAG.get("reject_total") or 0) + 1
+            _YWS_GUARD_DIAG["last_reject_at"] = now
+            _YWS_GUARD_DIAG["last_reject_reason"] = reason
+            _YWS_GUARD_DIAG["last_reject_webspace_id"] = webspace_key
+            _YWS_GUARD_DIAG["last_reject_dev_id"] = dev_key
+            if quarantine_ttl_s is not None:
+                _YWS_GUARD_DIAG["last_reject_quarantine_ttl_s"] = quarantine_ttl_s
+            if quarantine_incident_count is not None:
+                _YWS_GUARD_DIAG["last_reject_incident_count"] = quarantine_incident_count
+    diag = {
+        "active_total": active_total,
+        "recent_open_10s": recent_10s,
+        "client_open_15s": client_15s,
+        "quarantine_until": quarantine_until,
+        "quarantine_ttl_s": quarantine_ttl_s,
+        "quarantine_incident_count": quarantine_incident_count,
+    }
+    if reason:
+        _yws_guard_log(
+            webspace_id=webspace_key,
+            dev_id=dev_key,
+            reason=reason,
+            active_total=active_total,
+            recent_10s=recent_10s,
+            client_15s=client_15s,
+            cooldown_s=quarantine_ttl_s,
+            incident_count=quarantine_incident_count,
+        )
+    return reason, diag
+
+
 def _yws_storm_snapshot(now: float) -> dict[str, Any]:
+    active_clients = _active_yws_client_rows()
     with _YWS_STORM_LOCK:
         recent_10s = sum(1 for ts in _YWS_OPEN_HISTORY if ts >= now - 10.0)
         recent_60s = sum(1 for ts in _YWS_OPEN_HISTORY if ts >= now - 60.0)
+        quarantined_total = sum(
+            1 for until in _YWS_GUARD_QUARANTINE_UNTIL.values() if float(until or 0.0) > now
+        )
+        incident_total = len(_YWS_GUARD_INCIDENTS)
+        guard_diag = dict(_YWS_GUARD_DIAG)
         hot_clients: list[dict[str, Any]] = []
         for key, queue in _YWS_CLIENT_OPEN_HISTORY.items():
             recent_15s = sum(1 for ts in queue if ts >= now - 15.0)
@@ -1905,6 +2222,20 @@ def _yws_storm_snapshot(now: float) -> dict[str, Any]:
         "recent_open_60s": recent_60s,
         "storm_detected": recent_10s >= 8,
         "hot_clients": hot_clients[:3],
+        "active_clients": active_clients[:8],
+        "guard": {
+            "max_active_per_webspace": _YWS_MAX_ACTIVE_PER_WEBSPACE,
+            "max_active_per_client": _YWS_MAX_ACTIVE_PER_CLIENT,
+            "recent_open_10s_limit": _YWS_GUARD_RECENT_OPEN_10S,
+            "client_open_15s_limit": _YWS_GUARD_CLIENT_OPEN_15S,
+            "cooldown_s": _YWS_GUARD_COOLDOWN_S,
+            "max_cooldown_s": _YWS_GUARD_MAX_COOLDOWN_S,
+            "escalation_window_s": _YWS_GUARD_ESCALATION_WINDOW_S,
+            "notify_interval_s": _YWS_GUARD_NOTIFY_INTERVAL_S,
+            "quarantined_total": quarantined_total,
+            "incident_total": incident_total,
+            **guard_diag,
+        },
     }
 
 
@@ -1923,8 +2254,7 @@ def _untrack_yws_connection(webspace_id: str, websocket: WebSocket) -> None:
             remaining_connections = len(items)
         if not items:
             _ACTIVE_YWS_CONNECTIONS.pop(key, None)
-        params = getattr(websocket, "query_params", {}) or {}
-        device_key = str(params.get("dev") or "unknown").strip() or "unknown"
+        device_key = _websocket_device_id(websocket)
         clients = _ACTIVE_YWS_CLIENTS.get(key)
         if clients:
             remaining = int(clients.get(device_key) or 0) - 1
@@ -2061,6 +2391,7 @@ async def reset_live_webspace_room(
     close_reason: str = "webspace_reload",
     persist_ystore_snapshot: bool = True,
     reset_route_runtime: bool = True,
+    prewarm_after_reset: bool | None = None,
 ) -> dict[str, Any]:
     key = str(webspace_id or "").strip() or "default"
     _cancel_idle_room_reset(key)
@@ -2115,6 +2446,7 @@ async def reset_live_webspace_room(
     runtime_compaction_requested = False
     room_refs_released = False
     gc_collected = 0
+    malloc_trimmed = False
     room_prewarmed = False
     room_prewarm_error = ""
 
@@ -2196,11 +2528,20 @@ async def reset_live_webspace_room(
         runtime_compaction_requested = bool(
             ystore_snapshot_persisted or eviction.get("backup_skipped")
         )
+        try:
+            gc_collected = int(gc.collect() or 0)
+        except Exception:
+            gc_collected = 0
 
-    prewarm_after_reset = str(
-        os.getenv("ADAOS_YJS_PREWARM_ROOM_AFTER_RESET", "1") or "1"
-    ).strip().lower() not in {"0", "false", "no", "off"}
-    if prewarm_after_reset:
+    malloc_trimmed = _trim_allocator_after_yjs_room_reset()
+
+    should_prewarm_after_reset = (
+        str(os.getenv("ADAOS_YJS_PREWARM_ROOM_AFTER_RESET", "1") or "1").strip().lower()
+        not in {"0", "false", "no", "off"}
+        if prewarm_after_reset is None
+        else bool(prewarm_after_reset)
+    )
+    if should_prewarm_after_reset:
         try:
             await y_server.get_room(key)
             room_prewarmed = True
@@ -2230,6 +2571,8 @@ async def reset_live_webspace_room(
         "runtime_compaction_requested": runtime_compaction_requested,
         "room_refs_released": room_refs_released,
         "gc_collected": gc_collected,
+        "malloc_trimmed": malloc_trimmed,
+        "prewarm_after_reset": should_prewarm_after_reset,
         "room_prewarmed": room_prewarmed,
         "room_prewarm_error": room_prewarm_error,
     }
@@ -3454,9 +3797,52 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
             return
     except Exception:
         _ylog.debug("browser access policy check failed webspace=%s dev=%s", webspace_id, dev_id, exc_info=True)
-    _ylog.info("yws connection open webspace=%s dev=%s", webspace_id, dev_id)
     if not await _accept_websocket(websocket, channel="yws"):
         return
+    replaced_existing = await _close_existing_yws_client_connections(webspace_id, dev_id)
+    if replaced_existing:
+        deadline = time.monotonic() + 1.0
+        while (
+            _active_yws_connection_total_for_client(webspace_id, dev_id) >= _YWS_MAX_ACTIVE_PER_CLIENT
+            and time.monotonic() < deadline
+        ):
+            await asyncio.sleep(0.05)
+    guard_reason, guard_diag = _yws_guard_reject_reason(webspace_id, dev_id)
+    if guard_reason:
+        state_token = f"yws_guard_{guard_reason}"
+        if _yws_guard_should_notify(webspace_id=webspace_id, dev_id=dev_id, reason=guard_reason):
+            try:
+                from adaos.services.access_links import touch_browser_session
+
+                touch_browser_session(
+                    dev_id,
+                    webspace_id=webspace_id,
+                    connection_state=state_token,
+                    online=False,
+                    **browser_metadata,
+                )
+            except Exception:
+                _ylog.debug("browser access registry guard update failed webspace=%s dev=%s", webspace_id, dev_id, exc_info=True)
+            _publish_runtime_event(
+                "browser.session.changed",
+                {
+                    "device_id": dev_id,
+                    "webspace_id": webspace_id,
+                    "connection_state": state_token,
+                    "yjs_channel_state": "rejected",
+                    "reason": guard_reason,
+                    "active_yws": guard_diag.get("active_total"),
+                    "recent_open_10s": guard_diag.get("recent_open_10s"),
+                    "client_open_15s": guard_diag.get("client_open_15s"),
+                    "source": "yws.gateway.guard",
+                },
+            )
+        try:
+            await websocket.close(code=1013, reason=state_token[:120])
+        except Exception:
+            pass
+        return
+    _ylog.info("yws connection open webspace=%s dev=%s", webspace_id, dev_id)
     await start_y_server()
 
     adapter: YWebsocket = FastAPIWebsocketAdapter(websocket, path=webspace_id)
@@ -3515,28 +3901,37 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
     finally:
         _untrack_yws_connection(webspace_id, websocket)
         _transport_mark_close("yws")
-        try:
-            from adaos.services.access_links import touch_browser_session
+        mark_offline = _should_mark_yws_browser_session_offline(dev_id)
+        if mark_offline:
+            try:
+                from adaos.services.access_links import touch_browser_session
 
-            touch_browser_session(
-                dev_id,
-                webspace_id=webspace_id,
-                connection_state="closed",
-                online=False,
-                **browser_metadata,
+                touch_browser_session(
+                    dev_id,
+                    webspace_id=webspace_id,
+                    connection_state="closed",
+                    online=False,
+                    **browser_metadata,
+                )
+            except Exception:
+                _ylog.debug("browser access registry close update failed webspace=%s dev=%s", webspace_id, dev_id, exc_info=True)
+            _publish_runtime_event(
+                "browser.session.changed",
+                {
+                    "device_id": dev_id,
+                    "webspace_id": webspace_id,
+                    "connection_state": "closed",
+                    "yjs_channel_state": "closed",
+                    "source": "yws.gateway",
+                },
             )
-        except Exception:
-            _ylog.debug("browser access registry close update failed webspace=%s dev=%s", webspace_id, dev_id, exc_info=True)
-        _publish_runtime_event(
-            "browser.session.changed",
-            {
-                "device_id": dev_id,
-                "webspace_id": webspace_id,
-                "connection_state": "closed",
-                "yjs_channel_state": "closed",
-                "source": "yws.gateway",
-            },
-        )
+        else:
+            _ylog.debug(
+                "yws connection closed but browser session remains active webspace=%s dev=%s active_sessions=%s",
+                webspace_id,
+                dev_id,
+                _active_yws_connection_total_for_device(dev_id),
+            )
         _ylog.info("yws connection closed webspace=%s dev=%s", webspace_id, dev_id)
         if _ws_trace_enabled():
             try:
@@ -3711,8 +4106,23 @@ async def process_events_command(
         captured_device = new_device
         captured_ws = new_webspace
 
-        async def _post_register() -> None:
+        async def _post_register() -> dict[str, Any]:
             try:
+                guard_reason, guard_diag = _yws_guard_reject_reason(captured_ws, captured_device)
+                if guard_reason:
+                    _log.warning(
+                        "device.register skipped Yjs post steps due yws guard webspace=%s device=%s reason=%s active=%s recent_open_10s=%s client_open_15s=%s",
+                        captured_ws,
+                        captured_device,
+                        guard_reason,
+                        guard_diag.get("active_total"),
+                        guard_diag.get("recent_open_10s"),
+                        guard_diag.get("client_open_15s"),
+                    )
+                    return {
+                        "yjs_post_skipped": True,
+                        "yjs_guard_reason": guard_reason,
+                    }
                 await start_y_server()
                 await _update_device_presence(captured_ws, captured_device)
                 # Sync webspace listing directly to the live room's YDoc.
@@ -3736,23 +4146,33 @@ async def process_events_command(
                 except Exception:
                     _log.debug("webspace listing sync failed", exc_info=True)
                 _log.debug("device.register post steps ok webspace=%s device=%s", captured_ws, captured_device)
+                return {"yjs_post_skipped": False}
             except Exception:
                 _log.warning("device.register post steps failed webspace=%s device=%s", captured_ws, captured_device, exc_info=True)
+                return {"yjs_post_failed": True}
 
         try:
             # Ensure room is created and seeded BEFORE sending ack.
             # This prevents race condition where frontend connects Yjs provider
             # before room is ready, causing empty webspaces on first connection.
-            await _post_register()
+            post_result = await _post_register()
+            event_payload = {
+                "device_id": captured_device,
+                "webspace_id": captured_ws,
+                "kind": "browser",
+            }
+            if post_result.get("yjs_post_skipped"):
+                event_payload["yjs_post_skipped"] = True
+                event_payload["yjs_guard_reason"] = str(post_result.get("yjs_guard_reason") or "")
             _publish_bus(
                 "device.registered",
-                {
-                    "device_id": captured_device,
-                    "webspace_id": captured_ws,
-                    "kind": "browser",
-                },
+                event_payload,
             )
-            await _ack(data={"webspace_id": new_webspace})
+            ack_data = {"webspace_id": new_webspace}
+            if post_result.get("yjs_post_skipped"):
+                ack_data["yjs_post_skipped"] = True
+                ack_data["yjs_guard_reason"] = str(post_result.get("yjs_guard_reason") or "")
+            await _ack(data=ack_data)
         except Exception:
             # Best-effort: still send ack even if post-register fails
             await _ack(data={"webspace_id": new_webspace})
@@ -3851,6 +4271,33 @@ async def process_events_command(
         except Exception:
             await _ack(False, error="webspace_unavailable")
             return None
+
+    if kind == "skill.event.publish":
+        event_type = str((payload or {}).get("event_type") or (payload or {}).get("type") or "").strip()
+        if not event_type:
+            await _ack(False, error="event_type required")
+            return None
+        raw_event_payload = (payload or {}).get("payload")
+        if isinstance(raw_event_payload, dict):
+            event_payload = dict(raw_event_payload)
+        elif raw_event_payload is None:
+            event_payload = {}
+        else:
+            event_payload = {"value": raw_event_payload}
+        for key in ("webspace_id", "workspace_id", "node_id", "target_node_id"):
+            value = (payload or {}).get(key)
+            if value is not None and not event_payload.get(key):
+                event_payload[key] = value
+        meta = dict(event_payload.get("_meta") or {})
+        top_meta = (payload or {}).get("_meta")
+        if isinstance(top_meta, dict):
+            for key, value in top_meta.items():
+                meta.setdefault(key, value)
+        if meta:
+            event_payload["_meta"] = meta
+        _publish_bus(event_type, event_payload)
+        await _ack(data={"event_type": event_type})
+        return None
 
     if kind == "weather.city_changed":
         event_payload = dict(payload or {})

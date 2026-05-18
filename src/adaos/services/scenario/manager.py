@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import logging
 import re, os, json
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Any, Optional, Literal
 
 import yaml
 from adaos.adapters.git.workspace import wait_for_materialized
@@ -120,6 +120,7 @@ class ScenarioManager:
     ):
         self.repo, self.reg, self.git, self.paths, self.bus, self.caps = repo, registry, git, paths, bus, caps
         self.ctx: AgentContext = get_ctx()
+        self.last_dependency_bootstrap_result: dict[str, Any] | None = None
 
     def list_installed(self) -> list[SkillRecord]:
         self.caps.require("core", "scenarios.manage")
@@ -223,24 +224,35 @@ class ScenarioManager:
         target_webspace = webspace_id or default_webspace_id()
         meta = self.install(name, pin=pin)
         try:
-            self.bootstrap_dependencies(meta.id.value, webspace_id=target_webspace)
-        except Exception:
-            # Best-effort; do not fail install on bootstrap errors.
-            pass
+            dep_result = self.bootstrap_dependencies(meta.id.value, webspace_id=target_webspace)
+        except Exception as exc:
+            dep_result = {
+                "ok": False,
+                "scenario_id": getattr(getattr(meta, "id", None), "value", name),
+                "webspace_id": target_webspace,
+                "required": [],
+                "items": [],
+                "succeeded": [],
+                "failed": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        self.last_dependency_bootstrap_result = dep_result
         try:
             self.sync_to_yjs(meta.id.value, webspace_id=target_webspace)
         except Exception:
             pass
         return meta
 
-    def bootstrap_dependencies(self, scenario_id: str, *, webspace_id: str | None = None) -> None:
+    def bootstrap_dependencies(self, scenario_id: str, *, webspace_id: str | None = None) -> dict[str, Any]:
         """
         Best-effort dependency activation for an already installed scenario.
 
         Split out from :meth:`install_with_deps` so async install operations can
         report progress phase-by-phase instead of blocking in one opaque step.
         """
-        self._post_install_bootstrap(scenario_id, webspace_id=webspace_id)
+        result = self._post_install_bootstrap(scenario_id, webspace_id=webspace_id)
+        self.last_dependency_bootstrap_result = result
+        return result
 
     def _ensure_yjs_payload(self, scenario_id: str, *, space: str = "workspace") -> tuple[dict, dict, dict, dict]:
         """
@@ -439,20 +451,30 @@ class ScenarioManager:
         if emit_event:
             emit(self.bus, "scenarios.synced", {"scenario_id": scenario_id, "webspace_id": target_webspace}, "scenario.mgr")
 
-    def _post_install_bootstrap(self, scenario_id: str, webspace_id: str | None = None) -> None:
+    def _post_install_bootstrap(self, scenario_id: str, webspace_id: str | None = None) -> dict[str, Any]:
         """
         Stage A2: after a scenario is installed into the workspace repo,
         apply its manifest-defined dependencies by installing/activating
         skills via the existing SkillManager.
         """
+        target_webspace = webspace_id or default_webspace_id()
+        result: dict[str, Any] = {
+            "ok": True,
+            "scenario_id": scenario_id,
+            "webspace_id": target_webspace,
+            "required": [],
+            "items": [],
+            "succeeded": [],
+            "failed": [],
+        }
         manifest = read_manifest(scenario_id)
         bindings = parse_scenario_skill_bindings(manifest if isinstance(manifest, dict) else {})
         depends = list(bindings.required)
+        result["required"] = [dep for dep in depends if isinstance(dep, str) and dep]
         if not depends:
-            return
+            return result
 
         # Use the same construction pattern as CLI SkillManager.
-        target_webspace = webspace_id or default_webspace_id()
         skill_reg = SqliteSkillRegistry(self.ctx.sql)
         skill_mgr = SkillManager(
             repo=self.ctx.skills_repo,
@@ -465,22 +487,49 @@ class ScenarioManager:
         for dep in depends:
             if not isinstance(dep, str) or not dep:
                 continue
+            item: dict[str, Any] = {
+                "name": dep,
+                "required": True,
+                "installed": False,
+                "prepared": False,
+                "activated": False,
+                "ok": False,
+            }
             try:
                 # Ensure installed in monorepo and then activate runtime.
                 skill_mgr.install(dep)
-                version = None
-                slot = None
-                try:
-                    runtime = skill_mgr.prepare_runtime(dep, run_tests=False)
-                except Exception:
-                    runtime = None
-                if runtime:
-                    version = getattr(runtime, "version", None)
-                    slot = getattr(runtime, "slot", None)
+                item["installed"] = True
+                runtime = skill_mgr.prepare_runtime(dep, run_tests=False)
+                item["prepared"] = True
+                version = getattr(runtime, "version", None)
+                slot = getattr(runtime, "slot", None)
+                item["version"] = version
+                item["slot"] = slot
                 skill_mgr.activate_for_space(dep, version=version, slot=slot, space="default", webspace_id=target_webspace)
-            except Exception:
-                # Do not break scenario install on individual dependency issues.
-                continue
+                item["activated"] = True
+                item["ok"] = True
+                result["succeeded"].append(dep)
+            except Exception as exc:
+                item["error"] = f"{type(exc).__name__}: {exc}"
+                result["failed"].append(dep)
+                result["ok"] = False
+            result["items"].append(item)
+        try:
+            emit(
+                self.bus,
+                "scenario.dependencies.bootstrapped",
+                {
+                    "scenario_id": scenario_id,
+                    "webspace_id": target_webspace,
+                    "ok": bool(result.get("ok")),
+                    "succeeded": list(result.get("succeeded") or []),
+                    "failed": list(result.get("failed") or []),
+                },
+                "scenario.mgr",
+            )
+        except Exception:
+            pass
+        return result
 
     def remove(self, name: str, *, safe: bool = False) -> None:
         self.caps.require("core", "scenarios.manage", "net.git")

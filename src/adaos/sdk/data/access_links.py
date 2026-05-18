@@ -1,12 +1,90 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from adaos.services import access_links as _service
 
 
+_TITLE_TOKENS = {
+    "chrome": "Chrome",
+    "chromium": "Chromium",
+    "edge": "Edge",
+    "firefox": "Firefox",
+    "ios": "iOS",
+    "iphone": "iPhone",
+    "ipad": "iPad",
+    "linux": "Linux",
+    "mac": "Mac",
+    "macos": "macOS",
+    "safari": "Safari",
+    "tablet": "Tablet",
+    "windows": "Windows",
+}
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _title_token(value: Any) -> str:
+    token = _text(value)
+    if not token:
+        return ""
+    folded = token.casefold().replace("_", " ").replace("-", " ")
+    return _TITLE_TOKENS.get(folded, " ".join(part.capitalize() for part in folded.split()))
+
+
+def _browser_draft_name(entry: Mapping[str, Any]) -> str:
+    browser = _title_token(
+        entry.get("browser_family")
+        or entry.get("browser_name")
+        or entry.get("browser")
+    )
+    os_name = _title_token(entry.get("os_name") or entry.get("os") or entry.get("platform"))
+    form_factor = _title_token(entry.get("form_factor") or entry.get("device_type"))
+    if form_factor.casefold() in {"desktop", "computer", "pc"}:
+        form_factor = ""
+    if browser and os_name and form_factor:
+        return f"{browser} on {os_name} {form_factor}"
+    if browser and os_name:
+        return f"{browser} on {os_name}"
+    if browser:
+        return f"{browser} browser"
+    if os_name:
+        return f"Browser on {os_name}"
+    return ""
+
+
+def _enrich_browser_link(entry: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(entry, Mapping):
+        return None
+    out = dict(entry)
+    display_name = _text(out.get("display_name"))
+    hostname = _text(out.get("hostname"))
+    draft_name = _browser_draft_name(out)
+    entry_id = _text(out.get("id"))
+    effective_name = display_name or hostname or draft_name or entry_id or "browser"
+
+    out["effective_name"] = effective_name
+    if not _text(out.get("title")):
+        out["title"] = effective_name
+    if draft_name:
+        out["draft_name"] = draft_name
+        out["suggested_display_name"] = draft_name
+    if not display_name and (hostname or draft_name):
+        out["display_name"] = hostname or draft_name
+        out["display_name_source"] = "hostname" if hostname else "browser_metadata"
+    elif display_name:
+        out["display_name_source"] = "policy"
+    return out
+
+
 def list_browser_links() -> list[dict[str, Any]]:
-    return _service.browser_snapshot()
+    return [
+        item
+        for item in (_enrich_browser_link(entry) for entry in _service.browser_snapshot())
+        if item is not None
+    ]
 
 
 def list_member_links() -> list[dict[str, Any]]:
@@ -14,7 +92,7 @@ def list_member_links() -> list[dict[str, Any]]:
 
 
 def get_browser_link(device_id: str) -> dict[str, Any] | None:
-    return _service.get_link("browser", device_id)
+    return _enrich_browser_link(_service.get_link("browser", device_id))
 
 
 def get_member_link(node_id: str) -> dict[str, Any] | None:

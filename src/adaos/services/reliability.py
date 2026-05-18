@@ -4759,6 +4759,10 @@ def yjs_sync_runtime_snapshot(
             "storm_detected": bool(yws_transport.get("storm_detected")),
             "hot_client_total": len(list(yws_transport.get("hot_clients") or [])),
             "hot_clients": list(yws_transport.get("hot_clients") or []),
+            "active_clients": list(yws_transport.get("active_clients") or []),
+            "guard": dict(yws_transport.get("guard") or {})
+            if isinstance(yws_transport.get("guard"), dict)
+            else {},
             "owner": yws_ownership.get("current_owner") or "runtime",
             "lifecycle_manager": yws_ownership.get("lifecycle_manager"),
             "planned_owner": yws_ownership.get("planned_owner"),

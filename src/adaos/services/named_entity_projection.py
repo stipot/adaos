@@ -20,6 +20,12 @@ def _payload(evt: Any) -> dict[str, Any]:
     return {}
 
 
+def _topic(evt: Any) -> str:
+    if isinstance(evt, dict):
+        return str(evt.get("type") or evt.get("topic") or "").strip()
+    return str(getattr(evt, "type", "") or getattr(evt, "topic", "") or "").strip()
+
+
 def _resolve_webspace_id(payload: Mapping[str, Any] | None = None) -> str:
     payload = payload if isinstance(payload, Mapping) else {}
     scope = payload.get("scope") if isinstance(payload.get("scope"), Mapping) else {}
@@ -97,7 +103,14 @@ async def on_sys_ready(evt: Any) -> None:
 @subscribe("subnet.alias.changed")
 async def on_entity_registry_changed(evt: Any) -> None:
     try:
-        await project_named_entity_registry(webspace_id=_resolve_webspace_id(_payload(evt)))
+        payload = _payload(evt)
+        webspace_ids = [_resolve_webspace_id(payload)]
+        if _topic(evt) == "subnet.alias.changed":
+            default_webspace = default_webspace_id()
+            if default_webspace not in webspace_ids:
+                webspace_ids.append(default_webspace)
+        for webspace_id in webspace_ids:
+            await project_named_entity_registry(webspace_id=webspace_id)
     except Exception:
         _log.debug("failed to project named entity registry", exc_info=True)
 

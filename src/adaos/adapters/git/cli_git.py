@@ -1,6 +1,8 @@
 # src\adaos\adapters\git\cli_git.py
 from __future__ import annotations
 import os
+import re
+import shutil
 import subprocess
 import uuid
 from pathlib import Path
@@ -63,6 +65,53 @@ def _is_adaos_workspace_repo(dir: StrOrPath) -> bool:
     if parts[-1] != "workspace":
         return False
     return any(part == ".adaos" for part in parts)
+
+
+def _git_path_exists(dir: StrOrPath, git_path: str) -> bool:
+    resolved = _safe_git(dir, ["rev-parse", "--git-path", git_path])
+    if not resolved:
+        return False
+    return Path(dir, resolved).exists()
+
+
+def _rebase_in_progress(dir: StrOrPath) -> bool:
+    return _git_path_exists(dir, "rebase-merge") or _git_path_exists(dir, "rebase-apply")
+
+
+def _abort_rebase_if_needed(dir: StrOrPath) -> bool:
+    if not _rebase_in_progress(dir):
+        return False
+    try:
+        _run_git(["rebase", "--abort"], cwd=dir)
+        return True
+    except GitError as exc:
+        _log.warning("git rebase abort failed repo=%s err=%s", str(Path(dir)), exc)
+        return False
+
+
+def _is_rebase_conflict_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(
+        marker in msg
+        for marker in (
+            "conflict (content)",
+            "could not apply",
+            "resolve all conflicts manually",
+            "you have unmerged files",
+            "fix them up in the work tree",
+            "exiting because of an unresolved conflict",
+        )
+    )
+
+
+def _format_rebase_push_conflict(exc: BaseException, *, aborted: bool) -> str:
+    suffix = (
+        "The interrupted rebase was aborted and the workspace is back at the local commit. "
+        "Resolve the merge conflict or retry after the remote branch is reconciled."
+        if aborted
+        else "A merge conflict interrupted the rebase. Check the workspace before retrying."
+    )
+    return f"{exc}\n\n{suffix}"
 
 
 def _truncate(text: str, *, limit: int = 12000) -> str:
@@ -179,6 +228,51 @@ def _sanitize_sparse_checkout_file(dir: StrOrPath) -> bool:
     sp.write_text(content, encoding="utf-8")
     _log.warning("git sparse-checkout patterns sanitized repo=%s removed_cli_flags=%s", str(Path(dir)), len(lines) - len(cleaned))
     return True
+
+
+_SPARSE_OVERWRITE_RE = re.compile(
+    r"Working tree file '([^']+)' would be overwritten by sparse checkout update"
+)
+
+
+def _sparse_checkout_overwrite_paths(message: str) -> list[str]:
+    paths: list[str] = []
+    for match in _SPARSE_OVERWRITE_RE.finditer(message or ""):
+        rel = match.group(1).strip()
+        if rel and rel not in paths:
+            paths.append(rel)
+    return paths
+
+
+def _sparse_checkout_blocker_retry_limit() -> int:
+    try:
+        return max(1, int(str(os.getenv("ADAOS_SPARSE_CHECKOUT_BLOCKER_RETRIES") or "200").strip()))
+    except Exception:
+        return 200
+
+
+def _remove_sparse_checkout_blockers(dir: StrOrPath, paths: Sequence[str]) -> list[str]:
+    root = Path(dir).resolve()
+    removed: list[str] = []
+    for rel in paths:
+        rel_path = Path(rel)
+        if rel_path.is_absolute():
+            continue
+        target = (root / rel_path).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            continue
+        if target == root or ".git" in target.relative_to(root).parts:
+            continue
+        if not target.exists() and not target.is_symlink():
+            continue
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+        removed.append(rel.replace("\\", "/"))
+    return removed
 
 
 class CliGitClient(GitClient):
@@ -305,7 +399,8 @@ class CliGitClient(GitClient):
         args = ["sparse-checkout", "init"]
         if cone:
             args.append("--cone")
-        if _is_adaos_workspace_repo(dir):
+        is_workspace = _is_adaos_workspace_repo(dir)
+        if is_workspace:
             env_type = str(os.getenv("ENV_TYPE", "prod") or "prod").strip().lower()
             if env_type != "dev":
                 dirty = self.changed_files(dir)
@@ -331,7 +426,9 @@ class CliGitClient(GitClient):
         args = ["sparse-checkout", "set"]
         if no_cone:
             args.append("--no-cone")
-        if _is_adaos_workspace_repo(dir):
+        is_workspace = _is_adaos_workspace_repo(dir)
+        env_type = str(os.getenv("ENV_TYPE", "prod") or "prod").strip().lower()
+        if is_workspace:
             dirty = self.changed_files(dir)
             if dirty:
                 repo_path = str(Path(dir))
@@ -344,24 +441,51 @@ class CliGitClient(GitClient):
                 stash_ref = self.stash_push(str(dir), "adaos:auto-stash sparse-checkout set", include_untracked=True)
                 if stash_ref:
                     _log.warning("git auto-stashed local changes repo=%s stash=%s", repo_path, stash_ref)
-        try:
+        def _apply_sparse_set() -> None:
             _run_git([*args, *paths], cwd=dir)
             if _sanitize_sparse_checkout_file(dir):
                 self.sparse_reapply(dir)
-        except GitError as exc:
-            lowered = str(exc).lower()
-            if _is_adaos_workspace_repo(dir) and "unstaged changes" in lowered and "sparse-checkout" in lowered:
-                repo_path = str(Path(dir))
-                _log.warning("git sparse-checkout set blocked by dirty worktree; auto-stashing repo=%s", repo_path)
-                _log_git_snapshot(dir)
-                stash_ref = self.stash_push(str(dir), "adaos:auto-stash sparse-checkout set", include_untracked=True)
-                if stash_ref:
-                    _log.warning("git auto-stashed local changes repo=%s stash=%s", repo_path, stash_ref)
-                _run_git([*args, *paths], cwd=dir)
-                if _sanitize_sparse_checkout_file(dir):
-                    self.sparse_reapply(dir)
+
+        stashed_after_error = False
+        removed_blockers = 0
+        blocker_retry_limit = _sparse_checkout_blocker_retry_limit()
+        while True:
+            try:
+                _apply_sparse_set()
                 return
-            raise
+            except GitError as exc:
+                lowered = str(exc).lower()
+                if is_workspace and "unstaged changes" in lowered and "sparse-checkout" in lowered and not stashed_after_error:
+                    repo_path = str(Path(dir))
+                    _log.warning("git sparse-checkout set blocked by dirty worktree; auto-stashing repo=%s", repo_path)
+                    _log_git_snapshot(dir)
+                    stash_ref = self.stash_push(str(dir), "adaos:auto-stash sparse-checkout set", include_untracked=True)
+                    if stash_ref:
+                        _log.warning("git auto-stashed local changes repo=%s stash=%s", repo_path, stash_ref)
+                    stashed_after_error = True
+                    continue
+                overwrite_paths = _sparse_checkout_overwrite_paths(str(exc))
+                if is_workspace and overwrite_paths and env_type != "dev":
+                    repo_path = str(Path(dir))
+                    if removed_blockers + len(overwrite_paths) > blocker_retry_limit:
+                        raise GitError(
+                            f"{exc}\n\nSparse checkout blocker recovery exceeded "
+                            f"{blocker_retry_limit} file(s); refusing to continue."
+                        ) from exc
+                    _log.warning(
+                        "git sparse-checkout set blocked by stale workspace files; removing blockers repo=%s env_type=%s files=%s",
+                        repo_path,
+                        env_type,
+                        len(overwrite_paths),
+                    )
+                    _log_git_snapshot(dir)
+                    removed = _remove_sparse_checkout_blockers(dir, overwrite_paths)
+                    if not removed:
+                        raise
+                    removed_blockers += len(removed)
+                    _log.warning("git sparse-checkout stale blockers removed repo=%s files=%s", repo_path, removed)
+                    continue
+                raise
 
     def sparse_add(self, dir: StrOrPath, path: str) -> None:
         try:
@@ -482,13 +606,23 @@ class CliGitClient(GitClient):
             #    но shallow-репо могут не иметь базовой истории → разшалловим и повторим
             try:
                 _run_git(["-c", "rebase.autoStash=true", "pull", "--rebase", remote, branch], cwd=dir)
-            except GitError:
+            except GitError as rebase_exc:
+                if _is_rebase_conflict_error(rebase_exc):
+                    aborted = _abort_rebase_if_needed(dir)
+                    raise GitError(_format_rebase_push_conflict(rebase_exc, aborted=aborted)) from rebase_exc
+                _abort_rebase_if_needed(dir)
                 # попытка «расшалловить» историю и снова rebase
                 try:
                     _run_git(["fetch", "--prune", "--unshallow", remote], cwd=dir)
                 except GitError:
                     # если git старый и не знает --unshallow, просто увеличим глубину
                     _run_git(["fetch", "--prune", "--depth=50", remote], cwd=dir)
-                _run_git(["-c", "rebase.autoStash=true", "pull", "--rebase", remote, branch], cwd=dir)
+                try:
+                    _run_git(["-c", "rebase.autoStash=true", "pull", "--rebase", remote, branch], cwd=dir)
+                except GitError as retry_exc:
+                    aborted = _abort_rebase_if_needed(dir)
+                    if _is_rebase_conflict_error(retry_exc):
+                        raise GitError(_format_rebase_push_conflict(retry_exc, aborted=aborted)) from retry_exc
+                    raise
         # 3) когда локальная ветка на вершине origin/<branch> — пушим
         _run_git(["push", remote, branch], cwd=dir)

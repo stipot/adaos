@@ -66,6 +66,19 @@ The runtime keeps the original text and span metadata:
 }
 ```
 
+## NLU integration rule
+
+Named-entity canonicalization is the first shared preprocessing stage for
+regex, Neural NLU, Rasa, and Teacher probes. Provider models receive the
+normalized text and entity evidence; they do not own local aliases, display
+names, or observed device/browser names.
+
+This rule is especially important for the neural service skill: the first
+production model is node-level, not per-webspace or per-profile. Local names
+must therefore stay runtime data, while the model learns intent shape and entity
+classes. Usage statistics may later justify specialized models, but alias
+changes alone should not require retraining.
+
 ## Entity vocabulary
 
 ### Canonical ref

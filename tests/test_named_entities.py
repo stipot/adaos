@@ -728,6 +728,7 @@ def test_sdk_entities_alias_helpers_delegate_to_named_entity_service(monkeypatch
 
 @pytest.mark.anyio
 async def test_project_named_entity_registry_writes_compact_yjs_branch(monkeypatch) -> None:
+    pytest.importorskip("y_py")
     from adaos.services import named_entity_projection
     from adaos.services.yjs.doc import async_get_ydoc
     from adaos.services.yjs.store import reset_ystore_for_webspace
@@ -755,3 +756,43 @@ async def test_project_named_entity_registry_writes_compact_yjs_branch(monkeypat
         assert current["items"][0]["canonical_ref"] == "skill:browsers_skill"
     finally:
         reset_ystore_for_webspace(webspace_id)
+
+
+@pytest.mark.anyio
+async def test_subnet_alias_change_projects_named_entities_to_current_and_default_webspaces(monkeypatch) -> None:
+    pytest.importorskip("y_py")
+    from adaos.services import named_entity_projection
+    from adaos.services.yjs.doc import async_get_ydoc
+    from adaos.services.yjs.store import reset_ystore_for_webspace
+
+    webspace_id = f"named-entities-{uuid4().hex}"
+    default_id = f"named-default-{uuid4().hex}"
+    service = named_entities.NamedEntityService(
+        static_entities=[
+            named_entities.NamedEntityRecord(
+                canonical_ref="assistant:sn_home",
+                kind="assistant",
+                display_name="HomeAssistant",
+            )
+        ],
+        device_inventory_service=_FakeDeviceInventory([]),
+        lookup_payload_provider=_empty_lookup_provider,
+    )
+    monkeypatch.setattr(named_entities, "get_named_entity_service", lambda: service)
+    monkeypatch.setattr(named_entity_projection, "default_webspace_id", lambda: default_id)
+
+    try:
+        await named_entity_projection.on_entity_registry_changed(
+            SimpleNamespace(type="subnet.alias.changed", payload={"webspace_id": webspace_id}),
+        )
+
+        async with async_get_ydoc(webspace_id, read_only=True, load_mark_roots=["registry"]) as ydoc:
+            current = ydoc.get_map("registry").get("named_entities")
+        assert current["items"][0]["display_label"] == "HomeAssistant"
+
+        async with async_get_ydoc(default_id, read_only=True, load_mark_roots=["registry"]) as ydoc:
+            default_current = ydoc.get_map("registry").get("named_entities")
+        assert default_current["items"][0]["display_label"] == "HomeAssistant"
+    finally:
+        reset_ystore_for_webspace(webspace_id)
+        reset_ystore_for_webspace(default_id)

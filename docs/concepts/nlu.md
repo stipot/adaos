@@ -4,15 +4,44 @@ This document describes the current production MVP direction for intent detectio
 
 ## MVP baseline
 
-- Pipeline: `regex` -> `neural (service-skill, optional)` -> `rasa (service-skill, optional default-on)` -> `teacher (LLM in the loop)`
+- Pipeline: `regex` -> `neural (service-skill, default-installed)` -> `rasa (service-skill, long-term fallback)` -> `teacher (LLM in the loop)`
 - System boundary: NLU runtime code is one; only **data** varies per scenario/skill.
 - Transport: intent detection is integrated into AdaOS event bus (not CLI-only).
+
+The target install policy is:
+
+- Neural NLU is prepared by default during `adaos install`.
+- Nodes may still disable it with `ADAOS_NLU_NEURAL=0` or by omitting the
+  service skill on constrained devices.
+- Rasa remains a long-term fallback, not only a temporary migration bridge.
+- The hot request path must only discover/start installed service skills. It
+  must not create workspace skills or A/B runtime slots on demand.
+
+## Ownership boundaries
+
+Core AdaOS owns orchestration, contracts, confidence policy, traces, named
+entity canonicalization, and the fallback/governance loop. Core AdaOS must not
+bundle concrete NLU engines, Torch/FAISS dependencies, model weights, or service
+skill source trees under the Python package.
+
+Concrete NLU engines are providers:
+
+- `neural_nlu_service_skill` is a registry/workspace service skill.
+- `rasa_nlu_service_skill` is a registry/workspace service skill.
+- Model artifacts and indexes are service-owned runtime data, not core package
+  data.
+- Provider installation and A/B slot activation belong to install/update
+  flows, not to `nlp.intent.detect.*` handling.
+
+The historical `src/adaos/interpreter_data` package is an early experiment and
+should be retired as a provider delivery mechanism.
 
 ## Current implementation status
 
 Implemented now:
 
 - Regex-first event pipeline with optional Rasa service-skill fallback.
+- Optional neural delegation event behind `ADAOS_NLU_NEURAL`.
 - Rasa NLU service-skill isolation from the hub Python environment.
 - Dry-run probe API for safe phrase checks:
   - `POST /api/nlu/teacher/{webspace_id}/probe`
@@ -29,41 +58,54 @@ Not implemented yet:
 - Stable template inventory for regex, Rasa examples, neural labels, and lookup sets.
 - Root MCP token/session flow for governed LLM-assisted authoring.
 
-The neural stage is part of the target architecture and remains optional. The current practical baseline is still `regex -> Rasa -> fallback/Teacher`.
+The neural stage is part of the target architecture and should be installed by
+default once the provider is moved out of core package data. Until then the
+practical baseline remains `regex -> Rasa -> fallback/Teacher` unless the
+operator explicitly enables the experimental neural stage.
 
 ## Event flow (high level)
 
 1. UI / Telegram / Voice publishes:
    - `nlp.intent.detect.request { text, webspace_id, request_id, _meta... }`
-2. `nlu.pipeline` tries regex rules:
+2. Named-entity canonicalization resolves runtime names and aliases before
+   model-specific interpretation becomes final:
+   - device/browser/node/webspace/scenario/skill/app/modal aliases are resolved
+     to canonical refs;
+   - model-facing text may be masked with placeholders such as `{device}`,
+     `{scenario}`, or `{app}`;
+   - `resolved_entities`, ambiguities, and unresolved spans are recorded in
+     trace.
+3. `nlu.pipeline` tries regex rules:
    - built-in rules (`nlu.pipeline`)
    - dynamic rules loaded centrally from:
      - workspace scenarios (`scenario.json:nlu.regex_rules`)
      - workspace skills (`skill.yaml:nlu.regex_rules`)
      - legacy per-webspace cache (`data.nlu.regex_rules`)
-3. If regex does not match:
+4. If regex does not match:
    - if `ADAOS_NLU_NEURAL=1`: emits `nlp.intent.detect.neural`
    - otherwise emits `nlp.intent.detect.rasa`
-4. Neural bridge:
+5. Neural bridge:
    - calls `neural_nlu_service_skill:/parse`
-   - if the skill is missing, hub bootstraps it from packaged template (`adaos.interpreter_data/neural_nlu_service_skill`)
-   - upstream detector code is ported into `handlers/upstream_detector_port.py` (service-side runtime module)
-   - neural service can run notebook-compatible Char-CNN + BiLSTM weights via:
-     - `ADAOS_NEURAL_MODEL_PATH` (state_dict `.pt`)
-     - `ADAOS_NEURAL_LABELS_PATH` (JSON list of intents)
-     - `ADAOS_NEURAL_VOCAB_PATH` (JSON char vocabulary)
-   - default artifact location (if env vars are not set):
-     - `<ADAOS_BASE_DIR>/state/nlu/neural/model.pt`
-     - `<ADAOS_BASE_DIR>/state/nlu/neural/labels.json`
-     - `<ADAOS_BASE_DIR>/state/nlu/neural/vocab.json`
+   - the service skill is installed/prepared by install/update flows, not by
+     the hot parse path;
+   - neural service can run notebook-compatible Char-CNN + BiLSTM weights plus
+     FAISS ranking artifacts when installed;
+   - default deployment uses one active model per node, with usage telemetry
+     collected so later per-locale/webspace/profile splits can be justified by
+     evidence.
    - on high confidence -> emits `nlp.intent.detected { via: "neural" }`
    - on abstain/error -> falls back to `nlp.intent.detect.rasa`
-5. If an intent is found:
+6. Rasa bridge:
+   - calls the installed `rasa_nlu_service_skill`;
+   - remains a supported long-term fallback, especially for ambiguous neural
+     outputs and domains where Rasa training data is already stronger;
+   - can be disabled on weak devices if neural/regex coverage is sufficient.
+7. If an intent is found:
    - `nlp.intent.detected { intent, confidence, slots, text, webspace_id, request_id, via }`
-6. If intent is not obtained:
+8. If intent is not obtained:
    - `nlp.intent.not_obtained { reason, text, via, webspace_id, request_id }`
    - Router emits a human-friendly `io.out.chat.append` and records the request for NLU Teacher.
-7. If teacher is enabled:
+9. If teacher is enabled:
    - `nlp.teacher.request { webspace_id, request }` is emitted for teacher runtimes.
 
 ## Runtime trace
@@ -125,6 +167,31 @@ Target behavior:
 
 The target architecture and roadmap are documented in
 [Named Entities and Canonical Naming](../architecture/named-entities.md).
+
+## NLU data ownership
+
+Curated examples should live where the behavior is owned:
+
+- Skill-owned actions: the owning skill stores intent examples, slots, regex
+  rules, and training metadata.
+- Scenario-owned flows: the owning scenario stores scenario-level NLU examples
+  and routing hints.
+- Core/client actions such as moving, hiding, opening, pinning, switching, and
+  other shell behavior should not be faked as user skills. They should be
+  described in a versioned **system action catalog** with stable action ids,
+  argument schemas, aliases, and training examples.
+
+The system action catalog is still data, not provider code. Regex, Rasa,
+neural, Teacher, and MCP authoring can all consume it. This lets AdaOS train
+and explain built-in UI/kernel commands without baking them into a particular
+NLU engine.
+
+NLU Teacher should write accepted corrections back to the owning artifact:
+
+- skill examples/rules for skill actions;
+- scenario examples/rules for scenario flows;
+- system action examples/templates for core/client commands;
+- named-entity aliases through the governed named-entity write path.
 
 ## Rasa as a service-skill
 

@@ -210,6 +210,7 @@ async def install(body: InstallReq, mgr: ScenarioManager = Depends(_get_manager)
             "version": getattr(meta, "version", None),
             "path": str(getattr(meta, "path", "")),
         },
+        "dependency_bootstrap": getattr(mgr, "last_dependency_bootstrap_result", None),
     }
 
 

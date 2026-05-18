@@ -32,6 +32,8 @@ class GitPathStatus:
     dirty: bool
     base_ref: Optional[str] = None
     changed_vs_base: Optional[bool] = None
+    ahead_count: Optional[int] = None
+    behind_count: Optional[int] = None
     base_last_commit: Optional[GitCommitInfo] = None
     local_last_commit: Optional[GitCommitInfo] = None
     error: Optional[str] = None
@@ -75,6 +77,31 @@ def resolve_base_ref(workdir: Path, *, remote: str = "origin") -> Optional[str]:
             return candidate
 
     return None
+
+
+def ref_exists(workdir: Path, ref: str) -> bool:
+    proc = _run_git(workdir, ["rev-parse", "--verify", "--quiet", ref])
+    return _git_ok(proc)
+
+
+def current_branch(workdir: Path) -> Optional[str]:
+    proc = _run_git(workdir, ["rev-parse", "--abbrev-ref", "HEAD"])
+    if not _git_ok(proc):
+        return None
+    token = (proc.stdout or "").strip()
+    if not token or token == "HEAD":
+        return None
+    return token
+
+
+def list_changed_paths(workdir: Path, *, base_ref: str, path: str | None = None) -> list[str]:
+    args = ["diff", "--name-only", f"{base_ref}...HEAD"]
+    if path:
+        args.extend(["--", path])
+    proc = _run_git(workdir, args)
+    if not _git_ok(proc):
+        return []
+    return [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
 
 
 def ensure_remote(workdir: Path, *, name: str, url: str) -> Optional[str]:
@@ -150,6 +177,22 @@ def read_last_commit(workdir: Path, *, rev: str, path: str) -> Optional[GitCommi
     return GitCommitInfo(sha=sha, timestamp=ts_int, subject=subject)
 
 
+def read_path_divergence(workdir: Path, *, base_ref: str, path: str) -> tuple[Optional[int], Optional[int]]:
+    proc = _run_git(workdir, ["rev-list", "--left-right", "--count", f"{base_ref}...HEAD", "--", path])
+    if not _git_ok(proc):
+        return None, None
+    raw = (proc.stdout or "").strip()
+    parts = raw.split()
+    if len(parts) < 2:
+        return None, None
+    try:
+        behind = int(parts[0])
+        ahead = int(parts[1])
+    except Exception:
+        return None, None
+    return ahead, behind
+
+
 def compute_path_status(
     *,
     workdir: Path,
@@ -171,7 +214,11 @@ def compute_path_status(
 
     status.local_last_commit = read_last_commit(workdir, rev="HEAD", path=rel)
     if base_ref:
+        if not ref_exists(workdir, base_ref):
+            status.error = f"base ref {base_ref} is not available"
+            return status
         status.base_last_commit = read_last_commit(workdir, rev=base_ref, path=rel)
+        status.ahead_count, status.behind_count = read_path_divergence(workdir, base_ref=base_ref, path=rel)
         proc = _run_git(workdir, ["diff", "--name-only", base_ref, "--", rel])
         if _git_ok(proc):
             status.changed_vs_base = bool((proc.stdout or "").strip())

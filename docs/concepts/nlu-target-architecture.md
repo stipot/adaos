@@ -17,7 +17,8 @@ For AdaOS, this is a good fit between regex (fast deterministic) and LLM teacher
 
 ```mermaid
 flowchart LR
-  A[nlp.intent.detect.request] --> B[Regex stage]
+  A[nlp.intent.detect.request] --> N[Named-entity canonicalization]
+  N --> B[Regex stage]
   B -->|hit| O[nlp.intent.detected via=regex]
   B -->|miss| C[Neural NLU Service Skill]
   C -->|conf >= threshold| O2[nlp.intent.detected via=neural]
@@ -29,9 +30,37 @@ flowchart LR
 
 ## Components
 
+### 0) Named-entity canonicalization
+
+Named entities are resolved before the neural or Rasa model is treated as final.
+This layer is owned by core AdaOS and reuses the shared named-entity registry:
+
+- device, browser, node, webspace, scenario, skill, app, and modal names are
+  resolved to canonical refs;
+- request text can be normalized to placeholders such as `{device}`,
+  `{scenario}`, `{skill}`, or `{app}`;
+- ambiguity and unresolved spans are recorded in NLU trace;
+- model providers receive canonicalization evidence but do not learn local
+  device names as permanent behavior.
+
+This keeps model training focused on intent shape while runtime names remain
+governed operational data.
+
 ### 1) Neural NLU Service Skill (`runtime.kind=service`)
 
-A dedicated service skill with its own Python environment and lifecycle supervision.
+A dedicated service skill with its own Python environment and lifecycle
+supervision.
+
+The neural provider is installed as a workspace/registry skill. It must not be
+bundled as core Python package data, and the hot parse path must not create or
+switch A/B runtime slots. Install/update flows own provider preparation.
+
+Target install policy:
+
+- `adaos install` prepares Neural NLU by default.
+- `ADAOS_NLU_NEURAL=0` disables the runtime stage.
+- Weak devices may skip installing the service skill.
+- Rasa remains available as a long-term fallback after neural abstain/error.
 
 Responsibilities:
 
@@ -57,7 +86,14 @@ Response:
   "alternatives": [{"intent":"timer.start","confidence":0.05}],
   "slots": {"time":"07:30"},
   "via": "neural",
-  "evidence": {"softmax": 0.82, "knn": 0.88, "skill_prior": 0.9}
+  "model_id": "node-default-2026-05-16",
+  "evidence": {
+    "softmax": 0.82,
+    "knn": 0.88,
+    "skill_prior": 0.9,
+    "matched_examples": ["поставь будильник на {time}"],
+    "canonicalized_text": "поставь будильник на {time}"
+  }
 }
 ```
 
@@ -71,21 +107,30 @@ Responsibilities:
 - emit:
   - `nlp.intent.detected` (`via="neural"`), or
   - `nlp.intent.not_obtained` / `nlp.intent.detect.rasa` fallback.
+- collect usage statistics for later model-splitting decisions.
 
 ### 4) Data and model registry
 
-`state/nlu/neural/` (versioned runtime artifacts):
+Model and index artifacts are owned by the neural service skill runtime, not by
+the core AdaOS package. The initial policy is one active model per node. Future
+per-locale, per-webspace, or per-profile models should be introduced only when
+usage statistics show a real need.
+
+Versioned runtime artifacts:
 
 - `model.pt`
 - `faiss.index`
 - `intents_manifest.json`
 - `masking_rules.json`
+- `examples_manifest.jsonl`
+- `ranker_config.json`
 - `metrics.json`
 
 Model lifecycle:
 
 - immutable model versions (`model_id`),
-- canary switch per webspace,
+- one active node-level pointer initially,
+- optional canary switch per webspace later,
 - rollback by pointer change.
 
 ### 5) Governance and observability
@@ -97,6 +142,29 @@ Mandatory telemetry fields:
 - fallback ratio (`neural -> rasa -> teacher`),
 - per-intent precision/recall (offline eval),
 - rejected/abstained samples for Teacher queue.
+- provider version and `model_id`,
+- canonicalization hit/miss/ambiguity counts,
+- per-intent accept/abstain/reject counts,
+- matched-example evidence for accepted neural decisions.
+
+The statistics are intentionally part of the first node-level model rollout.
+They are the evidence we need before deciding whether multiple models by
+locale, webspace, profile, hardware class, or domain are justified.
+
+### 6) Training data ownership
+
+Curated examples are stored with the owner of the behavior:
+
+- skill actions -> the owning skill;
+- scenario flows -> the owning scenario;
+- core/client actions -> a versioned system action catalog;
+- aliases and display names -> named-entity authoritative sources.
+
+The system action catalog covers built-in UI/kernel/client commands such as
+move, hide, open, pin, switch, and similar shell behavior. These actions should
+not be represented as fake user skills just to feed NLU. The catalog gives all
+providers stable action ids, schemas, aliases, and training examples while
+keeping execution authority in the core/client subsystem.
 
 ## Target decision policy
 
@@ -117,13 +185,16 @@ Tune per locale/domain after offline evaluation.
 ## Phase 0 — Preparation (1 sprint)
 
 - Define event and HTTP contracts for neural stage.
-- Create `neural_nlu_service_skill` skeleton (healthcheck, config, supervisor integration).
+- Create `neural_nlu_service_skill` as a registry/workspace service skill
+  (healthcheck, config, supervisor integration).
+- Remove provider delivery through `src/adaos/interpreter_data`.
 - Add feature flags:
   - `ADAOS_NLU_NEURAL=1`
   - `ADAOS_NLU_NEURAL_TIMEOUT_S`
   - `ADAOS_NLU_NEURAL_MODEL_ID`
 
-**Exit criteria:** service is startable, observable, and no-op safe when disabled.
+**Exit criteria:** service is startable, observable, installed by install/update
+flows, and no-op safe when disabled.
 
 ## Phase 1 — Inference MVP (1–2 sprints)
 
@@ -137,6 +208,7 @@ Tune per locale/domain after offline evaluation.
 ## Phase 2 — Hybrid ranking (1 sprint)
 
 - Add FAISS retrieval and weighted scorer.
+- Add positive and negative example indexes.
 - Externalize weights:
   - `w_softmax`, `w_knn`, `w_skill_prior`.
 - Log score components in `evidence`.
@@ -156,8 +228,8 @@ Tune per locale/domain after offline evaluation.
 
 ## Phase 4 — ModelOps and rollout safety (1 sprint)
 
-- Versioned model registry and rollback pointer.
-- Canary rollout by webspace/tenant.
+- Versioned model registry and node-level rollback pointer.
+- Canary rollout by webspace/tenant after node-level statistics justify it.
 - Automatic quality gates before promoting model.
 
 **Exit criteria:** controlled rollout with fast rollback and auditable model provenance.
@@ -174,8 +246,9 @@ Tune per locale/domain after offline evaluation.
 This target architecture preserves current AdaOS strategy:
 
 - regex remains first-stage deterministic policy,
+- named-entity canonicalization remains a core shared preprocessing layer,
 - service-skill isolation remains the default runtime model,
-- Rasa remains compatible fallback,
+- Rasa remains a long-term compatible fallback,
 - Teacher remains improvement/governance mechanism.
 
 The only structural change is adding a **neural service stage** between regex and Rasa.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 import types
 from types import SimpleNamespace
 
@@ -548,6 +549,7 @@ def test_reset_live_webspace_room_releases_refs_and_requests_compaction(monkeypa
     monkeypatch.setattr(gateway_module, "evict_ystore_for_webspace", _fake_evict_ystore_for_webspace)
     monkeypatch.setattr(gateway_module, "get_scheduler", lambda: SimpleNamespace(delete=_fake_delete))
     monkeypatch.setattr(gateway_module.gc, "collect", lambda: 7)
+    monkeypatch.setattr(gateway_module, "_trim_allocator_after_yjs_room_reset", lambda: True)
 
     result = asyncio.run(gateway_module.reset_live_webspace_room("gateway-room-reset"))
 
@@ -567,6 +569,8 @@ def test_reset_live_webspace_room_releases_refs_and_requests_compaction(monkeypa
     assert result["runtime_compaction_requested"] is True
     assert result["room_refs_released"] is True
     assert result["gc_collected"] == 7
+    assert result["malloc_trimmed"] is True
+    assert result["prewarm_after_reset"] is True
     assert backup_jobs_deleted == ["ystores.backup.gateway-room-reset"]
 
 
@@ -596,6 +600,53 @@ def test_yws_tracking_cancels_pending_idle_room_reset(monkeypatch) -> None:
     assert reset_calls == []
     gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
     gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._IDLE_ROOM_RESET_TASKS.clear()
+    gateway_module.y_server.rooms.clear()
+
+
+def test_idle_room_reset_evicts_without_prewarm_or_route_reset(monkeypatch) -> None:
+    gateway_module.y_server.rooms["idle-room-evict"] = object()
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._IDLE_ROOM_RESET_TASKS.clear()
+
+    reset_calls: list[dict[str, object]] = []
+
+    async def _fake_reset(
+        webspace_id: str,
+        *,
+        close_reason: str = "webspace_reload",
+        reset_route_runtime: bool = True,
+        prewarm_after_reset: bool | None = None,
+    ) -> dict[str, object]:
+        reset_calls.append(
+            {
+                "webspace_id": webspace_id,
+                "close_reason": close_reason,
+                "reset_route_runtime": reset_route_runtime,
+                "prewarm_after_reset": prewarm_after_reset,
+            }
+        )
+        return {"ok": True}
+
+    monkeypatch.setattr(gateway_module, "_IDLE_ROOM_EVICT_SEC", 0.02)
+    monkeypatch.setattr(gateway_module, "reset_live_webspace_room", _fake_reset)
+    monkeypatch.setattr(gateway_module, "_active_webrtc_peer_total_for_webspace", lambda _webspace_id: 0)
+
+    async def _exercise() -> None:
+        assert gateway_module._schedule_idle_room_reset("idle-room-evict") is True
+        await asyncio.sleep(0.06)
+
+    asyncio.run(_exercise())
+
+    assert reset_calls == [
+        {
+            "webspace_id": "idle-room-evict",
+            "close_reason": "idle_room_eviction",
+            "reset_route_runtime": False,
+            "prewarm_after_reset": False,
+        }
+    ]
     gateway_module._IDLE_ROOM_RESET_TASKS.clear()
     gateway_module.y_server.rooms.clear()
 
@@ -741,6 +792,51 @@ def test_process_events_command_preserves_weather_node_target(monkeypatch) -> No
     assert payload["target_node_id"] == "member-01"
     assert payload["_meta"]["target_node_id"] == "member-01"
     assert responses[-1]["ok"] is True
+
+
+def test_process_events_command_publishes_generic_skill_event(monkeypatch) -> None:
+    published: list[object] = []
+    responses: list[dict[str, object]] = []
+
+    class _Bus:
+        def publish(self, event: object) -> None:
+            published.append(event)
+
+    monkeypatch.setattr(gateway_module, "get_agent_ctx", lambda: SimpleNamespace(bus=_Bus()))
+
+    async def _send_response(msg: dict[str, object]) -> None:
+        responses.append(msg)
+
+    asyncio.run(
+        gateway_module.process_events_command(
+            kind="skill.event.publish",
+            cmd_id="cmd-skill-event-1",
+            payload={
+                "event_type": "custom.location.requested",
+                "payload": {"city": "Berlin", "request_id": "req-1"},
+                "node_id": "member-01",
+                "webspace_id": "desktop",
+                "_meta": {"trace_id": "trace-1"},
+            },
+            device_id="dev-1",
+            webspace_id="desktop",
+            send_response=_send_response,
+        )
+    )
+
+    assert len(published) == 1
+    event = published[0]
+    assert getattr(event, "type", "") == "custom.location.requested"
+    payload = getattr(event, "payload", {})
+    assert payload["city"] == "Berlin"
+    assert payload["request_id"] == "req-1"
+    assert payload["node_id"] == "member-01"
+    assert payload["target_node_id"] == "member-01"
+    assert payload["webspace_id"] == "desktop"
+    assert payload["_meta"]["trace_id"] == "trace-1"
+    assert payload["_meta"]["target_node_id"] == "member-01"
+    assert responses[-1]["ok"] is True
+    assert responses[-1]["data"] == {"event_type": "custom.location.requested"}
 
 
 def test_process_events_command_accepts_demo_metrics_host_action(monkeypatch) -> None:
@@ -987,6 +1083,63 @@ def test_process_events_command_publishes_device_registered(monkeypatch) -> None
     assert responses[-1]["data"] == {"webspace_id": "ops"}
 
 
+def test_device_register_skips_yjs_post_steps_when_yws_guard_is_active(monkeypatch) -> None:
+    published: list[tuple[str, dict[str, object] | None]] = []
+    responses: list[dict[str, object]] = []
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._YWS_OPEN_HISTORY.clear()
+    gateway_module._YWS_CLIENT_OPEN_HISTORY.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+    gateway_module._YWS_GUARD_INCIDENTS.clear()
+    gateway_module._ACTIVE_YWS_CONNECTIONS["ops"] = [object()]
+    monkeypatch.setattr(gateway_module, "_YWS_MAX_ACTIVE_PER_WEBSPACE", 1)
+    monkeypatch.setattr(gateway_module, "_make_publish_bus", lambda *args, **kwargs: (lambda topic, extra=None: published.append((topic, extra))))
+
+    async def _fake_start_y_server() -> None:
+        raise AssertionError("device.register guard should avoid YRoom startup")
+
+    async def _fake_update_device_presence(_webspace_id: str, _device_id: str) -> None:
+        raise AssertionError("device.register guard should avoid YDoc writes")
+
+    async def _send_response(msg: dict[str, object]) -> None:
+        responses.append(msg)
+
+    monkeypatch.setattr(gateway_module, "start_y_server", _fake_start_y_server)
+    monkeypatch.setattr(gateway_module, "_update_device_presence", _fake_update_device_presence)
+
+    asyncio.run(
+        gateway_module.process_events_command(
+            kind="device.register",
+            cmd_id="cmd-guard",
+            payload={"device_id": "dev-guard", "webspace_id": "ops"},
+            device_id="dev-guard",
+            webspace_id="default",
+            send_response=_send_response,
+        )
+    )
+
+    assert published == [
+        (
+            "device.registered",
+            {
+                "device_id": "dev-guard",
+                "webspace_id": "ops",
+                "kind": "browser",
+                "yjs_post_skipped": True,
+                "yjs_guard_reason": "active_limit",
+            },
+        )
+    ]
+    assert responses[-1]["ok"] is True
+    assert responses[-1]["data"] == {
+        "webspace_id": "ops",
+        "yjs_post_skipped": True,
+        "yjs_guard_reason": "active_limit",
+    }
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+
+
 def test_accept_websocket_returns_false_when_handshake_already_closed() -> None:
     class _FakeWebSocket:
         async def accept(self) -> None:
@@ -1043,6 +1196,50 @@ def test_active_browser_session_snapshot_tracks_yws_clients() -> None:
     assert gateway_module.active_browser_session_snapshot(now_ts=123.0)["peers"] == []
 
 
+def test_yws_close_preserves_online_state_when_device_has_replacement_session() -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+
+    old_ws = SimpleNamespace(query_params={"dev": "dev-2"})
+    new_ws = SimpleNamespace(query_params={"dev": "dev-2"})
+    gateway_module._track_yws_connection("ops", old_ws, device_id="dev-2")
+    gateway_module._track_yws_connection("desktop", new_ws, device_id="dev-2")
+
+    gateway_module._untrack_yws_connection("ops", old_ws)
+
+    assert gateway_module._active_yws_connection_total_for_device("dev-2") == 1
+    assert gateway_module._should_mark_yws_browser_session_offline("dev-2") is False
+
+    gateway_module._untrack_yws_connection("desktop", new_ws)
+    assert gateway_module._should_mark_yws_browser_session_offline("dev-2") is True
+
+
+def test_yws_guard_replaces_existing_client_sessions(monkeypatch) -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._YWS_GUARD_DIAG.clear()
+    monkeypatch.setattr(gateway_module, "_YWS_MAX_ACTIVE_PER_CLIENT", 1)
+
+    class _FakeWebSocket:
+        query_params = {"dev": "dev-2"}
+
+        def __init__(self) -> None:
+            self.closed: list[tuple[int, str]] = []
+
+        async def close(self, code: int = 1000, reason: str | None = None) -> None:
+            self.closed.append((code, str(reason or "")))
+
+    old_ws = _FakeWebSocket()
+    gateway_module._track_yws_connection("ops", old_ws, device_id="dev-2")
+
+    closed = asyncio.run(gateway_module._close_existing_yws_client_connections("ops", "dev-2"))
+
+    assert closed == 1
+    assert old_ws.closed == [(1012, "replaced_by_new_yws_session")]
+    assert gateway_module._YWS_GUARD_DIAG["replaced_total"] == 1
+    gateway_module._untrack_yws_connection("ops", old_ws)
+
+
 def test_yws_impl_aborts_when_room_ready_times_out(monkeypatch) -> None:
     gateway_module._TRANSPORT_STATE["yws"].update(
         {
@@ -1091,6 +1288,128 @@ def test_yws_impl_aborts_when_room_ready_times_out(monkeypatch) -> None:
     assert gateway_module._TRANSPORT_STATE["yws"]["active_connections"] == 0
     assert gateway_module._ACTIVE_YWS_CONNECTIONS == {}
     assert gateway_module._ACTIVE_YWS_CLIENTS == {}
+
+
+def test_yws_impl_rejects_before_room_acquire_when_active_limit_is_hit(monkeypatch) -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._YWS_OPEN_HISTORY.clear()
+    gateway_module._YWS_CLIENT_OPEN_HISTORY.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+    gateway_module._YWS_GUARD_INCIDENTS.clear()
+    gateway_module._YWS_GUARD_DIAG.update(
+        {
+            "reject_total": 0,
+            "last_reject_at": 0.0,
+            "last_reject_reason": "",
+            "last_reject_webspace_id": "",
+            "last_reject_dev_id": "",
+        }
+    )
+    monkeypatch.setattr(gateway_module, "_YWS_MAX_ACTIVE_PER_WEBSPACE", 1)
+    gateway_module._ACTIVE_YWS_CONNECTIONS["desktop"] = [object()]
+    events: list[tuple[str, dict[str, object] | None]] = []
+    touched: list[dict[str, object]] = []
+
+    class _FakeWebSocket:
+        query_params = {"dev": "dev-over-limit"}
+
+        def __init__(self) -> None:
+            self.accepted = False
+            self.closed: tuple[int, str] | None = None
+
+        async def accept(self) -> None:
+            self.accepted = True
+
+        async def close(self, code: int = 1000, reason: str | None = None) -> None:
+            self.closed = (code, str(reason or ""))
+
+    async def _start_y_server_must_not_run() -> None:
+        raise AssertionError("guard should reject before starting/acquiring Yjs room")
+
+    from adaos.services import access_links
+
+    monkeypatch.setattr(access_links, "authorize_link", lambda kind, entry_id: (True, "ok"))
+    monkeypatch.setattr(
+        access_links,
+        "touch_browser_session",
+        lambda device_id, **kwargs: touched.append({"device_id": device_id, **kwargs}) or {},
+    )
+    monkeypatch.setattr(gateway_module, "start_y_server", _start_y_server_must_not_run)
+    monkeypatch.setattr(gateway_module, "_publish_runtime_event", lambda topic, payload=None, source="yjs.gateway": events.append((topic, payload)))
+
+    websocket = _FakeWebSocket()
+    asyncio.run(gateway_module._yws_impl(websocket, "desktop"))
+
+    assert websocket.accepted is True
+    assert websocket.closed == (1013, "yws_guard_active_limit")
+    assert touched[0]["connection_state"] == "yws_guard_active_limit"
+    assert events[0][0] == "browser.session.changed"
+    assert events[0][1]["yjs_channel_state"] == "rejected"
+    assert events[0][1]["reason"] == "active_limit"
+    assert gateway_module._YWS_GUARD_DIAG["last_reject_reason"] == "active_limit"
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+
+
+def test_yws_guard_quarantines_hot_reconnecting_client(monkeypatch) -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._YWS_OPEN_HISTORY.clear()
+    gateway_module._YWS_CLIENT_OPEN_HISTORY.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+    gateway_module._YWS_GUARD_INCIDENTS.clear()
+    monkeypatch.setattr(gateway_module, "_YWS_GUARD_CLIENT_OPEN_15S", 3)
+    monkeypatch.setattr(gateway_module, "_YWS_GUARD_COOLDOWN_S", 10.0)
+    monkeypatch.setattr(gateway_module, "_YWS_GUARD_MAX_COOLDOWN_S", 40.0)
+
+    for _idx in range(3):
+        gateway_module._record_yws_open("desktop", "dev-hot")
+
+    reason, diag = gateway_module._yws_guard_reject_reason("desktop", "dev-hot")
+    assert reason == "client_reconnect_storm"
+    assert diag["client_open_15s"] == 3
+    assert diag["quarantine_ttl_s"] == 10.0
+
+    reason_again, _diag_again = gateway_module._yws_guard_reject_reason("desktop", "dev-hot")
+    assert reason_again == "quarantined"
+    assert gateway_module._yws_storm_snapshot(time.time())["guard"]["quarantined_total"] == 1
+    gateway_module._YWS_OPEN_HISTORY.clear()
+    gateway_module._YWS_CLIENT_OPEN_HISTORY.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+    gateway_module._YWS_GUARD_INCIDENTS.clear()
+
+
+def test_yws_guard_escalates_repeated_client_quarantine(monkeypatch) -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._YWS_OPEN_HISTORY.clear()
+    gateway_module._YWS_CLIENT_OPEN_HISTORY.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+    gateway_module._YWS_GUARD_INCIDENTS.clear()
+    monkeypatch.setattr(gateway_module, "_YWS_GUARD_CLIENT_OPEN_15S", 2)
+    monkeypatch.setattr(gateway_module, "_YWS_GUARD_COOLDOWN_S", 10.0)
+    monkeypatch.setattr(gateway_module, "_YWS_GUARD_MAX_COOLDOWN_S", 40.0)
+    monkeypatch.setattr(gateway_module, "_YWS_GUARD_ESCALATION_WINDOW_S", 3600.0)
+
+    for _idx in range(2):
+        gateway_module._record_yws_open("desktop", "dev-hot")
+    reason, diag = gateway_module._yws_guard_reject_reason("desktop", "dev-hot")
+    assert reason == "client_reconnect_storm"
+    assert diag["quarantine_ttl_s"] == 10.0
+
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+    gateway_module._YWS_CLIENT_OPEN_HISTORY.clear()
+    for _idx in range(2):
+        gateway_module._record_yws_open("desktop", "dev-hot")
+    reason2, diag2 = gateway_module._yws_guard_reject_reason("desktop", "dev-hot")
+    assert reason2 == "client_reconnect_storm"
+    assert diag2["quarantine_ttl_s"] == 20.0
+    assert diag2["quarantine_incident_count"] == 2
+    gateway_module._YWS_OPEN_HISTORY.clear()
+    gateway_module._YWS_CLIENT_OPEN_HISTORY.clear()
+    gateway_module._YWS_GUARD_QUARANTINE_UNTIL.clear()
+    gateway_module._YWS_GUARD_INCIDENTS.clear()
 
 
 def test_acquire_yws_room_uses_cache_when_bootstrap_lags(monkeypatch) -> None:

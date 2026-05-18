@@ -47,11 +47,7 @@ def test_weather_city_changed_ignores_other_target_node(monkeypatch):
     monkeypatch.setattr(mod, "_load_skill_data_projections", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_load_config", lambda: ("https://example.test", None))
     monkeypatch.setattr(mod, "_fetch_weather_async", lambda *_args, **_kwargs: (True, {"temp": 10, "description": "clear", "wind_ms": 1}))
-    monkeypatch.setattr(
-        mod,
-        "get_ctx",
-        lambda: SimpleNamespace(config=SimpleNamespace(node_id="member-local")),
-    )
+    monkeypatch.setattr(mod, "get_ctx", lambda: SimpleNamespace(config=SimpleNamespace(node_id="member-local")))
     monkeypatch.setattr(
         mod,
         "ctx_subnet",
@@ -92,11 +88,7 @@ def test_weather_city_changed_projects_without_blocking_sync_ctx_set(monkeypatch
     monkeypatch.setattr(mod, "_load_skill_data_projections", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_load_config", lambda: ("https://example.test", None))
     monkeypatch.setattr(mod, "_fetch_weather_async", _fetch_weather_async)
-    monkeypatch.setattr(
-        mod,
-        "get_ctx",
-        lambda: SimpleNamespace(config=SimpleNamespace(node_id="member-local")),
-    )
+    monkeypatch.setattr(mod, "get_ctx", lambda: SimpleNamespace(config=SimpleNamespace(node_id="member-local")))
     monkeypatch.setattr(mod, "ctx_subnet", _CtxSubnet())
 
     import asyncio
@@ -119,7 +111,69 @@ def test_weather_city_changed_projects_without_blocking_sync_ctx_set(monkeypatch
     assert [entry[0] for entry in projected] == ["weather.snapshot", "weather.snapshot"]
     assert [entry[1].get("status") for entry in projected] == ["refreshing", "ok"]
     assert {entry[2] for entry in projected} == {"desktop"}
+    assert projected[0][1]["current"]["city"] == "Berlin"
+    assert projected[0][1]["current"]["temp_c"] is None
+    assert projected[0][1]["current"]["source"] == "pending"
     assert projected[-1][1]["current"]["source"] == "api"
+
+
+def test_weather_location_requested_projects_browser_coordinates(monkeypatch):
+    mod = _load_weather_module()
+    projected: list[tuple[str, dict, str | None]] = []
+
+    class _CtxSubnet:
+        async def set_async(self, slot, payload, webspace_id=None):
+            projected.append((slot, payload, webspace_id))
+
+    async def _fetch_weather_async(_api, _city=None, location=None):
+        return True, {
+            "city": "Current location",
+            "temp": 21,
+            "description": "Clear",
+            "wind_ms": 2,
+            "current": {
+                "city": "Current location",
+                "temp_c": 21,
+                "condition": "Clear",
+                "wind_ms": 2,
+                "location": location,
+                "updated_at": "after",
+                "source": "api",
+            },
+            "hourly_chart": {"points": [{"x": "10:00", "y": 21}]},
+            "daily": [{"day": "2026-05-17"}],
+        }
+
+    monkeypatch.setattr(mod, "set_current_skill", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_load_skill_data_projections", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_load_config", lambda: ("https://example.test", "Moscow"))
+    monkeypatch.setattr(mod, "_fetch_weather_async", _fetch_weather_async)
+    monkeypatch.setattr(mod, "get_ctx", lambda: SimpleNamespace(config=SimpleNamespace(node_id="member-local")))
+    monkeypatch.setattr(mod, "ctx_subnet", _CtxSubnet())
+
+    import asyncio
+
+    async def _run():
+        await mod.on_weather_location_requested(
+            {
+                "location": {"latitude": 52.52, "longitude": 13.405, "accuracy": 10},
+                "request_id": "req-geo",
+                "webspace_id": "desktop",
+                "target_node_id": "member-local",
+            }
+        )
+        tasks = list(mod._WEATHER_UPDATE_TASKS.values())
+        if tasks:
+            await asyncio.gather(*tasks)
+
+    asyncio.run(_run())
+
+    assert [entry[1].get("status") for entry in projected] == ["refreshing", "ok"]
+    assert projected[0][1]["current"]["request_id"] == "req-geo"
+    assert projected[0][1]["current"]["pending"] is True
+    assert projected[-1][1]["current"]["request_id"] == "req-geo"
+    assert projected[-1][1]["current"]["pending"] is False
+    assert projected[-1][1]["current"]["location"]["latitude"] == 52.52
 
 
 def test_weather_legacy_openweathermap_endpoint_uses_open_meteo(monkeypatch):
@@ -146,7 +200,10 @@ def test_weather_legacy_openweathermap_endpoint_uses_open_meteo(monkeypatch):
     assert request["url"] == mod.DEFAULT_API_ENDPOINT
     assert request["params"]["latitude"] == 55.75
     assert request["params"]["longitude"] == 37.62
-    assert request["params"]["current"] == "temperature_2m,wind_speed_10m"
+    assert "temperature_2m" in request["params"]["current"]
+    assert "wind_speed_10m" in request["params"]["current"]
+    assert "relative_humidity_2m" in request["params"]["current"]
+    assert request["params"]["wind_speed_unit"] == "ms"
     assert data["temp_c"] == 11.25
     assert data["wind_ms"] == 2.5
 
@@ -176,17 +233,9 @@ def test_weather_async_fetch_preserves_skill_i18n_in_worker_thread(monkeypatch):
     ctx = get_ctx()
     skill_dir = ctx.paths.skills_workspace_dir() / "weather_skill"
     (skill_dir / "i18n").mkdir(parents=True, exist_ok=True)
-    (skill_dir / "skill.yaml").write_text(
-        "name: weather_skill\nversion: 1.0.0\n",
-        encoding="utf-8",
-    )
+    (skill_dir / "skill.yaml").write_text("name: weather_skill\nversion: 1.0.0\n", encoding="utf-8")
     (skill_dir / "i18n" / "en.json").write_text(
-        json.dumps(
-            {
-                "runtime.weather.errors.status": "Weather API returned status {status}",
-            },
-            ensure_ascii=False,
-        ),
+        json.dumps({"runtime.weather.errors.status": "Weather API returned status {status}"}, ensure_ascii=False),
         encoding="utf-8",
     )
 
@@ -226,8 +275,8 @@ def test_weather_intent_api_error_appends_chat_when_route_missing(monkeypatch):
     asyncio.run(mod.on_weather_intent({"city": "Berlin", "_meta": {"webspace_id": "desktop"}}))
 
     assert [entry[0] for entry in emitted] == ["ui.notify", "io.out.chat.append"]
-    assert emitted[0][1]["text"] == "Не удается получить данные о погоде."
-    assert emitted[1][1]["text"] == "Не удается получить данные о погоде."
+    assert emitted[0][1]["text"] == mod._WEATHER_UNAVAILABLE_TEXT
+    assert emitted[1][1]["text"] == mod._WEATHER_UNAVAILABLE_TEXT
     assert emitted[1][1]["_meta"] == {"webspace_id": "desktop"}
 
 
@@ -277,4 +326,4 @@ def test_weather_intent_api_error_keeps_existing_route_single_delivery(monkeypat
     asyncio.run(mod.on_weather_intent({"city": "Berlin", "_meta": {"webspace_id": "desktop", "route_id": "voice_chat"}}))
 
     assert [entry[0] for entry in emitted] == ["ui.notify"]
-    assert emitted[0][1]["text"] == "Не удается получить данные о погоде."
+    assert emitted[0][1]["text"] == mod._WEATHER_UNAVAILABLE_TEXT

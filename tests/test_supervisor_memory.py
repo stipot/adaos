@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -21,6 +22,7 @@ from adaos.services.supervisor_memory import (
     supervisor_memory_runtime_state_path,
     supervisor_memory_session_operations_path,
     supervisor_memory_sessions_index_path,
+    supervisor_memory_telemetry_path,
     write_memory_session_index,
 )
 
@@ -110,6 +112,55 @@ def test_memory_telemetry_tail_round_trips_samples(monkeypatch, tmp_path) -> Non
     assert tail[0]["family_rss_bytes"] == 456
 
 
+def test_memory_telemetry_compacts_large_jsonl(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_MEMORY_TELEMETRY_MAX_BYTES", "700")
+    monkeypatch.setenv("ADAOS_SUPERVISOR_MEMORY_TELEMETRY_COMPACT_KEEP_LINES", "3")
+
+    for index in range(20):
+        append_memory_telemetry_sample(
+            {
+                "sampled_at": float(index),
+                "slot": "A",
+                "family_rss_bytes": index,
+                "rss_growth_bytes": index,
+            }
+        )
+
+    lines = supervisor_memory_telemetry_path().read_text(encoding="utf-8").splitlines()
+    tail = read_memory_telemetry_tail(limit=10)
+
+    assert len(lines) <= 4
+    assert tail[-1]["sampled_at"] == 19.0
+    assert tail[0]["sampled_at"] >= 16.0
+
+
+def test_memory_telemetry_tail_uses_bounded_file_tail(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+
+    for index in range(30):
+        append_memory_telemetry_sample(
+            {
+                "sampled_at": float(index),
+                "slot": "A",
+                "runtime_instance_id": "rt-a-a-1",
+                "managed_pid": 999,
+                "family_rss_bytes": index,
+            }
+        )
+    path = supervisor_memory_telemetry_path()
+    assert path.exists()
+
+    def _fail_read_text(self, *args, **kwargs):
+        raise AssertionError(f"unexpected full text read for {self}")
+
+    monkeypatch.setattr(Path, "read_text", _fail_read_text)
+
+    tail = read_memory_telemetry_tail(limit=3)
+
+    assert [item["sampled_at"] for item in tail] == [27.0, 28.0, 29.0]
+
+
 def test_supervisor_manager_memory_status_reports_live_rss(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
     manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
@@ -136,6 +187,25 @@ def test_supervisor_manager_memory_status_reports_live_rss(monkeypatch, tmp_path
     assert payload["last_session_id"] == "mem-001"
     assert payload["profile_control_mode"] == "phase2_supervisor_restart"
     assert payload["operation_log_contract_version"] == "1"
+
+
+def test_memory_status_uses_compact_session_index(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    write_memory_session_index(
+        {
+            "contract_version": "1",
+            "updated_at": 123.0,
+            "sessions": [{"session_id": f"mem-{index:03d}"} for index in range(20)],
+        }
+    )
+
+    compact = manager._memory_sessions_index_compact(limit=3)
+
+    assert compact["total"] == 20
+    assert compact["returned"] == 3
+    assert compact["omitted"] == 17
+    assert [item["session_id"] for item in compact["sessions"]] == ["mem-017", "mem-018", "mem-019"]
 
 
 def test_supervisor_manager_profile_intent_flow_updates_session_state(monkeypatch, tmp_path) -> None:
@@ -357,6 +427,82 @@ def test_supervisor_manager_samples_memory_telemetry_and_marks_suspicion(monkeyp
     assert status["suspicion_reason"] == "growth_and_slope_threshold"
     assert status["requested_profile_mode"] == "sampled_profile"
     assert status["requested_session_id"]
+
+
+def test_supervisor_manager_marks_plateaued_growth_as_suspected(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_MEMORY_TELEMETRY_SEC", "5")
+    monkeypatch.setenv("ADAOS_SUPERVISOR_MEMORY_WINDOW_SEC", "60")
+    monkeypatch.setenv("ADAOS_SUPERVISOR_MEMORY_GROWTH_BYTES", str(32 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_MEMORY_SLOPE_BYTES_PER_MIN", str(1024 * 1024 * 1024))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+
+    class _Proc:
+        pid = 4321
+
+        @staticmethod
+        def poll():
+            return None
+
+    samples = iter(
+        [
+            (100 * 1024 * 1024, 100 * 1024 * 1024),
+            (100 * 1024 * 1024, 160 * 1024 * 1024),
+        ]
+    )
+    times = iter([10.0, 70.0])
+    manager._proc = _Proc()
+
+    monkeypatch.setattr(supervisor, "active_slot", lambda: "A")
+    monkeypatch.setattr(supervisor, "_proc_details", lambda proc, cwd_hint=None: {"managed_pid": 4321})
+    monkeypatch.setattr(supervisor, "_process_family_rss_bytes", lambda pid: next(samples))
+    monkeypatch.setattr(supervisor, "_available_memory_bytes", lambda: 1024)
+    monkeypatch.setattr(supervisor.time, "time", lambda: next(times, 999.0))
+    monkeypatch.setattr(manager, "_persist_runtime_state", lambda: None)
+
+    first = manager._sample_memory_telemetry()
+    second = manager._sample_memory_telemetry()
+
+    assert first is not None
+    assert second is not None
+    assert second["suspicion_state"] == "suspected"
+    assert second["rss_growth_bytes"] == 60 * 1024 * 1024
+
+
+def test_supervisor_manager_ignores_zero_memory_baseline(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_MEMORY_TELEMETRY_SEC", "5")
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+
+    class _Proc:
+        pid = 4321
+
+        @staticmethod
+        def poll():
+            return None
+
+    samples = iter([(0, 0), (100, 160)])
+    times = iter([10.0, 70.0])
+    manager._proc = _Proc()
+    manager._memory_baseline_family_rss_bytes = 0
+
+    monkeypatch.setattr(supervisor, "active_slot", lambda: "A")
+    monkeypatch.setattr(supervisor, "_proc_details", lambda proc, cwd_hint=None: {"managed_pid": 4321})
+    monkeypatch.setattr(supervisor, "_process_family_rss_bytes", lambda pid: next(samples))
+    monkeypatch.setattr(supervisor, "_available_memory_bytes", lambda: 1024)
+    monkeypatch.setattr(supervisor.time, "time", lambda: next(times, 999.0))
+    monkeypatch.setattr(manager, "_persist_runtime_state", lambda: None)
+
+    first = manager._sample_memory_telemetry()
+    second = manager._sample_memory_telemetry()
+
+    assert first is not None
+    assert first["baseline_rss_bytes"] is None
+    assert first["rss_growth_bytes"] == 0
+    assert second is not None
+    assert second["baseline_rss_bytes"] == 160
+    assert second["rss_growth_bytes"] == 0
+    assert manager._memory_baseline_family_rss_bytes == 160
 
 
 def test_spawn_runtime_locked_sets_profile_launch_env_for_requested_session(monkeypatch, tmp_path) -> None:

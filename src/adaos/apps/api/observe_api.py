@@ -78,26 +78,26 @@ async def _sse_iter(topic_prefix: str | None, node_id: str | None, since: float 
     Итератор для SSE. Не держим старую историю (кроме опционального since для фильтра).
     """
     q = BROADCAST.subscribe(topic_prefix=topic_prefix, node_id=node_id, since_ts=since)
-    # шлём комментарий раз в 15с, чтобы соединение не засыпало
-    heartbeat_at = time.time()
-    if replay_lines and not since:
-        # прочитаем хвост и отправим их как "исторические"
-        from adaos.services.observe import _log_path
-
-        try:
-            with _log_path().open("r", encoding="utf-8") as f:
-                tail = f.readlines()[-int(replay_lines) :]
-            for ln in tail:
-                try:
-                    obj = json.loads(ln)
-                    if pass_filters(obj, topic_prefix, node_id, None):
-                        data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-                        yield b"event: adaos\n" + b"data: " + data + b"\n\n"
-                except Exception:
-                    pass
-        except Exception:
-            pass
     try:
+        # шлём комментарий раз в 15с, чтобы соединение не засыпало
+        heartbeat_at = time.time()
+        if replay_lines and not since:
+            # прочитаем хвост и отправим их как "исторические"
+            from adaos.services.observe import _log_path
+
+            try:
+                with _log_path().open("r", encoding="utf-8") as f:
+                    tail = f.readlines()[-int(replay_lines) :]
+                for ln in tail:
+                    try:
+                        obj = json.loads(ln)
+                        if pass_filters(obj, topic_prefix, node_id, None):
+                            data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+                            yield b"event: adaos\n" + b"data: " + data + b"\n\n"
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         while True:
             try:
                 evt = await asyncio.wait_for(q.get(), timeout=5.0)  # type: ignore[name-defined]
@@ -114,6 +114,8 @@ async def _sse_iter(topic_prefix: str | None, node_id: str | None, since: float 
     except (asyncio.CancelledError, GeneratorExit):
         # клиент закрыл соединение — выходим тихо
         return
+    finally:
+        BROADCAST.unsubscribe(q)
 
 
 @router.get("/stream", dependencies=[Depends(require_token)])

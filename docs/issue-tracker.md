@@ -364,6 +364,260 @@ Actions:
   branches; decide whether branch fingerprint reuse can be preserved safely
   without reintroducing stale Yjs state.
 
+## Runtime, Catalog, and Member Sync Integrity
+
+### Goal
+
+Make member and hub synchronization trustworthy by separating catalog,
+workspace source, and active runtime state; applying full lifecycle updates in
+production paths; and keeping Infrastructure State quiet unless a real
+operator-visible drift or degraded condition exists.
+
+Success means:
+
+- Member nodes can run without local git for normal production consumption.
+- Hub/dev nodes have explicit git requirements for catalog authority and
+  `.adaos/dev` LLM-assisted development.
+- Production updates do not report success until the active runtime has been
+  prepared and activated, not merely refreshed in source workspace.
+- Infrastructure State shows the full installed skills/scenarios inventory by
+  default, with a shared `Drift only` toggle for focused divergence review and
+  compact status icons with tooltips.
+- Scenario installation and update paths apply the skill lifecycle to required
+  skill dependencies and expose dependency failures as structured operation
+  results.
+- Production CLI/control commands run against the active slot venv and code, or
+  refuse state-changing work with an actionable diagnostic.
+
+### Current Status
+
+Snapshot date: 2026-05-18.
+
+Stand observations showed that a source refresh can temporarily clear skill
+drift markers in Infrastructure State even when the installed active runtime is
+still behind the registry. For example, `infrastate_skill` could appear current
+after another skill update while the active runtime remained `0.75.2` and the
+catalog had `0.75.3+`. This exposed a modeling problem: catalog version,
+workspace source version, and active runtime version are currently too easy to
+collapse into a single "installed" value.
+
+Code review confirms that git is already optional in the install/materialization
+path through GitHub archive fallback. That is appropriate for member nodes, but
+hub/dev operation needs a stricter policy because the hub owns catalog refresh,
+runtime publishing, and future LLM development in `.adaos/dev`.
+
+### Product Rules
+
+- Infrastructure State shows full Installed skills/scenarios by default so the
+  operator keeps the complete picture. A shared `Drift only` control filters the
+  same inventory to divergence/degradation rows when needed.
+- Status is represented with icons and tooltips:
+  `behind catalog`, `ahead of catalog`, `workspace differs`, `active runtime
+  differs`, `catalog unavailable`, `git unavailable`, `runtime inactive`, and
+  `dependency lifecycle failed`.
+- A source workspace version is never treated as proof that the runtime is
+  active. It can only be shown as `workspace_source_version`.
+- In production, source-only refreshes are diagnostic/dev operations. Normal
+  update actions must complete source refresh, prepare, activate, and projection
+  rebuild as one operation.
+- Dev workspace flows are explicit and scoped to `.adaos/dev`; they may expose
+  source/runtime divergence intentionally.
+
+### Tasks
+
+#### RCMS-001: Enforce git policy by role and deployment mode
+
+Status: in progress.
+
+Progress: 15%.
+
+Actions:
+
+- [ ] Keep the no-git GitHub archive materialization path for member production
+  nodes.
+- [ ] Require git on hub when dev mode or LLM development workspace features are
+  enabled.
+- [ ] In hub production, either require git for catalog-authoritative update
+  flows or enter an explicit degraded mode for catalog refresh and dev commands.
+- [ ] Persist `git.available`, `git.mode`, `git.source`, and `git.reason` into
+  diagnostics/capacity state.
+- [ ] Surface git state in Infrastructure State only when it blocks an action or
+  makes a displayed drift result stale.
+- [ ] Add tests for hub/dev git-required behavior and member no-git archive
+  install/update behavior.
+- [x] Keep `skill push` / `scenario push` workspaces clean after a rebase
+  content conflict by aborting the interrupted rebase and surfacing an
+  actionable conflict diagnostic.
+- [x] Bound sparse-checkout stale-file recovery so production auto-cleanup can
+  remove repeated stale blockers without entering an unbounded retry loop.
+
+Implementation notes:
+
+- This is a guardrail before LLM-assisted conflict resolution: a detected git
+  conflict now leaves the local commit intact and the worktree clean, so a
+  future root/LLM resolver can build a bounded conflict pack from a stable
+  repository state.
+- Sparse-checkout stale blocker recovery is now iterative but capped through
+  `ADAOS_SPARSE_CHECKOUT_BLOCKER_RETRIES`, preserving deterministic failure when
+  the workspace cannot be safely repaired.
+
+#### RCMS-002: Separate catalog, workspace source, and active runtime versions
+
+Status: in progress.
+
+Progress: 60%.
+
+Actions:
+
+- [x] Extend Infrastructure State skill/scenario rows with `catalog_version`,
+  `workspace_source_version`, `active_version`, and skill `slot`.
+- [x] Add `catalog_commit`, `catalog_source`, and `runtime_bucket` to the
+  authoritative inventory model.
+- [x] Classify behind/ahead/different drift independently for catalog vs
+  workspace and catalog vs active runtime.
+- [x] Add explicit unknown, unavailable, and no-git drift classifications.
+- [ ] Add explicit stale-catalog drift classification once catalog snapshot
+  freshness metadata is persisted.
+- [ ] Treat workspace source as a fallback only when explicitly marked
+  `source=workspace_fallback`.
+- [x] Return Installed skills/scenarios to the full inventory view and add a
+  shared `Drift only` toggle.
+- [x] Order inventory columns by source flow: Catalog, Workspace, workspace
+  actions, Runtime, runtime actions.
+- [x] Register renderer table icons and render drift statuses as icons with
+  tooltips.
+- [x] Limit skill `Activate` visibility to missing runtime or
+  workspace/runtime divergence.
+- [x] Add a push-comment modal for skill workspace publish actions.
+- [ ] Add row-level details/logs modal wiring so the current Logs icon opens the
+  relevant skill diagnostics instead of only returning paths in the action
+  result.
+- [ ] Extend scenario source/runtime action buttons once scenario update/push
+  lifecycle has the same safe operation surface as skills.
+- [x] Add a regression proving a source refresh cannot clear a drift marker
+  unless the active runtime version also changes.
+
+#### RCMS-003: Make production skill updates runtime-atomic
+
+Status: in progress.
+
+Progress: 65%.
+
+Actions:
+
+- [x] Replace the API `skills.update` production path with source refresh,
+  inactive-slot prepare, lifecycle activation, and webspace/projection rebuild.
+- [x] Keep the previous active runtime if prepare or activation fails.
+- [x] Return an operation result containing source version, active before/after
+  version, active before/after slot, and migration result.
+- [x] Include explicit prepared version, lifecycle stage list, and failure
+  reason in a stable operation schema.
+- [ ] Restrict lightweight `runtime_update` source-copy behavior to dev/debug
+  flows where source/runtime drift is expected and visible.
+- [x] Make API update success require active runtime convergence in production.
+- [x] Make unqualified `adaos skill activate <skill>` prepare and activate the
+  workspace source version when it differs from the active runtime.
+- [x] Refresh same-runtime-bucket prepared sources when the workspace patch
+  version advances, even if an earlier activation already moved the active
+  version marker.
+- [x] Correct CLI runtime drift direction so a newer workspace source reports
+  `runtime-behind`, and semantically equal `v0.75.6` / `0.75.6` versions do not
+  show drift.
+- [x] Add tests around update failure and drift visibility.
+- [x] Add rollback-to-previous-active coverage for partial activation failures.
+
+Implementation notes:
+
+- `refresh_skill_runtime` now returns a stable operation schema with
+  `prepared_version`, `prepared_slot`, `activated_slot`, `failed_stage`,
+  `failure_reason`, and ordered `lifecycle_stages`.
+- API `skills.update` returns the same runtime refresh payload on convergence
+  failures through the `409.detail.runtime_refresh` diagnostic object.
+- Existing runtime activation tests cover smoke-import failures before slot
+  switch and `rehydrate` failures after slot switch, including rollback to the
+  previous active version.
+- Regression coverage now includes the `v0.75.6` -> `0.75.7` style case where
+  both versions share one runtime bucket but the active slot still needs fresh
+  workspace sources.
+
+#### RCMS-004: Treat scenario dependencies as lifecycle operations
+
+Status: in progress.
+
+Progress: 35%.
+
+Actions:
+
+- [x] Make scenario dependency bootstrap return structured per-skill results
+  instead of silently continuing after dependency lifecycle failures.
+- [x] For each required skill dependency, run install/source sync,
+  `prepare_runtime`, and `activate_for_space`.
+- [ ] Decide and implement production policy for required dependency failure:
+  block scenario activation or activate the scenario as degraded with an
+  explicit operation warning.
+- [x] Include dependent skill lifecycle results in synchronous scenario install
+  API payloads.
+- [x] Include dependent skill lifecycle results in async scenario install
+  operation payloads.
+- [ ] Include dependent skill lifecycle results in async scenario update
+  operation payloads.
+- [ ] Surface dependency lifecycle failures in Infrastructure State and
+  Operations details only when they affect active scenarios.
+- [x] Add tests for dependency lifecycle result reporting.
+- [ ] Add tests for scenario install/update that pulls a dependent skill forward
+  and applies its lifecycle through the full operation path.
+
+Implementation notes:
+
+- Async scenario install operations now persist the structured
+  `dependency_bootstrap` result in the operation result payload, matching the
+  synchronous scenario install API surface.
+- Dependency bootstrap timeout/exception paths produce explicit
+  `dependency_bootstrap.ok=false` diagnostics instead of dropping dependency
+  lifecycle visibility from the operation result.
+
+#### RCMS-005: Make production CLI/control commands slot-bound
+
+Status: in progress.
+
+Progress: 20%.
+
+Actions:
+
+- [x] Add a slot-bound CLI launcher/self-reexec path so production commands can
+  run from the active core slot venv and code.
+- [x] Apply active slot manifest env/cwd when the CLI is already running under
+  the slot Python but `tools/slot-shell.sh` was not sourced.
+- [ ] Refuse or warn for state-changing production commands when the current
+  interpreter, repo root, or package path does not match the active slot
+  manifest.
+- [ ] Keep root checkout drift acceptable for production when only supervisor
+  and sidecar are launched from root and the updater controls those processes.
+- [ ] Keep `.adaos/dev` development commands explicit and separate from
+  production slot-bound commands.
+- [ ] Add a `slot_shell_required` diagnostic only when command context is unsafe,
+  not as normal Infrastructure State noise.
+- [x] Add tests for the forgotten `tools/slot-shell.sh` case.
+- [ ] Add tests for unsafe state-changing command refusal and allowed dev
+  override.
+
+#### RCMS-006: Sync catalog snapshots from hub/root to members
+
+Status: planned.
+
+Actions:
+
+- [ ] Persist a hub-provided catalog snapshot on members with commit,
+  `fetched_at`, source, and staleness metadata.
+- [ ] Use that snapshot for member drift calculations instead of requiring each
+  member to fetch GitHub directly.
+- [ ] Keep archive materialization available for members without git.
+- [ ] Refresh member catalog snapshots on link/reconnect and after hub catalog
+  update operations.
+- [ ] Surface member catalog staleness only when it affects installed
+  skill/scenario drift or update actions.
+- [ ] Add tests for no-git member drift calculation from a hub snapshot.
+
 ## Hub Memory Growth Under Snapshot and Webspace Fanout
 
 ### Goal

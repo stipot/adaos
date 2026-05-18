@@ -1005,6 +1005,7 @@ def _make_tts():
 class SetAliasRequest(BaseModel):
     alias: str = Field(..., min_length=1, max_length=64)
     hub_id: str | None = Field(default=None, description="Optional hub/subnet id; ignored on hub, for logging only.")
+    webspace_id: str | None = Field(default=None, max_length=128)
 
 
 class ShutdownRequest(BaseModel):
@@ -1063,14 +1064,44 @@ async def set_alias(body: SetAliasRequest, token=Depends(require_token)):
     try:
         conf = get_ctx().config
         save_subnet_alias(body.alias, subnet_id=conf.subnet_id)
+        event_payload = {
+            "alias": body.alias,
+            "subnet_id": conf.subnet_id,
+            "webspace_id": body.webspace_id,
+        }
+        projection_refreshed = False
+        try:
+            from adaos.services import named_entity_projection
+
+            webspace_ids: list[str] = []
+            requested_webspace_id = str(body.webspace_id or "").strip()
+            if requested_webspace_id:
+                webspace_ids.append(requested_webspace_id)
+            default_webspace_id = named_entity_projection.default_webspace_id()
+            if default_webspace_id not in webspace_ids:
+                webspace_ids.append(default_webspace_id)
+            for webspace_id in webspace_ids:
+                await asyncio.wait_for(
+                    named_entity_projection.project_named_entity_registry(webspace_id=webspace_id),
+                    timeout=2.5,
+                )
+            projection_refreshed = True
+        except Exception:
+            projection_refreshed = False
         # broadcast over local event bus
         try:
             from adaos.domain import Event as _Ev
 
-            get_ctx().bus.publish(_Ev(type="subnet.alias.changed", payload={"alias": body.alias, "subnet_id": conf.subnet_id}, source="api"))
+            get_ctx().bus.publish(
+                _Ev(
+                    type="subnet.alias.changed",
+                    payload=event_payload,
+                    source="api",
+                )
+            )
         except Exception:
             pass
-        return {"ok": True, "alias": body.alias}
+        return {"ok": True, "alias": body.alias, "projection_refreshed": projection_refreshed}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

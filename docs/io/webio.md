@@ -260,8 +260,16 @@ state lives in `desktop`.
 ## Snapshot-on-Subscribe
 
 Streams are live transports, not implicit persistent state. To avoid blank
-widgets on first subscribe, the browser now requests an initial snapshot when
-it subscribes to `webio.stream.*`.
+widgets on first subscribe, the browser requests an initial snapshot when it
+subscribes to `webio.stream.*`. The gateway also emits the same request when it
+observes the websocket subscription, so initial materialization has two
+independent triggers instead of depending on one subscribe-side effect.
+
+Receivers whose first value is loaded asynchronously should use an explicit
+`initialState` envelope such as `{ "status": "init", "message": "Loading data...", "items": [] }`.
+Widgets can then show a loading/data-not-delivered state until the first
+snapshot arrives, rather than rendering an empty collection as if the source had
+successfully reported "no rows".
 
 The server emits `webio.stream.snapshot.requested` with:
 
@@ -752,6 +760,17 @@ Recommended to add this to the top of every `webui.json`:
   "$schema": "../../../src/adaos/abi/webui.v1.schema.json"
 }
 ```
+
+`webui.v1` now enumerates the client-supported widget renderer types. The
+first reusable stream/file widgets are:
+
+* `visual.frameViewer` - renders a stream-backed image/frame payload with
+  optional status badges and metric chips
+* `visual.image` - image-only alias for the frame viewer renderer
+* `visual.timeseriesChart` - MVP line chart over a stream/Yjs point array,
+  configured with `inputs.xKey` and `inputs.yKey`
+* `input.fileUpload` - uploads a browser-selected file to the core
+  skill-owned file store and dispatches `uploaded` actions with `artifact_ref`
 
 The schema also supports coarse staged-readiness hints on page/widget/modal
 and catalog surfaces via a `load` object:

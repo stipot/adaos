@@ -386,6 +386,45 @@ def test_member_link_client_persists_node_display_assignment(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
+async def test_member_link_start_clears_stop_and_restarts_finished_task() -> None:
+    client = MemberLinkClient()
+    calls: list[bool] = []
+
+    async def _fake_run() -> None:
+        calls.append(client._stop.is_set())
+
+    client._run = _fake_run  # type: ignore[method-assign]
+    client._stop.set()
+
+    await client.start()
+    first_task = client._task
+    assert first_task is not None
+    await first_task
+
+    await client.start()
+    second_task = client._task
+    assert second_task is not None
+    assert second_task is not first_task
+    await second_task
+
+    assert calls == [False, False]
+
+
+def test_member_link_is_connected_treats_stale_activity_as_disconnected(monkeypatch) -> None:
+    now = {"value": 100.0}
+    monkeypatch.setattr("adaos.services.subnet.link_client.time.time", lambda: now["value"])
+
+    client = MemberLinkClient()
+    client._connected.set()
+    client._connected_at = 50.0
+    client._last_message_at = 50.0
+    client._last_pong_at = 50.0
+    monkeypatch.setattr(client, "_pong_stale_after_s", lambda: 35.0)
+
+    assert not client.is_connected()
+
+
+@pytest.mark.asyncio
 async def test_member_link_ping_loop_exits_when_pong_goes_stale(monkeypatch) -> None:
     class _FakeWs:
         def __init__(self) -> None:
@@ -443,38 +482,29 @@ async def test_member_link_queue_node_snapshot_prefers_async_snapshot_builder(mo
 
 def test_member_link_queues_snapshot_after_desktop_yjs_write(monkeypatch) -> None:
     client = MemberLinkClient()
-    queued: list[dict[str, object]] = []
+    queued: list[str] = []
+    monkeypatch.setenv("ADAOS_SUBNET_FULL_SNAPSHOT_ON_YJS_WRITE", "1")
 
-    monkeypatch.setattr(
-        client,
-        "_request_local_snapshot_sync",
-        lambda **kwargs: queued.append(dict(kwargs)),
-    )
+    monkeypatch.setattr(client, "_queue_node_snapshot", lambda: queued.append("snapshot"))
 
-    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop")
+    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop", meta={"source": "webspace_runtime"})
 
-    assert queued == [{"webspace_id": "desktop", "reason": "yjs.write"}]
+    assert queued == ["snapshot"]
 
 
 def test_member_link_throttles_snapshot_after_yjs_write(monkeypatch) -> None:
     client = MemberLinkClient()
-    queued: list[dict[str, object]] = []
+    queued: list[str] = []
     now = {"value": 100.0}
+    monkeypatch.setenv("ADAOS_SUBNET_FULL_SNAPSHOT_ON_YJS_WRITE", "1")
 
-    monkeypatch.setattr(
-        client,
-        "_request_local_snapshot_sync",
-        lambda **kwargs: queued.append(dict(kwargs)),
-    )
+    monkeypatch.setattr(client, "_queue_node_snapshot", lambda: queued.append("snapshot"))
     monkeypatch.setattr("adaos.services.subnet.link_client.time.time", lambda: now["value"])
 
-    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop")
-    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop")
+    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop", meta={"source": "webspace_runtime"})
+    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop", meta={"source": "webspace_runtime"})
     now["value"] += 2.0
-    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop")
-    client._queue_node_snapshot_from_yjs_write(webspace_id="project-ws")
+    client._queue_node_snapshot_from_yjs_write(webspace_id="desktop", meta={"source": "webspace_runtime"})
+    client._queue_node_snapshot_from_yjs_write(webspace_id="project-ws", meta={"source": "webspace_runtime"})
 
-    assert queued == [
-        {"webspace_id": "desktop", "reason": "yjs.write"},
-        {"webspace_id": "desktop", "reason": "yjs.write"},
-    ]
+    assert queued == ["snapshot"]

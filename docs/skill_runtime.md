@@ -263,6 +263,23 @@ Every install/test/activate/run operation logs under `slots/<slot>/logs/`. `adao
 - Workspace: `adaos skill status <NAME> --fetch --diff` compares `skills/<NAME>` against the workspace registry remote (`adaos-registry.git` main).
 - Dev: `adaos skill status --space dev <NAME> --fetch --diff` compares the dev folder against the hub draft state via Root API (requires hub mTLS keys from the bootstrap `node.yaml`).
 
+Workspace markers are split by state plane. `git-dirty` means local filesystem
+changes are not committed, while `git-ahead` means path-level commits exist
+locally and still need a registry push. `git-behind` means the registry base has
+newer path-level commits, and `git-different` is the fallback when the path
+differs but Git cannot classify the divergence. `git-error` means the CLI could
+not compute the Git comparison. Runtime markers are separate: `runtime-ahead`
+means the workspace skill version is ahead of the active runtime slot,
+`runtime-behind` means the active slot is newer than the workspace source, and
+`runtime-different` means the versions differ but cannot be ordered.
+
+`adaos skill push` without a skill name is a batch release command, not a raw
+Git transport command. It finds skills with dirty files, committed `git-ahead`
+changes, or an explicit manifest-vs-registry version drift, then runs the same
+version bump, registry update, commit, and push flow used by
+`adaos skill push <name> -m ...`. Batch release commits use the standard message
+`chore(<skill>): release workspace changes`.
+
 ## Weather skill reference
 
 `.adaos/skills/weather_skill/` demonstrates the complete lifecycle:

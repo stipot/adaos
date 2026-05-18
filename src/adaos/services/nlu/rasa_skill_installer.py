@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ _SKILL_NAME = "rasa_nlu_service_skill"
 _PACKAGE = "adaos.interpreter_data"
 _RESOURCE_DIR = "rasa_nlu_service_skill"
 _MANAGED_META = ".adaos-managed.json"
+_RASA_PORT_SUBMODULE = Path("src/adaos/integrations/rasa-port")
 _DEFAULT_RASA_PORT_REQUIREMENT = "adaos-rasa-nlu @ git+https://github.com/stipot-com/rasa-port.git@main"
 _FALSE_VALUES = {"0", "false", "no", "off", "disable", "disabled", "none"}
 _TRUE_VALUES = {"1", "true", "yes", "on", "enable", "enabled"}
@@ -171,6 +173,138 @@ def _local_rasa_port_path(ctx: Any) -> Path | None:
     return None
 
 
+def _repo_root_candidates(ctx: Any) -> list[Path]:
+    candidates: list[Path] = []
+    repo_root = _ctx_path(ctx, "repo_root")
+    if repo_root:
+        candidates.append(repo_root)
+
+    package_dir = _ctx_path(ctx, "package_path") or _ctx_path(ctx, "package_dir")
+    if package_dir:
+        for candidate in (
+            package_dir,
+            package_dir.parent,
+            package_dir.parents[1] if len(package_dir.parents) > 1 else None,
+        ):
+            if candidate is not None:
+                candidates.append(candidate)
+
+    try:
+        cwd = Path.cwd().resolve()
+        candidates.extend((cwd, *cwd.parents))
+    except Exception:
+        pass
+
+    seen: set[str] = set()
+    roots: list[Path] = []
+    for candidate in candidates:
+        try:
+            resolved = candidate.expanduser().resolve()
+        except Exception:
+            continue
+        key = str(resolved).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if (resolved / ".gitmodules").exists():
+            roots.append(resolved)
+    return roots
+
+
+def _declares_rasa_port_submodule(repo_root: Path) -> bool:
+    try:
+        text = (repo_root / ".gitmodules").read_text(encoding="utf-8")
+    except Exception:
+        return False
+    needle = _RASA_PORT_SUBMODULE.as_posix().lower()
+    for line in text.splitlines():
+        name, sep, value = line.partition("=")
+        if sep and name.strip().lower() == "path" and value.strip().lower() == needle:
+            return True
+    return False
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    try:
+        return left.expanduser().resolve() == right.expanduser().resolve()
+    except Exception:
+        return str(left).lower() == str(right).lower()
+
+
+def _rasa_port_submodule_needs_init(repo_root: Path) -> bool:
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "submodule",
+                "status",
+                "--",
+                _RASA_PORT_SUBMODULE.as_posix(),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return False
+
+    line = (completed.stdout or "").strip().splitlines()
+    if not line:
+        return False
+    return line[0].startswith("-")
+
+
+def _ensure_rasa_port_submodule_checkout(ctx: Any) -> Path | None:
+    existing = _local_rasa_port_path(ctx)
+
+    for repo_root in _repo_root_candidates(ctx):
+        if not _declares_rasa_port_submodule(repo_root):
+            continue
+        submodule_path = (repo_root / _RASA_PORT_SUBMODULE).resolve()
+        if existing is not None and not _same_path(existing, submodule_path):
+            continue
+        if not (repo_root / ".git").exists() or shutil.which("git") is None:
+            if _is_rasa_port_checkout(submodule_path):
+                return submodule_path
+            continue
+
+        needs_checkout = not _is_rasa_port_checkout(submodule_path)
+        needs_init = _rasa_port_submodule_needs_init(repo_root)
+        if not needs_checkout and not needs_init:
+            return submodule_path
+
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_root),
+                    "submodule",
+                    "update",
+                    "--init",
+                    "--recursive",
+                    "--",
+                    _RASA_PORT_SUBMODULE.as_posix(),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except Exception as exc:
+            _log.warning("failed to initialize rasa-port submodule at %s: %s", submodule_path, exc)
+            continue
+
+        if _is_rasa_port_checkout(submodule_path):
+            return submodule_path
+        _log.warning("rasa-port submodule initialized but checkout is incomplete at %s", submodule_path)
+
+    return existing
+
+
 def _path_requirement(path: Path) -> str:
     try:
         return path.expanduser().resolve().as_uri()
@@ -179,7 +313,7 @@ def _path_requirement(path: Path) -> str:
 
 
 def _rasa_port_dependency_args(ctx: Any) -> list[str]:
-    local_path = _local_rasa_port_path(ctx)
+    local_path = _ensure_rasa_port_submodule_checkout(ctx)
     if local_path:
         return ["--no-deps", "-e", _path_requirement(local_path)]
     requirement = _env_value("ADAOS_RASA_PORT_REQUIREMENT") or _DEFAULT_RASA_PORT_REQUIREMENT

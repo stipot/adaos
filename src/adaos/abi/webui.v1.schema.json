@@ -41,6 +41,41 @@
       "enum": ["primary", "supporting", "off_focus", "background"],
       "description": "Relative focus priority for staged or multi-surface interfaces."
     },
+    "widgetType": {
+      "type": "string",
+      "enum": [
+        "collection.grid",
+        "collection.tree",
+        "visual.taigaCollectionGrid",
+        "visual.taigaMetricChart",
+        "visual.frameViewer",
+        "visual.image",
+        "visual.metricTile",
+        "visual.metricChart",
+        "visual.timeseriesChart",
+        "visual.qrCode",
+        "feedback.log",
+        "feedback.statusBar",
+        "ui.chat",
+        "ui.voiceInput",
+        "ui.list",
+        "ui.table",
+        "ui.form",
+        "ui.actions",
+        "ui.jsonViewer",
+        "item.textEditor",
+        "item.codeViewer",
+        "item.details",
+        "input.commandBar",
+        "input.fileUpload",
+        "input.text",
+        "input.selector",
+        "desktop.widgets",
+        "media.videoBrowser",
+        "host.webspaceControls"
+      ],
+      "description": "Client-supported widget renderer type."
+    },
     "readinessState": {
       "type": "string",
       "enum": ["pending_structure", "first_paint", "interactive", "hydrating", "ready", "degraded"],
@@ -95,7 +130,7 @@
       "required": ["id", "type"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "type": { "type": "string", "minLength": 1, "description": "Widget type (e.g. 'ui.chat', 'ui.voiceInput')." },
+        "type": { "$ref": "#/$defs/widgetType" },
         "title": { "type": "string" },
         "area": { "type": "string", "description": "Optional default area when pinned as a widget." },
         "dataSource": { "$ref": "#/$defs/dataSource" },
@@ -243,7 +278,7 @@
       "required": ["id", "type", "area"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "type": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/$defs/widgetType" },
         "area": { "type": "string", "minLength": 1 },
         "title": { "type": "string" },
         "dataSource": { "$ref": "#/$defs/dataSource" },
@@ -261,6 +296,15 @@
         "kind": { "type": "string", "enum": ["y", "stream"] },
         "path": { "type": "string" },
         "transform": { "type": "string" },
+        "observeRoot": {
+          "type": "boolean",
+          "description": "For Yjs data sources, observe the root data map and read the declared path from it. Use when a skill replaces a plain JSON subtree."
+        },
+        "observe": {
+          "type": "string",
+          "enum": ["path", "dataRoot"],
+          "description": "Observation strategy for Yjs data sources. dataRoot is equivalent to observeRoot=true."
+        },
         "receiver": { "$ref": "#/$defs/id" },
         "scope": {
           "type": "string",

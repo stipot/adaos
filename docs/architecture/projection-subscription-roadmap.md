@@ -10,6 +10,8 @@ documents so implementation work has a focused checklist.
 The target architecture is defined in [Operational Event Model](operational-event-model.md).
 The master implementation order across all adjacent workstreams is defined in
 [Operational Event Model Roadmap](operational-event-model-roadmap.md).
+The skill-facing SDK/core rails are defined in
+[Skill Projection Runtime SDK](skill-projection-runtime-sdk.md).
 
 ## Ownership Rule
 
@@ -144,6 +146,9 @@ Current status:
 - [x] `dispatcher.shared_pattern`: add a shared dispatcher pattern for `domain/core/platform event -> in-memory update -> demanded projection refresh`
 - [x] `dispatcher.per_webspace_refresh`: make demanded projection refresh run per webspace
 - [x] `dispatcher.no_cross_webspace_churn`: prevent one webspace from forcing writes into unrelated webspaces
+- [x] `dispatcher.skill_projection_sdk`: implement the shared skill-facing
+  projection runtime SDK so skills do not open-code projection executors,
+  stream receiver routing, fingerprint maps, or dirty-section dispatch
 - [ ] `dispatcher.memory_richer_than_yjs`: allow skills and platform services to keep richer semantic caches in memory than they publish into Yjs
 - [x] `dispatcher.lifecycle_exposed`: expose projection lifecycle transitions through the shared projection record
 - [x] `dispatcher.pressure_observable`: preserve eventbus/rebuild/stream pressure counters when dispatcher coalesces or suppresses work

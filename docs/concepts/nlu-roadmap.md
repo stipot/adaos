@@ -1,14 +1,21 @@
 # NLU Roadmap Checklist
 
 Current implementation estimate: **49%** for the practical AdaOS NLU roadmap.
+The target architecture now treats Neural NLU as a default-installed provider,
+but the productionization checklist remains mostly open.
 
 ## Phase 1: Baseline Runtime
 
 - [x] Regex-first pipeline with dynamic scenario/skill regex rules.
+- [x] Optional neural delegation event (`nlp.intent.detect.neural`) behind
+  `ADAOS_NLU_NEURAL`.
 - [x] Rasa NLU service-skill isolated from the hub Python environment.
 - [x] Rasa service-skill prepared in A/B skill runtime slots.
 - [x] Confidence/fallback path to `nlp.intent.not_obtained`.
 - [x] Baseline desktop intents for opening modals and node-scoped modals.
+- [ ] Remove runtime-provider delivery through `src/adaos/interpreter_data`.
+- [ ] Ensure parse bridges only discover/start installed service skills and do
+  not mutate workspace skills or A/B slots on demand.
 
 ## Phase 2: Operator Feedback Loop
 
@@ -24,6 +31,10 @@ Current implementation estimate: **49%** for the practical AdaOS NLU roadmap.
 - [ ] UI field for "check phrase" wired to the probe endpoint.
 - [ ] UI buttons: "correct", "fix", "save example".
 - [ ] Operator-approved positive feedback stored with audit metadata.
+- [ ] Route accepted feedback to the owning artifact:
+  skill, scenario, system action catalog, or named-entity source.
+- [ ] Add explicit correction targets for core/client actions that are not
+  implemented as skills.
 
 ## Phase 3: Observability
 
@@ -37,6 +48,11 @@ Current implementation estimate: **49%** for the practical AdaOS NLU roadmap.
 - [ ] Trace UI should show `voice text -> regex/neural/rasa -> intent -> action`.
 - [ ] Add latency per stage and service timing.
 - [ ] Add golden phrase regression reports.
+- [ ] Add neural usage statistics: request count, latency, confidence
+  histogram, accept/abstain/reject counts, fallback ratio, and per-intent
+  confusion evidence.
+- [ ] Add named-entity canonicalization statistics: hit/miss/ambiguity counts
+  and unresolved spans.
 
 ## Human Verification Gates
 
@@ -61,23 +77,31 @@ Current implementation estimate: **49%** for the practical AdaOS NLU roadmap.
 - [x] Overlay live YJS desktop registry values on top of manifest lookups for Teacher API.
 - [ ] Expose stable template ids for regex, Rasa examples, neural labels, and lookup sets.
 - [ ] Implement stale-write protection using template fingerprints.
+- [ ] Define the system action catalog for core/client commands such as move,
+  hide, open, pin, switch, and other shell actions.
+- [ ] Include system action examples in NLU authoring context without treating
+  those actions as user skills.
 
 ## Phase 4a: Runtime Named Entities and Canonicalization
 
-- [ ] Add a named-entity read model over devices, nodes, browsers, webspaces,
+- [x] Add a named-entity read model over devices, nodes, browsers, webspaces,
   scenarios, skills, apps, and modals.
-- [ ] Add a deterministic resolver that maps display names, observed names, and
+- [x] Add a deterministic resolver that maps display names, observed names, and
   aliases to canonical refs before model dispatch.
-- [ ] Add entity masking so model-facing text can use placeholders such as
+- [x] Add entity masking so model-facing text can use placeholders such as
   `{device}`, `{webspace}`, and `{scenario}`.
-- [ ] Add ambiguity handling instead of silently choosing between conflicting
+- [x] Add ambiguity handling instead of silently choosing between conflicting
   aliases.
-- [ ] Add Teacher/probe output for resolved entities, unresolved spans,
+- [x] Add Teacher/probe output for resolved entities, unresolved spans,
   canonical refs, and ambiguity evidence.
-- [ ] Add regression tests proving alias and device-name changes do not require
+- [x] Add regression tests proving alias and device-name changes do not require
   Rasa/neural retraining.
-- [ ] Track the full target design in
+- [x] Track the full target design in
   [Named Entities and Canonical Naming](../architecture/named-entities.md).
+- [ ] Feed canonicalized text and entity evidence into the neural provider
+  contract.
+- [ ] Ensure Rasa and neural training fingerprints exclude runtime aliases by
+  default.
 
 ## Phase 5: MCP-Assisted Authoring
 
@@ -95,21 +119,93 @@ Current implementation estimate: **49%** for the practical AdaOS NLU roadmap.
 - [ ] LLM receives current template inventory before proposing changes.
 - [ ] Template patches are previewed and operator-approved before apply.
 
-## Phase 6: Neural Stage
+## Phase 6: Neural NLU Provider
 
-- [ ] Neural service-skill model artifacts.
-- [ ] Neural parse contract and confidence gates.
-- [ ] Neural abstain path to Rasa/Teacher.
-- [ ] Model registry, canary rollout, rollback pointer.
+### Provider Boundary
+
+- [ ] Move `neural_nlu_service_skill` out of `src/adaos/interpreter_data` into
+  normal registry/workspace skill delivery.
+- [ ] Add default-on `adaos install` preparation for Neural NLU.
+- [ ] Add `--no-neural-nlu` install option for constrained devices.
+- [ ] Make the neural bridge discover/start only installed service skills.
+- [ ] Remove hot-path workspace mutation/bootstrap from neural parse handling.
+- [ ] Keep provider dependencies (`torch`, `faiss-cpu`, etc.) out of the hub
+  root venv.
+
+### Inference Contract
+
+- [ ] Freeze `/parse` request/response schema with `top_intent`,
+  `confidence`, `alternatives`, `slots`, `model_id`, and `evidence`.
+- [ ] Pass named-entity canonicalization evidence into `/parse`.
+- [ ] Return matched examples, score components, and canonicalized text in
+  `evidence`.
+- [ ] Add confidence gates for accept/abstain/reject.
+- [ ] Add neural abstain/error fallback to Rasa.
+- [ ] Route Rasa miss/low confidence to NLU Teacher.
+
+### Notebook Approach Port
+
+- [ ] Port masking logic into provider-owned runtime code.
+- [ ] Port Char-CNN + BiLSTM model loader.
+- [ ] Fix and test special-token compatibility between training and runtime.
+- [ ] Port supervised-contrastive embedding projection usage.
+- [ ] Add FAISS positive example index.
+- [ ] Add FAISS negative example indexes.
+- [ ] Add weighted ranker over softmax, k-NN similarity, and action/skill
+  priors.
+- [ ] Add intent/action id mapping from research labels to AdaOS canonical
+  intents and system actions.
+
+### Artifacts and ModelOps
+
+- [ ] Define node-level active model layout owned by the service skill runtime.
+- [ ] Store `model.pt`, `labels.json`/`intents_manifest.json`, `vocab.json`,
+  `faiss.index`, `examples_manifest.jsonl`, `ranker_config.json`, and
+  `metrics.json`.
+- [ ] Add immutable `model_id` and model provenance metadata.
+- [ ] Add rollback pointer for the node-level active model.
+- [ ] Add golden phrase regression report before model promotion.
+- [ ] Add quality gates using accuracy, macro-F1, abstain rate, and latency.
+- [ ] Defer per-locale/webspace/profile models until usage statistics justify
+  the added operational complexity.
+
+### Usage Statistics
+
+- [ ] Record neural request count and latency per stage.
+- [ ] Record confidence distributions and threshold bands.
+- [ ] Record accept/abstain/reject counts per intent.
+- [ ] Record fallback ratio `neural -> Rasa -> Teacher`.
+- [ ] Record canonicalization hit/miss/ambiguity counts for neural requests.
+- [ ] Record abstained/rejected samples for Teacher review and retraining.
+
+### Training Data Feedback
+
+- [ ] Export skill-owned examples from skills.
+- [ ] Export scenario-owned examples from scenarios.
+- [ ] Export core/client command examples from the system action catalog.
+- [ ] Export named-entity classes as masks, not as local alias training data.
+- [ ] Let Teacher-approved corrections update regex, Neural, and Rasa datasets
+  through the owning artifact.
+- [ ] Rebuild/reindex the neural provider from curated examples after
+  approved changes.
 
 ## Immediate Next Steps
 
-1. Add a UI-capable action/bridge for safe NLU Teacher API calls, then wire Check phrase to `POST /api/nlu/teacher/{webspace_id}/probe`.
-2. Render probe response in the Teacher modal: trace, intent ranking, entities, slots, lookup matches, confidence, and action preview.
-3. Add "save correct example" backend action with scenario/skill target selection and audit metadata.
-4. Add the first named-entity resolver slice for device and browser aliases.
-5. Expose stable template ids for regex, Rasa examples, neural labels, and lookup sets.
-6. Add stage latency and golden phrase checks.
+1. Remove `src/adaos/interpreter_data` from the provider delivery path and
+   document the migration path for existing experimental templates.
+2. Add default-on Neural NLU install preparation plus a `--no-neural-nlu`
+   escape hatch.
+3. Port the full notebook ranker into the neural provider:
+   masking, Char-CNN/BiLSTM, FAISS positives/negatives, priors, and evidence.
+4. Define the system action catalog for core/client commands and include it in
+   NLU authoring context.
+5. Add neural usage statistics and stage latency before making rollout
+   decisions about per-locale/webspace/profile models.
+6. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
+   Rasa, and action-preview evidence.
+7. Add "save correct example" backend action with skill/scenario/system-action
+   target selection and audit metadata.
+8. Add golden phrase reports and model promotion gates.
 
 ## Last Completed Slice
 

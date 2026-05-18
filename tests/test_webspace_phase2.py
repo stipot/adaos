@@ -51,7 +51,7 @@ def test_build_local_desktop_catalog_snapshot_uses_runtime_skill_decls(monkeypat
         lambda: SimpleNamespace(role="member", node_id="node-1", node_settings=SimpleNamespace(node_names=[])),
     )
 
-    def _fake_collect(self, mode: str = "mixed") -> list[dict[str, object]]:  # noqa: ARG001
+    def _fake_collect(self, mode: str = "mixed", *, include_remote: bool = True) -> list[dict[str, object]]:  # noqa: ARG001
         captured_modes.append(mode)
         return [
             {
@@ -92,7 +92,7 @@ def test_build_local_desktop_catalog_snapshot_prefers_live_ydoc_values_over_decl
         lambda: SimpleNamespace(role="member", node_id="node-1", node_settings=SimpleNamespace(node_names=[])),
     )
 
-    def _fake_collect(self, mode: str = "mixed") -> list[dict[str, object]]:  # noqa: ARG001
+    def _fake_collect(self, mode: str = "mixed", *, include_remote: bool = True) -> list[dict[str, object]]:  # noqa: ARG001
         return [
             {
                 "skill": "infrastate_skill",
@@ -201,7 +201,7 @@ def test_build_local_desktop_catalog_snapshot_reads_node_scoped_defaults_from_lo
         lambda: SimpleNamespace(role="member", node_id="node-1", node_settings=SimpleNamespace(node_names=[])),
     )
 
-    def _fake_collect(self, mode: str = "mixed") -> list[dict[str, object]]:  # noqa: ARG001
+    def _fake_collect(self, mode: str = "mixed", *, include_remote: bool = True) -> list[dict[str, object]]:  # noqa: ARG001
         return [
             {
                 "skill": "infrastate_skill",
@@ -322,7 +322,7 @@ def test_build_local_desktop_catalog_snapshot_prefers_live_room_doc_without_sync
         lambda: SimpleNamespace(role="member", node_id="node-1", node_settings=SimpleNamespace(node_names=[])),
     )
 
-    def _fake_collect(self, mode: str = "mixed") -> list[dict[str, object]]:  # noqa: ARG001
+    def _fake_collect(self, mode: str = "mixed", *, include_remote: bool = True) -> list[dict[str, object]]:  # noqa: ARG001
         return [
             {
                 "skill": "infrastate_skill",
@@ -420,7 +420,7 @@ async def test_build_local_desktop_catalog_snapshot_async_reads_local_unscoped_s
         lambda: SimpleNamespace(role="member", node_id="node-1", node_settings=SimpleNamespace(node_names=[])),
     )
 
-    def _fake_collect(self, mode: str = "mixed") -> list[dict[str, object]]:  # noqa: ARG001
+    def _fake_collect(self, mode: str = "mixed", *, include_remote: bool = True) -> list[dict[str, object]]:  # noqa: ARG001
         return [
             {
                 "skill": "infrastate_skill",
@@ -587,6 +587,112 @@ def test_remote_member_catalog_entries_are_node_scoped_and_auto_installed(monkey
             "autoInstall": True,
         },
     ]
+
+
+def test_remote_member_catalog_entries_collapse_existing_node_scope(monkeypatch) -> None:
+    previous_directory_module = sys.modules.get("adaos.services.registry.subnet_directory")
+    directory_module = types.ModuleType("adaos.services.registry.subnet_directory")
+    directory_module.get_directory = lambda: SimpleNamespace(
+        list_known_nodes=lambda: [
+            {
+                "node_id": "member-1",
+                "roles": ["member"],
+                "runtime_projection": {
+                    "snapshot": {
+                        "desktop_catalog": {
+                            "apps": [
+                                {
+                                    "id": "node:member-1:weather_skill",
+                                    "title": "Weather",
+                                    "launchModal": "node:old-hub:node:member-1:weather_modal",
+                                    "node_local_id": "node:member-1:weather_skill",
+                                    "remote_id": "node:member-1:weather_skill",
+                                }
+                            ],
+                            "registry": {
+                                "modals": {
+                                    "node:member-1:weather_modal": {
+                                        "title": "Weather Settings",
+                                    }
+                                }
+                            },
+                        }
+                    }
+                },
+            }
+        ]
+    )
+    sys.modules["adaos.services.registry.subnet_directory"] = directory_module
+    monkeypatch.setattr(
+        webspace_runtime_module,
+        "load_config",
+        lambda: SimpleNamespace(role="hub", node_id="hub-1", node_settings=SimpleNamespace(node_names=[])),
+    )
+    monkeypatch.setattr(webspace_runtime_module, "_local_node_id", lambda: "hub-1")
+    try:
+        runtime = webspace_runtime_module.WebspaceScenarioRuntime(SimpleNamespace())
+        decls = runtime._collect_remote_skill_decls()
+    finally:
+        if previous_directory_module is None:
+            sys.modules.pop("adaos.services.registry.subnet_directory", None)
+        else:
+            sys.modules["adaos.services.registry.subnet_directory"] = previous_directory_module
+        importlib.invalidate_caches()
+
+    assert len(decls) == 1
+    app = decls[0]["apps"][0]
+    assert app["id"] == "node:member-1:weather_skill"
+    assert app["launchModal"] == "node:member-1:weather_modal"
+    assert app["node_local_id"] == "weather_skill"
+    assert app["remote_id"] == "weather_skill"
+    assert "node:member-1:weather_modal" in decls[0]["registry"]["modals"]
+
+
+def test_remote_member_catalog_skips_foreign_relay_entries(monkeypatch) -> None:
+    previous_directory_module = sys.modules.get("adaos.services.registry.subnet_directory")
+    directory_module = types.ModuleType("adaos.services.registry.subnet_directory")
+    directory_module.get_directory = lambda: SimpleNamespace(
+        list_known_nodes=lambda: [
+            {
+                "node_id": "hub-relay",
+                "roles": ["hub"],
+                "runtime_projection": {
+                    "snapshot": {
+                        "desktop_catalog": {
+                            "apps": [
+                                {
+                                    "id": "node:member-1:weather_skill",
+                                    "title": "Weather",
+                                    "origin": "skill:subnet.member.member-1",
+                                }
+                            ],
+                            "ydoc_defaults": {
+                                "data/nodes/member-1/weather/current": {"city": "Berlin"},
+                            },
+                        }
+                    }
+                },
+            }
+        ]
+    )
+    sys.modules["adaos.services.registry.subnet_directory"] = directory_module
+    monkeypatch.setattr(
+        webspace_runtime_module,
+        "load_config",
+        lambda: SimpleNamespace(role="hub", node_id="hub-1", node_settings=SimpleNamespace(node_names=[])),
+    )
+    monkeypatch.setattr(webspace_runtime_module, "_local_node_id", lambda: "hub-1")
+    try:
+        runtime = webspace_runtime_module.WebspaceScenarioRuntime(SimpleNamespace())
+        decls = runtime._collect_remote_skill_decls()
+    finally:
+        if previous_directory_module is None:
+            sys.modules.pop("adaos.services.registry.subnet_directory", None)
+        else:
+            sys.modules["adaos.services.registry.subnet_directory"] = previous_directory_module
+        importlib.invalidate_caches()
+
+    assert decls == []
 
 
 def test_member_snapshot_change_seeds_ydoc_defaults_without_waiting_for_rebuild(monkeypatch) -> None:

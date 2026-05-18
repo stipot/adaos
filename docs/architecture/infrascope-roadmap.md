@@ -287,6 +287,36 @@ Move the LLM from passive observer to governed participant in diagnosis and cont
 - dry-run and impact simulation before proposal submission
 - review and approval flow for LLM-generated changes
 - recommendation and anomaly layers on top of structured projections
+- LLM-assisted conflict resolution for git/workspace merge conflicts: a node
+  detects a conflict, asks an LLM through root, sends bounded artifacts, and
+  accepts the result only as a validated patch/action proposal
+
+### Future Task: LLM Conflict Resolution
+
+Workflows such as `skill push`, workspace registry updates, and other governed
+git operations need a dedicated conflict-resolution loop. When a node detects a
+merge or rebase conflict, it should not repair the worktree with ungoverned local
+heuristics. The target flow is:
+
+1. The node records the conflict as a runtime incident and builds a
+   `conflict_pack`: `git status`, conflicted paths, base/ours/theirs versions,
+   conflict-marker snippets, commit metadata, intended operation, and policy
+   context.
+2. The node sends the `conflict_pack` through a root-managed LLM endpoint without
+   exposing secrets, tokens, or personal workspace data.
+3. The LLM returns a structured `resolution_proposal`, not shell commands:
+   explanation, patch or file replacements, confidence, affected paths, risk
+   notes, and required checks.
+4. The node applies the proposal in a temporary or isolated worktree, runs
+   JSON/schema/tests/dry-run validation, and builds an impact summary.
+5. Only after validation and, where required, operator approval does the node
+   apply the resolution to the real merge/rebase through the existing git
+   adapters.
+
+The first safe candidates are `registry.json` conflicts during `skill push` and
+`scenario push`, where the LLM can reconcile remote additions with the local
+version bump, preserve both sets of entries, and update metadata without losing
+catalog records.
 
 ### Current Anchors
 

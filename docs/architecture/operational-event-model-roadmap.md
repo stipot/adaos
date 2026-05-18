@@ -24,6 +24,9 @@ Use these documents as the authoritative sources for detailed design:
   completion definition for implementing the model correctly.
 - [Projection Subscription Roadmap](projection-subscription-roadmap.md)
   Detailed checklist for projection ABI, client demand registration, dispatcher behavior, and migration work.
+- [Skill Projection Runtime SDK](skill-projection-runtime-sdk.md)
+  Skill-facing SDK/core rails for projection slots, stream receivers, dirty
+  routing, set-if-changed Yjs writes, and migration checklists.
 - [Infrascope Roadmap](infrascope-roadmap.md)
   Operator-workspace sequencing and the later heavy-skill migration target.
 - [Webspace Scenario Pointer/Projection Roadmap](webspace-scenario-pointer-projection-roadmap.md)
@@ -77,6 +80,8 @@ Use the documents this way:
   gates.
 - `Projection Subscription Roadmap` expands phases 3, 4, 5, 7, 8, and 9 into
   concrete client/projection/dispatcher checklists.
+- `Skill Projection Runtime SDK` expands the SDK/core helper layer needed by
+  phases 5, 8, 9, and the `browsers_skill`/`infrastate_skill` migrations.
 - `issue-tracker.md` records current execution tasks, incidents, and acceptance
   evidence.
 

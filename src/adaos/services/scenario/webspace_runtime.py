@@ -985,10 +985,12 @@ def _apply_node_context_to_ui(
         data["dataSource"] = _scope_node_data_source(data.get("dataSource"), node_id=node_id)
     if isinstance(data.get("source"), str):
         data["source"] = node_scope_data_path(str(data.get("source") or ""), node_id)
-    if modal_id_map and isinstance(data.get("launchModal"), str):
+    if isinstance(data.get("launchModal"), str):
         modal_id = str(data.get("launchModal") or "").strip()
-        if modal_id in modal_id_map:
+        if modal_id_map and modal_id in modal_id_map:
             data["launchModal"] = modal_id_map[modal_id]
+        elif modal_id:
+            data["launchModal"] = _node_scoped_catalog_id(node_id, modal_id)
     return data
 
 
@@ -1002,7 +1004,11 @@ def _node_scoped_modal_ids(registry: Mapping[str, Any], *, node_id: str) -> Dict
     for key in modals.keys():
         token = str(key or "").strip()
         if token:
-            out[token] = _node_scoped_catalog_id(node_id, token)
+            scoped = _node_scoped_catalog_id(node_id, token)
+            out[token] = scoped
+            stripped = _strip_node_scoped_catalog_prefix(token)
+            if stripped:
+                out[stripped] = scoped
     return out
 
 
@@ -1102,15 +1108,15 @@ def _local_catalog_decl_entries(decls: List[Dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def build_local_desktop_catalog_snapshot(*, mode: str = "workspace") -> dict[str, Any]:
+def build_local_desktop_catalog_snapshot(*, mode: str = "workspace", include_remote: bool = True) -> dict[str, Any]:
     runtime = WebspaceScenarioRuntime()
-    snapshot = _local_catalog_decl_entries(runtime._collect_skill_decls(mode=mode))
+    snapshot = _local_catalog_decl_entries(runtime._collect_skill_decls(mode=mode, include_remote=include_remote))
     return _overlay_current_ydoc_defaults(snapshot, webspace_id=default_webspace_id())
 
 
-async def build_local_desktop_catalog_snapshot_async(*, mode: str = "workspace") -> dict[str, Any]:
+async def build_local_desktop_catalog_snapshot_async(*, mode: str = "workspace", include_remote: bool = True) -> dict[str, Any]:
     runtime = WebspaceScenarioRuntime()
-    snapshot = _local_catalog_decl_entries(runtime._collect_skill_decls(mode=mode))
+    snapshot = _local_catalog_decl_entries(runtime._collect_skill_decls(mode=mode, include_remote=include_remote))
     return await _overlay_current_ydoc_defaults_async(snapshot, webspace_id=default_webspace_id())
 
 
@@ -1264,6 +1270,29 @@ def _node_scoped_entry_node_id(item_id: Any) -> str | None:
     return node_id or None
 
 
+def _node_scoped_data_path_node_id(path: Any) -> str | None:
+    raw = str(path or "").strip()
+    if raw.startswith("y:"):
+        raw = raw[2:]
+    parts = [part for part in raw.split("/") if part]
+    if len(parts) < 3 or parts[0] != "data" or parts[1] != "nodes":
+        return None
+    node_id = str(parts[2] or "").strip()
+    return node_id or None
+
+
+def _catalog_entry_is_foreign_relay(entry: Mapping[str, Any], *, node_id: str) -> bool:
+    entry_node_id = _node_scoped_entry_node_id(entry.get("id"))
+    if entry_node_id and entry_node_id != str(node_id or "").strip():
+        return True
+    source = str(entry.get("origin") or entry.get("source") or "").strip()
+    if source.startswith("skill:subnet.member."):
+        source_node_id = source.removeprefix("skill:subnet.member.").strip()
+        if source_node_id and source_node_id != str(node_id or "").strip():
+            return True
+    return False
+
+
 def _preserve_live_remote_catalog_entries(
     merged: List[Dict[str, Any]],
     *,
@@ -1337,11 +1366,14 @@ def _preserve_live_remote_registry_tokens(
 def _scope_remote_catalog_entry_id(entry: Dict[str, Any], *, node_id: str) -> Dict[str, Any]:
     data = dict(entry)
     remote_node_id = str(node_id or "").strip()
-    local_item_id = str(data.get("id") or "").strip()
+    local_item_id = _strip_node_scoped_catalog_prefix(str(data.get("id") or "").strip())
     if not remote_node_id or not local_item_id:
         return data
-    data.setdefault("node_local_id", local_item_id)
-    data.setdefault("remote_id", local_item_id)
+    canonical_local_id = _strip_node_scoped_catalog_prefix(
+        str(data.get("node_local_id") or data.get("remote_id") or local_item_id).strip()
+    )
+    data["node_local_id"] = canonical_local_id or local_item_id
+    data["remote_id"] = canonical_local_id or local_item_id
     data["id"] = _node_scoped_catalog_id(remote_node_id, local_item_id)
     return data
 
@@ -2999,7 +3031,7 @@ class WebspaceScenarioRuntime:
             _WEBUI_DECL_CACHE[cache_key] = (stamp, payload)
         return payload
 
-    def _collect_skill_decls(self, mode: str = "mixed") -> List[Dict[str, Any]]:
+    def _collect_skill_decls(self, mode: str = "mixed", *, include_remote: bool = True) -> List[Dict[str, Any]]:
         try:
             cap = get_local_capacity()
             skills = cap.get("skills") or []
@@ -3051,7 +3083,7 @@ class WebspaceScenarioRuntime:
         if isinstance(desktop_decl, dict) and desktop_decl:
             decls.append(desktop_decl)
 
-        if mode != "dev":
+        if include_remote and mode != "dev":
             decls.extend(self._collect_remote_skill_decls())
 
         return decls
@@ -3152,9 +3184,14 @@ class WebspaceScenarioRuntime:
             for path, value in ydoc_defaults.items():
                 token = str(path or "").strip()
                 if token:
+                    scoped_node_id = _node_scoped_data_path_node_id(token)
+                    if scoped_node_id and scoped_node_id != node_id:
+                        continue
                     decl["ydoc_defaults"][node_scope_data_path(token, node_id)] = _clone_json_like(value)
             for item in apps:
                 if not isinstance(item, dict):
+                    continue
+                if _catalog_entry_is_foreign_relay(item, node_id=node_id):
                     continue
                 entry = _scope_remote_catalog_entry_id(
                     _apply_node_context_to_ui(item, display, node_id=node_id, modal_id_map=modal_id_map),
@@ -3174,6 +3211,8 @@ class WebspaceScenarioRuntime:
             for item in widgets:
                 if not isinstance(item, dict):
                     continue
+                if _catalog_entry_is_foreign_relay(item, node_id=node_id):
+                    continue
                 entry = _scope_remote_catalog_entry_id(
                     _apply_node_context_to_ui(item, display, node_id=node_id, modal_id_map=modal_id_map),
                     node_id=node_id,
@@ -3189,7 +3228,15 @@ class WebspaceScenarioRuntime:
                             "autoInstall": True,
                         }
                     )
-            decls.append(decl)
+            if (
+                decl["apps"]
+                or decl["widgets"]
+                or decl["registry"]["modals"]
+                or decl["registry"]["widgets"]
+                or decl["webio"]["receivers"]
+                or decl["ydoc_defaults"]
+            ):
+                decls.append(decl)
         return decls
 
     def _apply_ydoc_defaults_in_txn(self, ydoc: Y.YDoc, txn: Any, decls: List[Dict[str, Any]]) -> None:  # type: ignore[override]

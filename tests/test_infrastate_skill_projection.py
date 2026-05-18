@@ -101,11 +101,42 @@ def test_infrastate_node_tabs_keep_offline_member_selected():
     }
 
     tabs, selected = mod._node_tabs(_Conf(), {"selected_node_id": "member-1"}, reliability)
+    local_tab = next(item for item in tabs if item["id"] == "hub-1")
+    member_tab = next(item for item in tabs if item["id"] == "member-1")
 
     assert any(item["id"] == "member-1" for item in tabs)
     assert selected["node_id"] == "member-1"
     assert selected["kind"] == "member"
     assert selected["connected"] is False
+    assert local_tab["node_status"] == "online"
+    assert member_tab["node_status"] == "offline"
+
+
+def test_infrastate_compact_summary_keeps_full_description():
+    mod = _load_infrastate_module()
+
+    description = "state=" + ("ready|" * 1000)
+    compact = mod._compact_summary_for_yjs({"description": description})
+
+    assert compact["description"] == description
+    assert "truncated; full diagnostics" not in compact["description"]
+
+
+def test_infrastate_compact_snapshot_excludes_yjs_controls():
+    mod = _load_infrastate_module()
+
+    compact = mod._compact_snapshot_for_yjs(
+        {
+            "summary": {"description": "ok"},
+            "core_actions": [{"id": "refresh", "title": "Refresh"}],
+            "yjs_actions": [{"id": "yjs_reset", "title": "Yjs reset"}],
+            "yjs_webspaces": [{"id": "default", "label": "default *"}],
+        }
+    )
+
+    assert "core_actions" in compact
+    assert "yjs_actions" not in compact
+    assert "yjs_webspaces" not in compact
 
 
 def test_infrastate_update_actions_use_member_label():
@@ -288,6 +319,73 @@ def test_infrastate_compact_snapshot_keeps_semantic_state_plane_contracts():
     assert runtime["connectivity"]["required_upstream_link"]["kind"] == "hub_root"
     assert runtime["state_sync"]["semantic_state"] == "stale"
     assert runtime["yjs_pressure"]["policy_state"] == "throttle"
+
+
+def test_infrastate_reliability_compaction_strips_heavy_runtime_payloads():
+    mod = _load_infrastate_module()
+
+    compact = mod._compact_reliability_for_infrastate(
+        {
+            "ok": True,
+            "runtime": {
+                "sync_runtime": {
+                    "selected_webspace_id": "desktop",
+                    "assessment": {"state": "pressure"},
+                    "transport": {"room_total": 1},
+                    "load_mark": {
+                        "assessment": {"state": "critical"},
+                        "selected_webspace": {"recent_bytes_total": 42},
+                        "webspaces": {"desktop": {"owners": {"huge": "tree"}}},
+                    },
+                    "webspaces": {
+                        "desktop": {
+                            "webspace_id": "desktop",
+                            "update_log_entries": 7,
+                            "oversized": {"x": list(range(20))},
+                        },
+                        "other": {"update_log_entries": 99},
+                    },
+                    "selected_webspace": {
+                        "webspace_id": "desktop",
+                        "rebuild": {
+                            "status": "ready",
+                            "materialization": {
+                                "ready": True,
+                                "registry": {"large": "omitted"},
+                                "catalog_counts": {"apps": 3},
+                            },
+                        },
+                    },
+                },
+                "hub_member_connection_state": {
+                    "role": "hub",
+                    "known_members": [
+                        {
+                            "node_id": "member-1",
+                            "connected": True,
+                            "node_snapshot": {
+                                "build": {"version": "1"},
+                                "desktop_catalog": {
+                                    "apps": [{"id": "a"}],
+                                    "registry": {"modals": {"m": {"very": "large"}}},
+                                },
+                            },
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    sync = compact["runtime"]["sync_runtime"]
+    assert sync["webspaces"] == {"desktop": {"webspace_id": "desktop", "update_log_entries": 7}}
+    assert "webspaces" not in sync["load_mark"]
+    assert sync["selected_webspace"]["rebuild"]["materialization"] == {
+        "ready": True,
+        "catalog_counts": {"apps": 3},
+    }
+    member_snapshot = compact["runtime"]["hub_member_connection_state"]["known_members"][0]["node_snapshot"]
+    assert member_snapshot["desktop_catalog"] == {"apps_total": 1, "modal_total": 1, "captured_at": None}
 
 
 def test_infrastate_reliability_summary_note_prefers_semantic_state_plane_contracts():
@@ -975,13 +1073,135 @@ def test_infrastate_scenario_items_only_show_installed_registry_entries(monkeypa
             ]
         ),
     )
+    monkeypatch.setattr(
+        mod,
+        "get_local_capacity",
+        lambda: {"scenarios": [{"name": "delta", "version": "4.0.0", "active": True, "updated_at": 4.0}]},
+    )
 
-    items = mod._scenario_items()
+    monkeypatch.setattr(mod, "_REMOTE_VERSION_PROBE_ENABLED", False)
 
-    assert items == [
-        {"name": "alpha", "version": "1.2.3", "updated_at": 1.0, "uninstall_disabled": False},
-        {"name": "gamma", "version": "3.0.0", "updated_at": 2.0, "uninstall_disabled": False},
+    all_items = mod._scenario_items(include_all=True)
+    assert [(item["name"], item["version"]) for item in all_items] == [
+        ("alpha", "1.0.0"),
+        ("delta", "4.0.0"),
+        ("gamma", "3.0.0"),
     ]
+    assert all_items[0]["workspace_source_version"] == "1.2.3"
+    assert all_items[0]["has_drift"] is True
+
+    default_items = mod._scenario_items()
+    assert [(item["name"], item["version"]) for item in default_items] == [
+        ("alpha", "1.0.0"),
+        ("delta", "4.0.0"),
+        ("gamma", "3.0.0"),
+    ]
+
+    drift_items = mod._filter_inventory_drift(default_items, drift_only=True)
+    assert [item["name"] for item in drift_items] == ["alpha"]
+
+
+def test_infrastate_inventory_stream_honors_drift_only_toggle(monkeypatch):
+    mod = _load_infrastate_module()
+    rows = [
+        {"name": "aligned", "has_drift": False},
+        {"name": "behind", "has_drift": True},
+    ]
+    monkeypatch.setattr(mod, "_skills_items", lambda *, include_all=True: list(rows))
+    monkeypatch.setattr(mod, "_ui_state", lambda: {"inventory_drift_only": False})
+
+    all_rows = mod._build_stream_payload_for_receiver(mod._skills_receiver())
+    assert [item["name"] for item in all_rows] == ["aligned", "behind"]
+
+    monkeypatch.setattr(mod, "_ui_state", lambda: {"inventory_drift_only": True})
+    drift_rows = mod._build_stream_payload_for_receiver(mod._skills_receiver())
+    assert [item["name"] for item in drift_rows] == ["behind"]
+
+
+def test_infrastate_catalog_record_exposes_source_and_commit(monkeypatch, tmp_path: Path):
+    mod = _load_infrastate_module()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    mod._registry_catalog_cache.clear()
+    mod._registry_catalog_meta_cache.clear()
+
+    monkeypatch.setattr(mod, "_REMOTE_VERSION_PROBE_ENABLED", True)
+    monkeypatch.setattr(mod, "_allow_marketplace_remote_fetch", lambda: False)
+    monkeypatch.setattr(mod, "_allow_marketplace_git_ref_lookup", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "_registry_payload_from_git_ref",
+        lambda workspace_root: {"skills": [{"id": "demo_skill", "version": "1.2.3"}]},
+    )
+    monkeypatch.setattr(mod, "_registry_ref_config", lambda: ("origin", "main"))
+    monkeypatch.setattr(mod, "_registry_git_ref_commit", lambda workspace_root, *, remote, branch: "abc123")
+    monkeypatch.setattr(
+        mod,
+        "get_ctx",
+        lambda: SimpleNamespace(paths=SimpleNamespace(workspace_dir=lambda: workspace)),
+    )
+
+    record = mod._read_catalog_record(kind_plural="skills", artifact_id="demo_skill")
+
+    assert record == {
+        "version": "1.2.3",
+        "catalog_source": "git_ref:origin/main",
+        "catalog_commit": "abc123",
+        "catalog_state": "available",
+    }
+
+
+def test_infrastate_catalog_record_reports_no_git(monkeypatch, tmp_path: Path):
+    mod = _load_infrastate_module()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    mod._registry_catalog_cache.clear()
+    mod._registry_catalog_meta_cache.clear()
+
+    monkeypatch.setattr(mod, "_REMOTE_VERSION_PROBE_ENABLED", True)
+    monkeypatch.setattr(mod, "_allow_marketplace_remote_fetch", lambda: False)
+    monkeypatch.setattr(mod, "_allow_marketplace_git_ref_lookup", lambda: True)
+    monkeypatch.setattr(mod.shutil, "which", lambda name: None)
+    monkeypatch.setattr(mod, "_marketplace_catalog_entries", lambda kind: [])
+    monkeypatch.setattr(
+        mod,
+        "get_ctx",
+        lambda: SimpleNamespace(paths=SimpleNamespace(workspace_dir=lambda: workspace)),
+    )
+
+    record = mod._read_catalog_record(kind_plural="skills", artifact_id="demo_skill")
+
+    assert record["version"] == ""
+    assert record["catalog_source"] == "no_git"
+    assert record["catalog_state"] == "no_git"
+
+
+def test_infrastate_version_status_marks_catalog_unknown_and_no_git():
+    mod = _load_infrastate_module()
+
+    unknown = mod._version_status(
+        artifact_kind="skill",
+        catalog_version="",
+        catalog_source="git_ref:origin/main",
+        catalog_state="unknown",
+        workspace_source_version="1.0.0",
+        active_version="1.0.0",
+        active=True,
+    )
+    no_git = mod._version_status(
+        artifact_kind="skill",
+        catalog_version="",
+        catalog_source="no_git",
+        catalog_state="no_git",
+        workspace_source_version="1.0.0",
+        active_version="1.0.0",
+        active=True,
+    )
+
+    assert unknown["status"] == "catalog_unknown"
+    assert unknown["has_drift"] is True
+    assert no_git["status"] == "git_unavailable"
+    assert no_git["has_drift"] is True
 
 
 def test_infrastate_skill_items_use_registry_and_workspace_versions(monkeypatch, tmp_path: Path):
@@ -1014,7 +1234,21 @@ def test_infrastate_skill_items_use_registry_and_workspace_versions(monkeypatch,
         ),
     )
     monkeypatch.setattr(mod, "SqliteSkillRegistry", lambda sql: SimpleNamespace(list=lambda: [_SkillRecord("infrastate_skill", "0.18.0")]))
-    monkeypatch.setattr(mod, "SkillManager", lambda **kwargs: SimpleNamespace(runtime_status=lambda name: {"active_slot": "A"}))
+    monkeypatch.setattr(
+        mod,
+        "SkillManager",
+        lambda **kwargs: SimpleNamespace(
+            runtime_status=lambda name: {"active_slot": "A", "version": "0.19.0", "runtime_bucket": "v0.19"}
+        ),
+    )
+    monkeypatch.setattr(mod, "_REMOTE_VERSION_PROBE_ENABLED", True)
+    monkeypatch.setattr(
+        mod,
+        "_registry_json_catalog_entries",
+        lambda kind, workspace_root: [{"id": "infrastate_skill", "name": "infrastate_skill", "version": "0.20.0"}]
+        if kind == "skills"
+        else [],
+    )
     monkeypatch.setattr(
         mod,
         "_marketplace_catalog_entries",
@@ -1023,25 +1257,88 @@ def test_infrastate_skill_items_use_registry_and_workspace_versions(monkeypatch,
 
     items = mod._skills_items()
 
-    assert items == [
-        {
-            "name": "infrastate_skill",
-            "display_name": "infrastate_skill *",
-            "version": "0.19.0",
-            "version_display": "0.19.0 (0.20.0)",
-            "slot": "A",
-            "active": True,
-            "can_activate": True,
-            "can_test": True,
-            "used_by_scenarios": [],
-            "uninstall_disabled": False,
-            "remote_version": "0.20.0",
-            "update_available": True,
-        }
-    ]
+    assert len(items) == 1
+    item = items[0]
+    assert item["name"] == "infrastate_skill"
+    assert item["version"] == "0.19.0"
+    assert item["active_version"] == "0.19.0"
+    assert item["workspace_source_version"] == "0.19.0"
+    assert item["catalog_version"] == "0.20.0"
+    assert item["catalog_source"] == "registry_json"
+    assert item["catalog_commit"] == ""
+    assert item["catalog_state"] == "available"
+    assert item["runtime_bucket"] == "v0.19"
+    assert item["version_display"] == "0.19.0* (0.20.0)"
+    assert item["slot"] == "A"
+    assert item["remote_version"] == "0.20.0"
+    assert item["update_available"] is True
+    assert item["registry_mismatch"] is True
+    assert item["has_drift"] is True
+    assert item["can_activate"] is False
+    assert item["status"] == "behind_catalog"
+    assert item["status_icon"] == "cloud-download-outline"
+    assert "behind catalog" in item["status_tooltip"]
 
 
-def test_infrastate_skill_items_skip_remote_version_probe_by_default(monkeypatch, tmp_path: Path):
+def test_infrastate_skill_items_compare_remote_against_active_runtime_version(monkeypatch, tmp_path: Path):
+    mod = _load_infrastate_module()
+    workspace = tmp_path / "workspace"
+    skill_dir = workspace / "skills" / "infrastate_skill"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "skill.yaml").write_text("id: infrastate_skill\nversion: '0.20.0'\n", encoding="utf-8")
+
+    class _SkillRecord:
+        name = "infrastate_skill"
+        active_version = "0.19.0"
+        installed = True
+
+    monkeypatch.setattr(
+        mod,
+        "get_ctx",
+        lambda: SimpleNamespace(
+            sql=object(),
+            git=object(),
+            paths=SimpleNamespace(workspace_dir=lambda: workspace),
+            bus=None,
+            caps=object(),
+            settings=object(),
+            skills_repo=object(),
+        ),
+    )
+    monkeypatch.setattr(mod, "SqliteSkillRegistry", lambda sql: SimpleNamespace(list=lambda: [_SkillRecord()]))
+    monkeypatch.setattr(
+        mod,
+        "SkillManager",
+        lambda **kwargs: SimpleNamespace(
+            runtime_status=lambda name: {"active_slot": "A", "version": "0.19.0", "runtime_bucket": "v0.19"}
+        ),
+    )
+    monkeypatch.setattr(mod, "_REMOTE_VERSION_PROBE_ENABLED", True)
+    monkeypatch.setattr(
+        mod,
+        "_registry_json_catalog_entries",
+        lambda kind, workspace_root: [{"id": "infrastate_skill", "name": "infrastate_skill", "version": "0.20.0"}]
+        if kind == "skills"
+        else [],
+    )
+
+    items = mod._skills_items()
+
+    assert items[0]["version"] == "0.19.0"
+    assert items[0]["remote_version"] == "0.20.0"
+    assert items[0]["active_version"] == "0.19.0"
+    assert items[0]["workspace_source_version"] == "0.20.0"
+    assert items[0]["catalog_version"] == "0.20.0"
+    assert items[0]["catalog_source"] == "registry_json"
+    assert items[0]["catalog_state"] == "available"
+    assert items[0]["runtime_bucket"] == "v0.19"
+    assert items[0]["version_display"] == "0.19.0* (0.20.0)"
+    assert items[0]["registry_mismatch"] is True
+    assert items[0]["has_drift"] is True
+    assert items[0]["can_activate"] is True
+
+
+def test_infrastate_skill_items_skip_remote_version_probe_when_disabled(monkeypatch, tmp_path: Path):
     mod = _load_infrastate_module()
     workspace = tmp_path / "workspace"
     skill_dir = workspace / "skills" / "infrastate_skill"
@@ -1079,6 +1376,11 @@ def test_infrastate_skill_items_skip_remote_version_probe_by_default(monkeypatch
 
     assert items[0]["remote_version"] == ""
     assert items[0]["update_available"] is False
+    assert items[0]["registry_mismatch"] is False
+    assert items[0]["version_display"] == "0.18.0"
+    assert items[0]["workspace_source_version"] == "0.19.0"
+    assert items[0]["has_drift"] is True
+    assert items[0]["status"] == "workspace_runtime_differs"
 
 
 def test_infrastate_marketplace_catalog_skips_remote_url_fetch_on_member(monkeypatch, tmp_path: Path):
@@ -1237,6 +1539,8 @@ def test_infrastate_marketplace_catalog_prefers_remote_registry_and_local_scan(m
         "get_ctx",
         lambda: SimpleNamespace(paths=SimpleNamespace(workspace_dir=lambda: workspace)),
     )
+    monkeypatch.setattr(mod, "load_config", lambda: SimpleNamespace(role="hub"))
+    monkeypatch.setattr(mod, "_registry_payload_from_url", lambda: None)
     monkeypatch.setattr(mod, "list_workspace_registry_entries", lambda *args, **kwargs: [])
     monkeypatch.setattr(
         mod.subprocess,
@@ -1264,6 +1568,8 @@ def test_infrastate_marketplace_catalog_uses_ttl_cache(monkeypatch, tmp_path: Pa
         "get_ctx",
         lambda: SimpleNamespace(paths=SimpleNamespace(workspace_dir=lambda: workspace)),
     )
+    monkeypatch.setattr(mod, "load_config", lambda: SimpleNamespace(role="hub"))
+    monkeypatch.setattr(mod, "_registry_payload_from_url", lambda: None)
     monkeypatch.setattr(mod, "list_workspace_registry_entries", lambda *args, **kwargs: [])
     monkeypatch.setattr(mod, "_MARKETPLACE_CACHE_TTL_S", 30.0)
     mod._marketplace_catalog_cache.clear()
@@ -1352,12 +1658,12 @@ def test_infrastate_realtime_items_include_semantic_state_plane_cards():
 
 def test_infrastate_project_async_skips_snapshot_with_only_timestamp_changes(monkeypatch):
     mod = _load_infrastate_module()
-    applied: list[tuple[str | None, str]] = []
+    applied: list[tuple[str | None, str, object]] = []
     mod._projection_fingerprints.clear()
     mod._projection_diag.update({"apply_total": 0, "skip_total": 0, "cache_hit_total": 0})
 
     async def _fake_set_async(slot, value, *, user_id=None, webspace_id=None):
-        applied.append((webspace_id, str(value.get("summary", {}).get("value") or "")))
+        applied.append((webspace_id, slot, value))
 
     monkeypatch.setattr(mod, "ctx_subnet", SimpleNamespace(set_async=_fake_set_async))
     monkeypatch.setattr(mod, "_projection_webspace_ids", lambda webspace_id=None: ["default"])
@@ -1379,14 +1685,14 @@ def test_infrastate_project_async_skips_snapshot_with_only_timestamp_changes(mon
     asyncio.run(mod._project_async(first, webspace_id="default"))
     asyncio.run(mod._project_async(second, webspace_id="default"))
 
-    assert applied == [("default", "ready")]
+    assert applied == [("default", "infrastate.summary", {"value": "ready"})]
     assert mod._projection_diag["apply_total"] == 1
     assert mod._projection_diag["skip_total"] == 1
 
 
 def test_infrastate_project_async_uses_throttled_interval_when_yjs_policy_requires(monkeypatch):
     mod = _load_infrastate_module()
-    applied: list[tuple[str | None, str]] = []
+    applied: list[tuple[str | None, str, object]] = []
     mod._projection_fingerprints.clear()
     mod._projection_last_applied_at.clear()
     mod._projection_diag.update(
@@ -1404,7 +1710,7 @@ def test_infrastate_project_async_uses_throttled_interval_when_yjs_policy_requir
     )
 
     async def _fake_set_async(slot, value, *, user_id=None, webspace_id=None):
-        applied.append((webspace_id, str(value.get("summary", {}).get("value") or "")))
+        applied.append((webspace_id, slot, value))
 
     monkeypatch.setattr(mod, "ctx_subnet", SimpleNamespace(set_async=_fake_set_async))
     monkeypatch.setattr(mod, "_projection_webspace_ids", lambda webspace_id=None: ["default"])
@@ -1423,7 +1729,7 @@ def test_infrastate_project_async_uses_throttled_interval_when_yjs_policy_requir
     asyncio.run(mod._project_async(first, webspace_id="default"))
     asyncio.run(mod._project_async(second, webspace_id="default"))
 
-    assert applied == [("default", "ready-1")]
+    assert applied == [("default", "infrastate.summary", {"value": "ready-1"})]
     assert mod._projection_diag["apply_total"] == 1
     assert mod._projection_diag["rate_limited_total"] == 1
 
@@ -1479,15 +1785,38 @@ def test_infrastate_project_async_blocks_primary_yjs_projection_but_keeps_stream
     assert mod._projection_diag["blocked_total"] == 1
 
 
+def test_infrastate_get_snapshot_project_false_does_not_project_fallback(monkeypatch):
+    mod = _load_infrastate_module()
+
+    monkeypatch.setattr(
+        mod,
+        "_snapshot_or_fallback_cached",
+        lambda **_kwargs: {
+            "fallback": True,
+            "summary": {"value": "degraded"},
+            "projection_diag": {},
+        },
+    )
+    monkeypatch.setattr(
+        mod,
+        "_project",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("project should not run")),
+    )
+
+    result = mod.get_snapshot(webspace_id="desktop", project=False)
+
+    assert result["summary"]["value"] == "degraded"
+
+
 def test_infrastate_project_async_excludes_stream_sections_from_yjs(monkeypatch):
     mod = _load_infrastate_module()
-    projected: list[dict[str, object]] = []
+    projected: list[tuple[str, object]] = []
     published: list[tuple[str, object, str | None]] = []
     mod._projection_fingerprints.clear()
     mod._projection_diag.update({"apply_total": 0, "skip_total": 0, "cache_hit_total": 0})
 
     async def _fake_set_async(slot, value, *, user_id=None, webspace_id=None):
-        projected.append(value)
+        projected.append((slot, value))
 
     monkeypatch.setattr(mod, "ctx_subnet", SimpleNamespace(set_async=_fake_set_async))
     monkeypatch.setattr(mod, "_projection_webspace_ids", lambda webspace_id=None: ["default"])
@@ -1508,20 +1837,11 @@ def test_infrastate_project_async_excludes_stream_sections_from_yjs(monkeypatch)
     asyncio.run(mod._project_async(snapshot, webspace_id="default"))
 
     assert projected == [
-        {
-            "summary": {"value": "ready"},
-            "operations": {"active": [{"id": "op-1"}]},
-        }
+        ("infrastate.summary", {"value": "ready"}),
+        ("infrastate.operations.active", [{"id": "op-1"}]),
     ]
     assert published == [
         ("infrastate.operations.active", [{"id": "op-1"}], "default"),
-        ("infrastate.logs.recent", [{"id": "log-1"}], "default"),
-        ("infrastate.events.recent", [{"id": "evt-1"}], "default"),
-        (
-            "infrastate.yjs.load_mark",
-            [{"root": "data", "kind": "root", "id": "data", "display": "data"}],
-            "default",
-        ),
     ]
 
 
@@ -1571,8 +1891,8 @@ def test_infrastate_stream_snapshot_request_publishes_requested_receiver(monkeyp
     )
     monkeypatch.setattr(
         mod,
-        "_publish_stream_payload",
-        lambda *, receiver, data, webspace_id=None, force=False: published.append((receiver, data, webspace_id)),
+        "stream_publish",
+        lambda receiver, data, _meta=None, **kwargs: published.append((receiver, data, (_meta or {}).get("webspace_id"))) or {"ok": True},
     )
 
     mod.on_webio_stream_snapshot_requested(
@@ -1588,6 +1908,44 @@ def test_infrastate_stream_snapshot_request_publishes_requested_receiver(monkeyp
         ("infrastate.logs.recent", [{"id": "log-1"}], "default"),
     ]
     assert cache_flags == [True]
+
+
+def test_infrastate_operations_stream_request_uses_direct_sdk_builder(monkeypatch):
+    mod = _load_infrastate_module()
+    published: list[tuple[str, object, str | None]] = []
+
+    monkeypatch.setattr(
+        mod,
+        "_snapshot_or_fallback_cached",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("operations stream should not build full snapshot")),
+    )
+    monkeypatch.setattr(
+        mod,
+        "get_operation_manager",
+        lambda: SimpleNamespace(
+            snapshot=lambda webspace_id=None: {
+                "active_items": [{"id": "op-1", "webspace_id": webspace_id}],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "stream_publish",
+        lambda receiver, data, _meta=None, **kwargs: published.append((receiver, data, (_meta or {}).get("webspace_id"))) or {"ok": True},
+    )
+
+    mod.on_webio_stream_snapshot_requested(
+        SimpleNamespace(
+            payload={
+                "receiver": "infrastate.operations.active",
+                "webspace_id": "default",
+            }
+        )
+    )
+
+    assert published == [
+        ("infrastate.operations.active", [{"id": "op-1", "webspace_id": "default"}], "default"),
+    ]
 
 
 def test_infrastate_stream_snapshot_request_bypasses_noncritical_guardrail(monkeypatch):
@@ -1676,8 +2034,8 @@ def test_infrastate_stream_snapshot_request_supports_yjs_load_mark(monkeypatch):
     )
     monkeypatch.setattr(
         mod,
-        "_publish_stream_payload",
-        lambda *, receiver, data, webspace_id=None, force=False: published.append((receiver, data, webspace_id)),
+        "stream_publish",
+        lambda receiver, data, _meta=None, **kwargs: published.append((receiver, data, (_meta or {}).get("webspace_id"))) or {"ok": True},
     )
 
     mod.on_webio_stream_snapshot_requested(
@@ -1721,8 +2079,8 @@ def test_infrastate_stream_snapshot_request_supports_yjs_load_mark_from_reliabil
     )
     monkeypatch.setattr(
         mod,
-        "_publish_stream_payload",
-        lambda *, receiver, data, webspace_id=None, force=False: published.append((receiver, data, webspace_id)),
+        "stream_publish",
+        lambda receiver, data, _meta=None, **kwargs: published.append((receiver, data, (_meta or {}).get("webspace_id"))) or {"ok": True},
     )
 
     mod.on_webio_stream_snapshot_requested(

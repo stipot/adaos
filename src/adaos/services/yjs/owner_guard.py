@@ -33,12 +33,15 @@ def _int_env(name: str, default: int, minimum: int = 0) -> int:
 
 _ENABLED = _bool_env("ADAOS_YJS_OWNER_GUARD_ENABLE", True)
 _QUARANTINE_ENABLE = _bool_env("ADAOS_YJS_OWNER_QUARANTINE_ENABLE", True)
-_QUARANTINE_TTL_S = _float_env("ADAOS_YJS_OWNER_QUARANTINE_TTL_S", 45.0, 1.0)
+_QUARANTINE_TTL_S = _float_env("ADAOS_YJS_OWNER_QUARANTINE_TTL_S", 300.0, 1.0)
+_QUARANTINE_MAX_TTL_S = _float_env("ADAOS_YJS_OWNER_QUARANTINE_MAX_TTL_S", 1800.0, 1.0)
+_QUARANTINE_ESCALATION_WINDOW_S = _float_env("ADAOS_YJS_OWNER_QUARANTINE_ESCALATION_WINDOW_S", 3600.0, 1.0)
 _THROTTLE_STREAK_LIMIT = _int_env("ADAOS_YJS_OWNER_QUARANTINE_THROTTLE_STREAK", 8, 1)
 
 _LOCK = threading.RLock()
 _DECISIONS: dict[str, dict[str, Any]] = {}
 _QUARANTINES: dict[str, dict[str, Any]] = {}
+_QUARANTINE_INCIDENTS: dict[str, dict[str, Any]] = {}
 _QUARANTINE_TOTAL = 0
 _DENIED_TOTAL = 0
 _SERVICE_NODE_NAME = "yjs_qrnt"
@@ -138,6 +141,25 @@ def _active_quarantine_locked(key: str, now: float) -> dict[str, Any] | None:
     return None
 
 
+def _next_quarantine_ttl_locked(key: str, *, now: float, requested_ttl_s: float | None) -> tuple[float, int]:
+    base_ttl = max(1.0, float(requested_ttl_s if requested_ttl_s is not None else _QUARANTINE_TTL_S))
+    incident = dict(_QUARANTINE_INCIDENTS.get(key) or {})
+    last_at = float(incident.get("last_at") or 0.0)
+    incident_count = int(incident.get("incident_count") or 0)
+    if last_at <= 0.0 or now - last_at > _QUARANTINE_ESCALATION_WINDOW_S:
+        incident_count = 0
+    incident_count += 1
+    _QUARANTINE_INCIDENTS[key] = {
+        "incident_count": incident_count,
+        "last_at": now,
+        "base_ttl_s": base_ttl,
+    }
+    if requested_ttl_s is not None:
+        return base_ttl, incident_count
+    multiplier = 2 ** max(0, incident_count - 1)
+    return min(_QUARANTINE_MAX_TTL_S, base_ttl * multiplier), incident_count
+
+
 def _quarantine_public_row(row: Mapping[str, Any], *, now: float) -> dict[str, Any]:
     owner = str(row.get("owner") or "").strip()
     skill = owner.split(":", 1)[1] if owner.startswith("skill:") else ""
@@ -158,6 +180,7 @@ def _quarantine_public_row(row: Mapping[str, Any], *, now: float) -> dict[str, A
         "channel": str(row.get("channel") or "").strip() or None,
         "work_kind": str(row.get("work_kind") or "").strip() or None,
         "tool": str(row.get("tool") or "").strip() or None,
+        "incident_count": int(row.get("incident_count") or 0) or None,
         "root_names": list(row.get("root_names") or []),
     }
 
@@ -291,7 +314,7 @@ def _activate_quarantine_locked(
 ) -> dict[str, Any]:
     global _QUARANTINE_TOTAL
 
-    ttl = max(1.0, float(ttl_s if ttl_s is not None else _QUARANTINE_TTL_S))
+    ttl, incident_count = _next_quarantine_ttl_locked(key, now=now, requested_ttl_s=ttl_s)
     until = now + ttl
     previous = dict(_QUARANTINES.get(key) or {})
     was_active = float(previous.get("quarantine_until") or 0.0) > now
@@ -302,6 +325,7 @@ def _activate_quarantine_locked(
         "quarantine_until": until,
         "quarantine_ttl_s": ttl,
         "retry_after_s": ttl,
+        "incident_count": incident_count,
         "reason": str(policy.get("reason") or "write_amplification").strip() or "write_amplification",
         "policy_state": str(policy.get("policy_state") or "block").strip().lower() or "block",
         "trigger": str(trigger or "pressure").strip() or "pressure",
@@ -317,11 +341,12 @@ def _activate_quarantine_locked(
     if not was_active:
         _QUARANTINE_TOTAL += 1
         _log.warning(
-            "YJS owner quarantined webspace=%s owner=%s trigger=%s ttl=%.1fs reason=%s path=%s tool=%s",
+            "YJS owner quarantined webspace=%s owner=%s trigger=%s ttl=%.1fs incident=%s reason=%s path=%s tool=%s",
             webspace_id,
             owner,
             row["trigger"],
             ttl,
+            incident_count,
             row["reason"],
             row.get("path") or "-",
             row.get("tool") or "-",
@@ -582,15 +607,37 @@ def admit_owner_work(
     }
 
 
-def admit_skill_tool(*, skill_name: str, tool: str, payload: Mapping[str, Any] | None) -> dict[str, Any]:
+def admit_skill_tool(
+    *,
+    skill_name: str,
+    tool: str,
+    payload: Mapping[str, Any] | None,
+    read_only: bool = False,
+    root_names: Sequence[str] | None = None,
+    path: str = "",
+) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
     webspace_id = str(body.get("webspace_id") or "").strip() or _default_webspace_id()
     owner = skill_owner(skill_name)
+    token_ws = _normalize_webspace(webspace_id)
+    token_owner = _normalize_owner(owner)
+    governed = _governs_owner(token_owner)
+    if read_only:
+        return {
+            "allowed": True,
+            "governed": governed,
+            "read_only": True,
+            "webspace_id": token_ws,
+            "owner": token_owner or None,
+            "policy_state": "read_only",
+            "reason": "read_only_tool",
+            "tool": f"{skill_name}:{tool}",
+        }
     return admit_owner_work(
-        webspace_id=webspace_id,
+        webspace_id=token_ws,
         owner=owner,
-        root_names=[],
-        path="",
+        root_names=root_names or [],
+        path=path,
         source="skill_manager",
         channel="skill.tool",
         work_kind="skill_tool",
@@ -641,6 +688,7 @@ def owner_guard_snapshot(*, webspace_id: str | None = None, owner: str | None = 
         "quarantine_trigger": str(active.get("trigger") or "").strip() or None,
         "quarantine_path": str(active.get("path") or "").strip() or None,
         "quarantine_tool": str(active.get("tool") or "").strip() or None,
+        "quarantine_incident_count": int(active.get("incident_count") or 0) or None,
         "active_quarantines": quarantines[:20],
         "rows": rows[:50],
     }

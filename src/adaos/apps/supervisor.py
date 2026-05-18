@@ -177,23 +177,30 @@ def _memory_telemetry_window_sec() -> float:
 
 
 def _memory_suspicion_growth_threshold_bytes() -> int:
+    default_value = 1024 * 1024 * 1024
+    total_memory = _total_memory_bytes()
+    if total_memory and total_memory > 0:
+        default_value = min(
+            1024 * 1024 * 1024,
+            max(256 * 1024 * 1024, int(float(total_memory) * 0.20)),
+        )
     try:
         return max(
             32 * 1024 * 1024,
-            int(str(os.getenv("ADAOS_SUPERVISOR_MEMORY_GROWTH_BYTES") or str(4 * 1024 * 1024 * 1024)).strip()),
+            int(str(os.getenv("ADAOS_SUPERVISOR_MEMORY_GROWTH_BYTES") or str(default_value)).strip()),
         )
     except Exception:
-        return 4 * 1024 * 1024 * 1024
+        return default_value
 
 
 def _memory_suspicion_slope_threshold_bytes_per_min() -> float:
     try:
         return max(
             float(8 * 1024 * 1024),
-            float(str(os.getenv("ADAOS_SUPERVISOR_MEMORY_SLOPE_BYTES_PER_MIN") or str(1024 * 1024 * 1024)).strip()),
+            float(str(os.getenv("ADAOS_SUPERVISOR_MEMORY_SLOPE_BYTES_PER_MIN") or str(128 * 1024 * 1024)).strip()),
         )
     except Exception:
-        return float(1024 * 1024 * 1024)
+        return float(128 * 1024 * 1024)
 
 
 def _memory_auto_profile_cooldown_sec() -> float:
@@ -206,7 +213,7 @@ def _memory_auto_profile_cooldown_sec() -> float:
 def _memory_policy_profile_restarts_enabled() -> bool:
     raw = os.getenv("ADAOS_SUPERVISOR_MEMORY_POLICY_PROFILE_RESTARTS")
     if raw is None:
-        return False
+        return True
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -1216,6 +1223,14 @@ def _process_family_rss_bytes(pid: int | None) -> tuple[int | None, int | None]:
     return root_rss, family_rss if family_rss > 0 else root_rss
 
 
+def _positive_int_or_none(value: Any) -> int | None:
+    try:
+        item = int(value)
+    except Exception:
+        return None
+    return item if item > 0 else None
+
+
 def _format_slot_value(template: str, values: dict[str, str]) -> str:
     fields = {field_name for _, field_name, _, _ in Formatter().parse(template) if field_name}
     payload = dict(values)
@@ -2222,6 +2237,8 @@ class SupervisorManager:
             return None
         current_time = time.time() if now is None else float(now)
         window_started_at = float(summary.get("profile_window_started_at") or 0.0)
+        if window_started_at <= 0.0 and started_at > 0.0:
+            window_started_at = started_at
         if window_started_at <= 0.0:
             runtime_snapshot = self.status()
             if not bool(runtime_snapshot.get("runtime_api_ready")):
@@ -2343,11 +2360,12 @@ class SupervisorManager:
             if self._memory_last_available_bytes is not None and total_memory_bytes not in {None, 0}
             else None
         )
-        if self._memory_baseline_family_rss_bytes is None:
-            self._memory_baseline_family_rss_bytes = int(family_rss_bytes)
-        elif family_rss_bytes < self._memory_baseline_family_rss_bytes:
-            self._memory_baseline_family_rss_bytes = int(family_rss_bytes)
-        growth_bytes = max(0, int(family_rss_bytes) - int(self._memory_baseline_family_rss_bytes or 0))
+        family_rss_value = int(family_rss_bytes)
+        baseline_family_rss = _positive_int_or_none(self._memory_baseline_family_rss_bytes)
+        if family_rss_value > 0 and (baseline_family_rss is None or family_rss_value < baseline_family_rss):
+            baseline_family_rss = family_rss_value
+        self._memory_baseline_family_rss_bytes = baseline_family_rss
+        growth_bytes = max(0, family_rss_value - baseline_family_rss) if baseline_family_rss is not None else 0
         tail = read_memory_telemetry_tail(limit=256)
         window_start = now - _memory_telemetry_window_sec()
         window = [item for item in tail if float(item.get("sampled_at") or 0.0) >= window_start]
@@ -2368,9 +2386,10 @@ class SupervisorManager:
             if self._memory_suspicion_since is None:
                 self._memory_suspicion_since = now
         elif growth_bytes >= growth_threshold:
-            suspicion_state = "watch"
+            suspicion_state = "suspected"
             suspicion_reason = "growth_threshold"
-            self._memory_suspicion_since = None
+            if self._memory_suspicion_since is None:
+                self._memory_suspicion_since = now
         elif slope >= slope_threshold:
             suspicion_state = "watch"
             suspicion_reason = "slope_threshold"
@@ -3815,6 +3834,7 @@ class SupervisorManager:
 
     def _memory_runtime_state_payload(self) -> dict[str, Any]:
         ensure_memory_store()
+        self._memory_baseline_family_rss_bytes = _positive_int_or_none(self._memory_baseline_family_rss_bytes)
         current_slot = str(active_slot() or "").strip().upper() or None
         managed = _proc_details(self._proc, cwd_hint=self._managed_runtime_cwd)
         managed_pid = managed.get("managed_pid")
@@ -3883,10 +3903,30 @@ class SupervisorManager:
             "updated_at": time.time(),
         }
 
+    def _memory_sessions_index_compact(self, *, limit: int = 10) -> dict[str, Any]:
+        index = read_memory_session_index()
+        items = index.get("sessions") if isinstance(index.get("sessions"), list) else []
+        normalized_limit = max(0, min(int(limit or 0), 100))
+        if normalized_limit > 0:
+            sessions = [dict(item) for item in items[-normalized_limit:] if isinstance(item, dict)]
+        else:
+            sessions = []
+        omitted = max(0, len(items) - len(sessions))
+        return {
+            "contract_version": str(index.get("contract_version") or "1"),
+            "sessions": sessions,
+            "total": len(items),
+            "returned": len(sessions),
+            "omitted": omitted,
+            "limit": normalized_limit,
+            "compact": True,
+            "updated_at": index.get("updated_at"),
+        }
+
     def memory_status(self) -> dict[str, Any]:
         payload = self._memory_runtime_state_payload()
         payload["persisted_state"] = read_memory_runtime_state()
-        payload["sessions_index"] = read_memory_session_index()
+        payload["sessions_index"] = self._memory_sessions_index_compact(limit=10)
         payload["runtime_state_path"] = str(supervisor_memory_runtime_state_path())
         return payload
 
@@ -3900,14 +3940,18 @@ class SupervisorManager:
             "runtime": self._memory_runtime_state_payload(),
         }
 
-    def memory_sessions(self) -> dict[str, Any]:
+    def memory_sessions(self, *, limit: int = 100) -> dict[str, Any]:
         index = read_memory_session_index()
         items = index.get("sessions") if isinstance(index.get("sessions"), list) else []
+        normalized_limit = max(1, min(int(limit or 100), 1000))
+        returned = [dict(item) for item in items[-normalized_limit:] if isinstance(item, dict)]
         return {
             "ok": True,
             "contract_version": str(index.get("contract_version") or "1"),
-            "sessions": items,
+            "sessions": returned,
             "total": len(items),
+            "returned": len(returned),
+            "limit": normalized_limit,
             "updated_at": index.get("updated_at"),
         }
 
@@ -4582,7 +4626,9 @@ class SupervisorManager:
                     profile_session_id,
                     _runtime_profile_finalize_wait_sec(),
                 )
-                while time.time() < finalize_wait_deadline:
+                finalize_checks = max(1, int(float(_runtime_profile_finalize_wait_sec()) / 0.1) + 2)
+                while time.time() < finalize_wait_deadline and finalize_checks > 0:
+                    finalize_checks -= 1
                     if proc.poll() is not None:
                         return
                     if self._memory_profile_finalize_observed(profile_session_id):
@@ -4600,14 +4646,18 @@ class SupervisorManager:
                         shutdown_error,
                     )
             deadline = time.time() + float(graceful_wait_sec)
-            while time.time() < deadline:
+            graceful_checks = max(1, int(float(graceful_wait_sec) / 0.2) + 2)
+            while time.time() < deadline and graceful_checks > 0:
+                graceful_checks -= 1
                 if proc.poll() is not None:
                     return
                 await asyncio.sleep(0.2)
         with contextlib.suppress(Exception):
             proc.terminate()
         deadline = time.time() + float(terminate_wait_sec)
-        while time.time() < deadline:
+        terminate_checks = max(1, int(float(terminate_wait_sec) / 0.1) + 2)
+        while time.time() < deadline and terminate_checks > 0:
+            terminate_checks -= 1
             if proc.poll() is not None:
                 return
             await asyncio.sleep(0.1)
@@ -6401,8 +6451,12 @@ async def supervisor_public_memory_status() -> dict[str, Any]:
 
 
 @app.get("/api/supervisor/memory/sessions", dependencies=[Depends(require_token)])
-async def supervisor_memory_sessions() -> dict[str, Any]:
-    return _manager().memory_sessions()
+async def supervisor_memory_sessions(limit: int = 100) -> dict[str, Any]:
+    manager = _manager()
+    try:
+        return manager.memory_sessions(limit=limit)
+    except TypeError:
+        return manager.memory_sessions()
 
 
 @app.get("/api/supervisor/memory/incidents", dependencies=[Depends(require_token)])

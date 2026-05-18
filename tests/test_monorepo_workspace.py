@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from adaos.adapters.git import cli_git as cli_git_module
 from adaos.adapters.git.cli_git import CliGitClient
 from adaos.adapters.scenarios.git_repo import GitScenarioRepository
 from adaos.adapters.skills.git_repo import GitSkillRepository
@@ -215,7 +216,105 @@ def test_sparse_set_auto_stashes_dirty_worktree(monkeypatch, monorepo, paths):
     assert _git_status_clean(paths.workspace_dir())
 
     stashes = _run_git(["stash", "list"], cwd=paths.workspace_dir())
-    assert "adaos:auto-stash sparse-checkout set" in stashes
+    assert "adaos:auto-stash sparse-checkout" in stashes
+
+
+def test_sparse_set_removes_stale_blocker_in_non_dev(monkeypatch, tmp_path):
+    monkeypatch.setenv("ENV_TYPE", "prod")
+    root = tmp_path / ".adaos" / "workspace"
+    blocker_one = root / "skills" / "news_skill" / "skill.yaml"
+    blocker_two = root / "skills" / "news_skill" / "handlers" / "__init__.py"
+    for blocker in (blocker_one, blocker_two):
+        blocker.parent.mkdir(parents=True, exist_ok=True)
+        blocker.write_text("local stale file\n", encoding="utf-8")
+    attempts = 0
+
+    def fake_run_git(args, cwd=None):
+        nonlocal attempts
+        if args[:2] == ["status", "--porcelain"]:
+            return ""
+        if args[:2] == ["sparse-checkout", "set"]:
+            attempts += 1
+            if attempts == 1:
+                raise cli_git_module.GitError(
+                    "git sparse-checkout set failed: error: Working tree file "
+                    "'skills/news_skill/skill.yaml' would be overwritten by sparse checkout update."
+                )
+            if attempts == 2:
+                raise cli_git_module.GitError(
+                    "git sparse-checkout set failed: error: Working tree file "
+                    "'skills/news_skill/handlers/__init__.py' would be overwritten by sparse checkout update."
+                )
+            return ""
+        if args and args[0] in {"status", "log"}:
+            return ""
+        raise AssertionError(f"unexpected git call: {args!r}")
+
+    monkeypatch.setattr(cli_git_module, "_run_git", fake_run_git)
+
+    CliGitClient(depth=0).sparse_set(str(root), ["skills/news_skill"], no_cone=True)
+
+    assert attempts == 3
+    assert not blocker_one.exists()
+    assert not blocker_two.exists()
+
+
+def test_sparse_set_limits_stale_blocker_recovery(monkeypatch, tmp_path):
+    monkeypatch.setenv("ENV_TYPE", "prod")
+    monkeypatch.setenv("ADAOS_SPARSE_CHECKOUT_BLOCKER_RETRIES", "1")
+    root = tmp_path / ".adaos" / "workspace"
+    blocker_one = root / "skills" / "news_skill" / "skill.yaml"
+    blocker_two = root / "skills" / "news_skill" / "handlers" / "__init__.py"
+    for blocker in (blocker_one, blocker_two):
+        blocker.parent.mkdir(parents=True, exist_ok=True)
+        blocker.write_text("local stale file\n", encoding="utf-8")
+    attempts = 0
+
+    def fake_run_git(args, cwd=None):
+        nonlocal attempts
+        if args[:2] == ["status", "--porcelain"]:
+            return ""
+        if args[:2] == ["sparse-checkout", "set"]:
+            attempts += 1
+            path = "skills/news_skill/skill.yaml" if attempts == 1 else "skills/news_skill/handlers/__init__.py"
+            raise cli_git_module.GitError(
+                "git sparse-checkout set failed: error: Working tree file "
+                f"'{path}' would be overwritten by sparse checkout update."
+            )
+        if args and args[0] in {"status", "log"}:
+            return ""
+        raise AssertionError(f"unexpected git call: {args!r}")
+
+    monkeypatch.setattr(cli_git_module, "_run_git", fake_run_git)
+
+    with pytest.raises(cli_git_module.GitError) as ei:
+        CliGitClient(depth=0).sparse_set(str(root), ["skills/news_skill"], no_cone=True)
+
+    assert "Sparse checkout blocker recovery exceeded 1 file(s)" in str(ei.value)
+    assert attempts == 2
+    assert not blocker_one.exists()
+    assert blocker_two.exists()
+
+
+def test_sparse_init_detects_workspace_before_dirty_autostash(monkeypatch, tmp_path):
+    monkeypatch.setenv("ENV_TYPE", "prod")
+    root = tmp_path / ".adaos" / "workspace"
+    root.mkdir(parents=True, exist_ok=True)
+    calls: list[list[str]] = []
+
+    def fake_run_git(args, cwd=None):
+        calls.append(list(args))
+        if args[:2] == ["status", "--porcelain"]:
+            return ""
+        if args[:2] == ["sparse-checkout", "init"]:
+            return ""
+        raise AssertionError(f"unexpected git call: {args!r}")
+
+    monkeypatch.setattr(cli_git_module, "_run_git", fake_run_git)
+
+    CliGitClient(depth=0).sparse_init(str(root), cone=False)
+
+    assert calls == [["status", "--porcelain"], ["sparse-checkout", "init"]]
 
 
 def test_sparse_checkout_ignores_cli_flags(monkeypatch, monorepo, paths):

@@ -16,13 +16,20 @@ DEFAULT_PRESET = InstallPreset(
         "web_desktop",
         "prompt_engineer_scenario",
         "infrascope",
+        "taiga_ui_demo_scenario",
     ),
     skills=(
         "infrastate_skill",
         "weather_skill",
         "web_desktop_skill",
         "prompt_engineer_skill",
-        "adaos_connect"
+        "adaos_connect",
+        "browsers_skill",
+        "infra_access_skill",
+        "mediaserver",
+        "rasa_nlu_service_skill",
+        "subnet_env",
+        "voice_chat_skill",
     ),
 )
 

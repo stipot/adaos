@@ -7,7 +7,7 @@ import os
 import queue
 import threading
 import time
-from typing import Any
+from typing import Any, Mapping
 
 from adaos.sdk.core.decorators import subscribe
 from adaos.sdk.io.out import stream_publish
@@ -52,6 +52,7 @@ _GATEWAY_PEAK_ALERTS = str(os.getenv("ADAOS_YJS_LOAD_MARK_GATEWAY_PEAK_ALERTS") 
 _LOCK = threading.RLock()
 _WEBSPACE_STATE: dict[str, dict[str, Any]] = {}
 _ACTIVE_STREAM_SUBSCRIPTIONS: dict[str, int] = {}
+_ACTIVE_STREAM_SUBSCRIPTION_KEYS: dict[str, dict[str, int]] = {}
 _LAST_STREAM_PUBLISH_AT: dict[str, float] = {}
 _LAST_STREAM_FINGERPRINT: dict[str, str] = {}
 _OWNER_ALERTS: dict[str, float] = {}
@@ -207,21 +208,54 @@ def _policy_state_for_owner_metrics(
     return _policy_state_for_observed_state(token)
 
 
+def _stream_subscription_key(payload: Mapping[str, Any] | None, webspace_id: str) -> str:
+    source = payload if isinstance(payload, Mapping) else {}
+    explicit = str(source.get("subscription_id") or "").strip()
+    if explicit:
+        return explicit
+    topic = str(source.get("topic") or "").strip()
+    transport = str(source.get("transport") or "").strip() or "unknown"
+    connection_id = str(source.get("connection_id") or source.get("peer_id") or source.get("client_id") or "").strip()
+    node_id = str(source.get("target_node_id") or source.get("node_id") or "").strip()
+    receiver = str(source.get("receiver") or _STREAM_RECEIVER).strip() or _STREAM_RECEIVER
+    if topic:
+        return "|".join([transport, connection_id, node_id, topic])
+    return "|".join([transport, connection_id, node_id, webspace_id, receiver])
+
+
+def _sync_active_stream_subscription_count_locked(webspace_id: str) -> None:
+    key = _webspace_token(webspace_id)
+    subscriptions = _ACTIVE_STREAM_SUBSCRIPTION_KEYS.get(key)
+    if isinstance(subscriptions, dict) and subscriptions:
+        count = sum(max(0, int(value or 0)) for value in subscriptions.values())
+        if count > 0:
+            _ACTIVE_STREAM_SUBSCRIPTIONS[key] = count
+            return
+    _ACTIVE_STREAM_SUBSCRIPTION_KEYS.pop(key, None)
+    _ACTIVE_STREAM_SUBSCRIPTIONS.pop(key, None)
+    _LAST_STREAM_PUBLISH_AT.pop(key, None)
+    _LAST_STREAM_FINGERPRINT.pop(key, None)
+
+
 def _has_active_stream_subscription_locked(webspace_id: str) -> bool:
     return int(_ACTIVE_STREAM_SUBSCRIPTIONS.get(_webspace_token(webspace_id)) or 0) > 0
 
 
-def _mark_stream_subscription(webspace_id: str, *, active: bool) -> None:
+def _mark_stream_subscription(webspace_id: str, *, active: bool, payload: Mapping[str, Any] | None = None) -> None:
     key = _webspace_token(webspace_id)
+    subscription_key = _stream_subscription_key(payload, key)
     with _LOCK:
-        current = int(_ACTIVE_STREAM_SUBSCRIPTIONS.get(key) or 0)
-        next_value = current + 1 if active else max(0, current - 1)
-        if next_value > 0:
-            _ACTIVE_STREAM_SUBSCRIPTIONS[key] = next_value
+        subscriptions = _ACTIVE_STREAM_SUBSCRIPTION_KEYS.setdefault(key, {})
+        current = max(0, int(subscriptions.get(subscription_key) or 0))
+        if active:
+            subscriptions[subscription_key] = current + 1
         else:
-            _ACTIVE_STREAM_SUBSCRIPTIONS.pop(key, None)
-            _LAST_STREAM_PUBLISH_AT.pop(key, None)
-            _LAST_STREAM_FINGERPRINT.pop(key, None)
+            next_value = max(0, current - 1)
+            if next_value > 0:
+                subscriptions[subscription_key] = next_value
+            else:
+                subscriptions.pop(subscription_key, None)
+        _sync_active_stream_subscription_count_locked(key)
     if active:
         _ensure_stream_ticker_running()
 
@@ -238,6 +272,52 @@ def _zero_stale_row_metrics(row: dict[str, Any]) -> dict[str, Any]:
     normalized["byte_status"] = "idle"
     normalized["write_status"] = "idle"
     return normalized
+
+
+def _row_has_recent_activity(row: dict[str, Any]) -> bool:
+    for key in ("avg_bps", "peak_bps", "avg_wps", "peak_wps", "recent_bytes", "recent_writes"):
+        try:
+            if float(row.get(key) or 0.0) > 0.0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _stream_heartbeat_mark_ts(now_ts: float) -> float:
+    interval = _STREAM_UNCHANGED_KEEPALIVE_SEC or _STREAM_PUBLISH_MIN_INTERVAL_SEC or _STREAM_TICK_INTERVAL_SEC
+    interval = max(float(interval or 0.0), 1.0)
+    now = float(now_ts)
+    if now < interval:
+        return now
+    return now - (now % interval)
+
+
+def _stream_heartbeat_row(webspace_id: str, *, now_ts: float) -> dict[str, Any]:
+    mark_ts = _stream_heartbeat_mark_ts(now_ts)
+    return {
+        "kind": "activity",
+        "id": "_activity/stream_heartbeat",
+        "display": "stream heartbeat",
+        "status": "nominal",
+        "avg_bps": 0.0,
+        "peak_bps": 0.0,
+        "avg_wps": round(1.0 / max(float(_WINDOW_SEC), 1.0), 3),
+        "peak_wps": round(1.0 / max(float(_BUCKET_SEC), 1.0), 3),
+        "recent_bytes": 0,
+        "recent_writes": 1,
+        "lifetime_bytes": 0,
+        "sample_total": 0,
+        "write_total": 0,
+        "current_size_bytes": 0,
+        "byte_status": "idle",
+        "write_status": "nominal",
+        "last_source": "load_mark.stream_ticker",
+        "last_channel": _STREAM_RECEIVER,
+        "last_changed_at": mark_ts,
+        "last_changed_ago_s": round(max(0.0, float(now_ts) - mark_ts), 3),
+        "webspace_id": _webspace_token(webspace_id),
+    }
 
 
 def _stream_payload_items_locked(webspace_id: str, *, now_ts: float, last_published_at: float = 0.0) -> list[dict[str, Any]]:
@@ -276,6 +356,10 @@ def _stream_payload_items_locked(webspace_id: str, *, now_ts: float, last_publis
             str(entry.get("display") or ""),
         )
     )
+    if _has_active_stream_subscription_locked(key) and not any(_row_has_recent_activity(row) for row in rows):
+        if _STREAM_TOP_N > 0:
+            rows = rows[: max(0, _STREAM_TOP_N - 1)]
+        rows.append(_stream_heartbeat_row(key, now_ts=now_ts))
     if _STREAM_TOP_N > 0:
         return rows[:_STREAM_TOP_N]
     return rows
@@ -1240,9 +1324,9 @@ def on_webio_stream_subscription_changed(evt: Any) -> None:
     webspace_id = _webspace_token(payload.get("webspace_id"))
     action = str(payload.get("action") or "").strip().lower()
     if action == "subscribed":
-        _mark_stream_subscription(webspace_id, active=True)
+        _mark_stream_subscription(webspace_id, active=True, payload=payload)
     elif action == "unsubscribed":
-        _mark_stream_subscription(webspace_id, active=False)
+        _mark_stream_subscription(webspace_id, active=False, payload=payload)
 
 
 try:

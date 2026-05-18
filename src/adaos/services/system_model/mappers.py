@@ -51,6 +51,64 @@ def coerce_mapping(value: Any) -> dict[str, Any]:
     return {}
 
 
+_BROWSER_TITLE_TOKENS = {
+    "chrome": "Chrome",
+    "chromium": "Chromium",
+    "edge": "Edge",
+    "firefox": "Firefox",
+    "ios": "iOS",
+    "iphone": "iPhone",
+    "ipad": "iPad",
+    "linux": "Linux",
+    "mac": "Mac",
+    "macos": "macOS",
+    "safari": "Safari",
+    "tablet": "Tablet",
+    "windows": "Windows",
+}
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _title_token(value: Any) -> str:
+    token = _text(value)
+    if not token:
+        return ""
+    folded = token.casefold().replace("_", " ").replace("-", " ")
+    return _BROWSER_TITLE_TOKENS.get(folded, " ".join(part.capitalize() for part in folded.split()))
+
+
+def _browser_session_draft_name(data: Mapping[str, Any]) -> str:
+    browser = _title_token(
+        data.get("browser_family")
+        or data.get("browser_name")
+        or data.get("browser")
+    )
+    os_name = _title_token(data.get("os_name") or data.get("os") or data.get("platform"))
+    form_factor = _title_token(data.get("form_factor") or data.get("device_type"))
+    if form_factor.casefold() in {"desktop", "computer", "pc"}:
+        form_factor = ""
+    if browser and os_name and form_factor:
+        return f"{browser} on {os_name} {form_factor}"
+    if browser and os_name:
+        return f"{browser} on {os_name}"
+    if browser:
+        return f"{browser} browser"
+    if os_name:
+        return f"Browser on {os_name}"
+    return ""
+
+
+def _browser_session_title(data: Mapping[str, Any], device_id: str) -> str:
+    for key in ("display_name", "effective_name", "name", "hostname"):
+        value = _text(data.get(key))
+        if value:
+            return value
+    return _browser_session_draft_name(data) or device_id
+
+
 def _connected_to_subnet_value(data: Mapping[str, Any] | None) -> bool | None:
     payload = data if isinstance(data, Mapping) else {}
     connected = payload.get("connected_to_subnet")
@@ -420,6 +478,7 @@ def canonical_object_from_scenario_item(payload: Any) -> CanonicalObject:
 def canonical_object_from_browser_session(payload: Any) -> CanonicalObject:
     data = coerce_mapping(payload)
     device_id = str(data.get("device_id") or data.get("id") or "unknown").strip() or "unknown"
+    title = _browser_session_title(data, device_id)
     webspace_id = str(data.get("webspace_id") or "").strip() or None
     connection_state = str(data.get("connection_state") or "").strip().lower() or None
     events_channel_state = str(data.get("events_channel_state") or "").strip().lower() or None
@@ -459,7 +518,7 @@ def canonical_object_from_browser_session(payload: Any) -> CanonicalObject:
     return CanonicalObject(
         id=f"browser:{device_id}",
         kind=CanonicalKind.BROWSER_SESSION.value,
-        title=device_id,
+        title=title,
         summary=summary,
         status=status,
         health=health,

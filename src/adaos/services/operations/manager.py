@@ -729,16 +729,67 @@ def submit_install_operation(
         await asyncio.to_thread(mgr.sync)
         handle.update(progress=45, message="Installing scenario", current_step="scenario.install")
         meta = await asyncio.to_thread(partial(mgr.install, target_id, pin=None))
-        warnings.extend(
-            await _best_effort_phase(
-                timeout_env="ADAOS_SCENARIO_DEP_BOOTSTRAP_TIMEOUT_S",
-                timeout_default_s=60.0,
-                message="Activating scenario dependencies",
-                current_step="scenario.bootstrap_dependencies",
-                progress=65,
-                func=partial(mgr.bootstrap_dependencies, target_id, webspace_id=ws),
-            )
+        dependency_bootstrap: dict[str, Any] | None = None
+        handle.update(
+            progress=65,
+            message="Activating scenario dependencies",
+            current_step="scenario.bootstrap_dependencies",
         )
+        dep_timeout_s = _timeout_env_seconds("ADAOS_SCENARIO_DEP_BOOTSTRAP_TIMEOUT_S", 60.0)
+        try:
+            raw_dependency_bootstrap = await asyncio.wait_for(
+                asyncio.to_thread(partial(mgr.bootstrap_dependencies, target_id, webspace_id=ws)),
+                timeout=dep_timeout_s,
+            )
+            if isinstance(raw_dependency_bootstrap, dict):
+                dependency_bootstrap = dict(raw_dependency_bootstrap)
+            else:
+                raw_last_result = getattr(mgr, "last_dependency_bootstrap_result", None)
+                dependency_bootstrap = dict(raw_last_result) if isinstance(raw_last_result, dict) else None
+        except asyncio.TimeoutError:
+            warning = f"scenario.bootstrap_dependencies timed out after {dep_timeout_s:.0f}s"
+            warnings.append(warning)
+            dependency_bootstrap = {
+                "ok": False,
+                "scenario_id": target_id,
+                "webspace_id": ws,
+                "required": [],
+                "items": [],
+                "succeeded": [],
+                "failed": [],
+                "error": warning,
+            }
+            _log.warning(
+                "operation phase timeout op=%s kind=%s target=%s step=scenario.bootstrap_dependencies timeout_s=%s",
+                handle.operation_id,
+                target_kind,
+                target_id,
+                dep_timeout_s,
+            )
+        except Exception as exc:
+            warning = f"scenario.bootstrap_dependencies warning: {type(exc).__name__}: {exc}"
+            warnings.append(warning)
+            dependency_bootstrap = {
+                "ok": False,
+                "scenario_id": target_id,
+                "webspace_id": ws,
+                "required": [],
+                "items": [],
+                "succeeded": [],
+                "failed": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            _log.warning(
+                "operation phase warning op=%s kind=%s target=%s step=scenario.bootstrap_dependencies",
+                handle.operation_id,
+                target_kind,
+                target_id,
+                exc_info=True,
+            )
+        if isinstance(dependency_bootstrap, dict) and not bool(dependency_bootstrap.get("ok", True)):
+            warning = str(dependency_bootstrap.get("error") or "scenario dependency bootstrap reported failures")
+            if warning not in warnings:
+                warnings.append(warning)
         warnings.extend(
             await _best_effort_phase(
                 timeout_env="ADAOS_SCENARIO_SYNC_TIMEOUT_S",
@@ -775,6 +826,8 @@ def submit_install_operation(
             "path": str(getattr(meta, "path", "")),
             "webspace_id": ws,
         }
+        if dependency_bootstrap is not None:
+            payload["dependency_bootstrap"] = dependency_bootstrap
         if warnings:
             payload["warnings"] = warnings
         handle.succeeded(

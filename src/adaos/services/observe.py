@@ -1,6 +1,6 @@
 # src/adaos/services/observe.py
 from __future__ import annotations
-import asyncio, json, time, uuid, gzip, os, queue, threading
+import asyncio, json, time, uuid, gzip, os, queue, threading, logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -10,6 +10,8 @@ from adaos.services.agent_context import get_ctx
 from adaos.services.node_config import load_config
 from adaos.services.settings import Settings
 from adaos.sdk.data import bus as bus_module  # будем мягко оборачивать emit
+
+_LOG = logging.getLogger("adaos.observe")
 
 try:
     # get_ctx может быть недоступен/неинициализирован на момент импорта
@@ -44,6 +46,34 @@ _LOCAL_LOG_DROPPED = 0
 class EventBroadcaster:
     def __init__(self):
         self._subs: List[asyncio.Queue] = []
+        self._dropped_subscribers = 0
+
+    def _max_subscribers(self) -> int:
+        try:
+            raw = str(os.getenv("ADAOS_OBSERVE_BROADCAST_MAX_SUBSCRIBERS", "128") or "128").strip()
+            return max(1, int(raw))
+        except Exception:
+            return 128
+
+    @staticmethod
+    def _drain(q: "asyncio.Queue[Dict[str, Any]]") -> None:
+        while True:
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            except Exception:
+                return
+
+    def _remove(self, q: "asyncio.Queue[Dict[str, Any]]") -> bool:
+        try:
+            self._subs.remove(q)
+        except ValueError:
+            return False
+        except Exception:
+            return False
+        self._drain(q)
+        return True
 
     async def publish(self, evt: Dict[str, Any]):
         for q in list(self._subs):
@@ -52,16 +82,38 @@ class EventBroadcaster:
                     _ = q.get_nowait()
                 q.put_nowait(evt)
             except Exception:
-                try:
-                    self._subs.remove(q)
-                except Exception:
-                    pass
+                if self._remove(q):
+                    self._dropped_subscribers += 1
 
     def subscribe(self, *, topic_prefix: str | None, node_id: str | None, since_ts: float | None) -> "asyncio.Queue[Dict[str, Any]]":
         q: asyncio.Queue = asyncio.Queue(maxsize=500)
         q._adaos_filter = {"topic_prefix": topic_prefix, "node_id": node_id, "since": since_ts}  # type: ignore[attr-defined]
+        max_subscribers = self._max_subscribers()
+        evicted = 0
+        while len(self._subs) >= max_subscribers and self._subs:
+            stale = self._subs.pop(0)
+            self._drain(stale)
+            evicted += 1
+        if evicted:
+            self._dropped_subscribers += evicted
+            _LOG.warning(
+                "observe broadcast subscriber cap reached; evicted=%s active=%s cap=%s",
+                evicted,
+                len(self._subs),
+                max_subscribers,
+            )
         self._subs.append(q)
         return q
+
+    def unsubscribe(self, q: "asyncio.Queue[Dict[str, Any]]") -> bool:
+        return self._remove(q)
+
+    def stats(self) -> Dict[str, Any]:
+        return {
+            "subscribers": len(self._subs),
+            "dropped_subscribers": int(self._dropped_subscribers),
+            "max_subscribers": self._max_subscribers(),
+        }
 
 
 BROADCAST = EventBroadcaster()

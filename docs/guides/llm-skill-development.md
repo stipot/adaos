@@ -129,6 +129,18 @@ Avoid in normal skills:
 If a legacy skill still needs direct Yjs access, document why and keep it on a
 short migration path toward `ProjectionService` / `ctx_subnet`.
 
+Make hot projection writes idempotent before calling the SDK helper. Runtime
+projection code can skip physical no-op mutations, but guard/governance checks
+still see the attempted write. For refresh-heavy skills, keep a small
+per-`(webspace_id, slot)` fingerprint and do not call `ctx_subnet.set*()` when
+the semantic payload has not changed. Keep an explicit recovery path, such as a
+user/API `refresh_snapshot`, that can bypass this fingerprint when the browser
+reports a missing projection after room rebuild or reconnect.
+
+Do not fan out routine projection refreshes to every webspace by default.
+Target the webspace from event metadata or the UI action. Reserve all-webspace
+fanout for boot, activation, migration, or explicit resync events.
+
 ## Stream data
 
 Use streams for data that changes often or grows by appending.
@@ -169,6 +181,9 @@ Stream rules:
 - dedupe events with stable ids
 - provide snapshot-on-subscribe for widgets that should not open empty
 - coalesce repeated snapshot requests per receiver/webspace/node
+- do not eager-publish a replace stream for the same state that the widget is
+  already reading from Yjs; use streams for separate high-churn state or
+  snapshot-on-subscribe recovery
 - do not copy stream tails back into Yjs just to make them visible
 
 ## Minimal UI plus details
@@ -380,6 +395,8 @@ Treat these as defects in LLM-generated skills:
 - returning a huge snapshot from `refresh_snapshot`
 - polling a heavy snapshot endpoint to keep normal UI alive
 - duplicating the same data in a tool response and Yjs
+- duplicating the same replace-state in both eager stream publishes and Yjs
+  projections on every refresh
 - using HTTP/API fallback as steady-state transport for Yjs-rendered data
 - hiding degraded state behind "successful" empty UI
 - controlling WebRTC/Yjs channel lifecycle from business logic
@@ -391,8 +408,9 @@ Treat these as defects in LLM-generated skills:
 The current workspace audit suggests this priority order:
 
 1. migrate `voice_chat_skill` to declared projection/stream contracts
-2. make `browsers_skill` actions return small acknowledgements while data
-   flows through projection/stream receivers
+2. make `browsers_skill` projection refreshes idempotent, avoid all-webspace
+   fanout for routine events, and keep streams to snapshot-on-subscribe or
+   genuinely high-churn data
 3. split `infrastate_skill` into minimal summary plus details/streams
 4. split `infrascope_skill` into demanded projection families
 5. decide whether `mediaserver` and `prompt_engineer_skill` should remain

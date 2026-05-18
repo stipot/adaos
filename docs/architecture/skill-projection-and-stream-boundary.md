@@ -41,6 +41,9 @@ The target state is:
   needed for projected state writes.
 - `ProjectionService` owns the sync/async bridge, pressure governance, live-room
   mutation preference, fallback YStore writes, and diagnostics.
+- The shared [Skill Projection Runtime SDK](skill-projection-runtime-sdk.md)
+  owns per-slot fingerprinting, dirty-section routing, stream receiver handling,
+  and the migration path away from skill-local projection runtimes.
 - Skills do not open-code thread pools, event loop bridges, node-scoped Yjs
   paths, or stream subscription routing.
 - Browser UI consumes node-aware data through shared addressing helpers, not
@@ -79,6 +82,10 @@ architecture:
 
 - [ ] Add a first-class `ProjectionService.apply_sync(...)` or equivalent SDK
   bridge so sync skill handlers can durably publish without per-skill executors.
+- [ ] Implement the shared projection runtime SDK described in
+  [Skill Projection Runtime SDK](skill-projection-runtime-sdk.md), starting with
+  `ProjectionSlot`, `StreamReceiver`, dirty routing, set-if-changed, and
+  diagnostics.
 - [ ] Make runtime packaging preserve projection metadata for every installed
   skill artifact.
 - [ ] Load skill projection declarations during activation before any tool,

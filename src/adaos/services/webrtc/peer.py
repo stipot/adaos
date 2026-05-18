@@ -130,7 +130,12 @@ def _register_event_channel_subscriptions(
         added = set(topics) - set(tracked)
         tracked.update(topics)
     if added:
-        _publish_webio_stream_subscription_change(added, action="subscribed", transport="webrtc_data:events")
+        _publish_webio_stream_subscription_change(
+            added,
+            action="subscribed",
+            transport="webrtc_data:events",
+            connection_id=str(id(peer)),
+        )
     return added
 
 
@@ -139,7 +144,12 @@ def _unregister_event_channel_subscriptions(peer: "HubPeer") -> None:
         entry = _EVENT_CHANNEL_SUBSCRIBERS.pop(id(peer), None)
     topics = set(entry.get("topics") or []) if isinstance(entry, dict) else set()
     if topics:
-        _publish_webio_stream_subscription_change(topics, action="unsubscribed", transport="webrtc_data:events")
+        _publish_webio_stream_subscription_change(
+            topics,
+            action="unsubscribed",
+            transport="webrtc_data:events",
+            connection_id=str(id(peer)),
+        )
 
 
 def _unregister_event_channel_subscription_topics(peer: "HubPeer", raw_topics: Any) -> set[str]:
@@ -162,7 +172,12 @@ def _unregister_event_channel_subscription_topics(peer: "HubPeer", raw_topics: A
         if not tracked:
             _EVENT_CHANNEL_SUBSCRIBERS.pop(id(peer), None)
     if removed:
-        _publish_webio_stream_subscription_change(removed, action="unsubscribed", transport="webrtc_data:events")
+        _publish_webio_stream_subscription_change(
+            removed,
+            action="unsubscribed",
+            transport="webrtc_data:events",
+            connection_id=str(id(peer)),
+        )
     return removed
 
 
@@ -261,7 +276,13 @@ def _request_webio_stream_snapshots(topics: set[str], *, transport: str) -> None
             _log.debug("failed to request webio stream snapshot topic=%s", token, exc_info=True)
 
 
-def _publish_webio_stream_subscription_change(topics: set[str], *, action: str, transport: str) -> None:
+def _publish_webio_stream_subscription_change(
+    topics: set[str],
+    *,
+    action: str,
+    transport: str,
+    connection_id: str | None = None,
+) -> None:
     for topic in topics:
         token = str(topic or "").strip()
         prefix = "webio.stream."
@@ -296,6 +317,9 @@ def _publish_webio_stream_subscription_change(topics: set[str], *, action: str, 
                 "transport": str(transport or "webrtc_data:events"),
                 "action": str(action or "").strip() or "subscribed",
             }
+            if connection_id:
+                payload["connection_id"] = str(connection_id)
+                payload["subscription_id"] = f"{transport}:{connection_id}:{token}"
             if node_id:
                 payload["node_id"] = node_id
             bus_emit(
