@@ -5,8 +5,8 @@ named-entity canonicalization, and fallback routing. This skill owns neural
 provider runtime code and model artifacts.
 
 The skill runs in a service-owned Python venv (`runtime.env.mode: venv`) and
-declares `torch` as a skill dependency so neural runtime packages stay out of
-the hub root venv.
+declares `torch` plus `numpy` as skill dependencies so neural runtime packages
+stay out of the hub root venv.
 
 ## HTTP API
 

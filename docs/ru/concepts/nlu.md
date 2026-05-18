@@ -24,8 +24,8 @@ This document describes the current production MVP direction for intent detectio
 4. Neural bridge:
    - calls `neural_nlu_service_skill:/parse`
    - if the skill is missing, hub falls back to Rasa; install/update flows prepare the service skill from the workspace/registry source
-   - service runs in its own venv and declares `torch` as a skill dependency,
-     outside the hub/root venv
+   - service runs in its own venv and declares `torch`/`numpy` as skill
+     dependencies, outside the hub/root venv
    - upstream detector code is ported into `handlers/upstream_detector_port.py` (service-side runtime module)
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights via:
      - `ADAOS_NEURAL_MODEL_PATH` (state_dict `.pt`)

@@ -22,6 +22,7 @@ def test_ensure_neural_service_skill_installed_creates_skill_tree():
     manifest_text = (target / "skill.yaml").read_text(encoding="utf-8")
     assert "mode: venv" in manifest_text
     assert "- torch" in manifest_text
+    assert "- numpy" in manifest_text
 
     env = SkillRuntimeEnvironment(skills_root=skills_root, skill_name="neural_nlu_service_skill")
     version = env.resolve_active_version()
