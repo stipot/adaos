@@ -47,6 +47,8 @@ Implemented now:
   source during install flow.
 - Neural bridge discovery/start of installed service only; no hot-path
   workspace mutation or A/B slot preparation.
+- Neural service-skill venv execution with `torch` declared as a skill
+  dependency, keeping neural packages out of the hub root venv.
 - Neural `/parse` contract with `top_intent`, `confidence`, `alternatives`,
   `slots`, `model_id`, `evidence`, canonicalized text, and named-entity
   evidence.

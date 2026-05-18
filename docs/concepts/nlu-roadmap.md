@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **65%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **66%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -222,4 +222,5 @@ but the productionization checklist remains mostly open.
 - Trace items are persisted to `data.nlu_trace.items[]` for the future UI timeline.
 - Neural bridge records node-local aggregate usage stats in `state/nlu/neural_usage.json`, including latency,
   confidence bands, accept/abstain/reject counts, fallback ratio, canonicalization buckets, and review samples.
+- Neural service skill now declares service-owned venv execution and keeps Torch dependency outside the hub root venv.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

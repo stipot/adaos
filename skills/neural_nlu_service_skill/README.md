@@ -4,6 +4,10 @@ AdaOS Neural NLU service-skill. The hub owns orchestration, confidence policy,
 named-entity canonicalization, and fallback routing. This skill owns neural
 provider runtime code and model artifacts.
 
+The skill runs in a service-owned Python venv (`runtime.env.mode: venv`) and
+declares `torch` as a skill dependency so neural runtime packages stay out of
+the hub root venv.
+
 ## HTTP API
 
 - `GET /health`
