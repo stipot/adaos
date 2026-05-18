@@ -120,11 +120,17 @@ Versioned runtime artifacts:
 
 - `model.pt`
 - `faiss.index`
+- `faiss.index.json` for index provenance/invalidation metadata
 - `intents_manifest.json`
 - `masking_rules.json`
 - `examples_manifest.jsonl`
 - `ranker_config.json`
 - `metrics.json`
+
+Current implementation note: the service can already create and reuse a lazy
+positive-example `faiss.index` when `faiss` is installed in the service venv.
+If FAISS is unavailable, it falls back to the persisted Torch tensor
+`example_index.pt`. Negative FAISS indexes remain a target item.
 
 Model lifecycle:
 

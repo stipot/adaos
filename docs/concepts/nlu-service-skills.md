@@ -74,10 +74,11 @@ Target artifacts are service-owned runtime data:
 - `model.pt`
 - `labels.json` / `intents_manifest.json`
 - `vocab.json`
-- `faiss.index`
+- `faiss.index` and `faiss.index.json` for the optional lazy positive-example
+  FAISS index
 - `examples_manifest.jsonl`
-- `example_index.pt` as the current lazy Torch tensor k-NN cache until FAISS
-  positive/negative indexes replace it
+- `example_index.pt` as the Torch tensor k-NN fallback cache when FAISS is not
+  installed in the service venv
 - `ranker_config.json`
 - `metrics.json`
 
@@ -92,6 +93,14 @@ Notebook outputs can be normalized into this layout with:
 The script copies `best_model*.pt`, derives labels/vocab with the same masking
 and special-token order as the notebook, writes example and intent manifests,
 and records provenance in `metrics.json`.
+
+On first successful model load, the neural skill validates and reuses an
+existing positive-example index when the model id, model SHA, example count,
+and example digest still match. If `faiss` is importable in the service venv,
+the preferred `auto` backend writes `faiss.index`; otherwise it writes
+`example_index.pt`. `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=torch` forces the
+Torch fallback, while `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=faiss` requires the
+FAISS backend.
 
 The active artifacts can be smoke-tested with
 `skills/neural_nlu_service_skill/scripts/evaluate_golden.py`, which writes

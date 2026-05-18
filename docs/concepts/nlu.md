@@ -47,8 +47,12 @@ Implemented now:
   source during install flow.
 - Neural bridge discovery/start of installed service only; no hot-path
   workspace mutation or A/B slot preparation.
-- Neural service-skill venv execution with `torch`/`numpy` declared as skill
-  dependency, keeping neural packages out of the hub root venv.
+- Neural service-skill venv execution with `torch`, `numpy`, and `faiss-cpu`
+  declared as skill dependencies, keeping neural packages out of the hub root
+  venv.
+- Neural positive-example retrieval now supports an optional lazy `faiss.index`
+  with a Torch tensor cache fallback when `faiss` is not installed in the
+  service venv.
 - Neural `/parse` contract with `top_intent`, `confidence`, `alternatives`,
   `slots`, `model_id`, `evidence`, canonicalized text, and named-entity
   evidence.
@@ -110,7 +114,8 @@ long-term fallback.
    - passes named-entity `canonicalized_text` and `resolved_entities` evidence
      into the provider request;
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights plus
-     FAISS ranking artifacts when installed;
+     a lazy FAISS positive-example index when `faiss` is installed, or the
+     Torch tensor k-NN fallback otherwise;
    - default deployment uses one active model per node, with usage telemetry
      collected so later per-locale/webspace/profile splits can be justified by
      evidence.

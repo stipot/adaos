@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **72%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **74%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -151,7 +151,7 @@ but the productionization checklist remains mostly open.
 - [x] Port supervised-contrastive embedding projection usage.
 - [x] Persist a lazy Torch tensor positive-example k-NN cache as an
   intermediate step before FAISS indexes.
-- [ ] Add FAISS positive example index.
+- [x] Add optional lazy FAISS positive example index with Torch tensor fallback.
 - [ ] Add FAISS negative example indexes.
 - [x] Add weighted ranker over softmax, k-NN similarity, and action/skill
   priors.
@@ -164,9 +164,9 @@ but the productionization checklist remains mostly open.
 - [x] Add a notebook-output preparation script that writes `model.pt`,
   `labels.json`, `vocab.json`, example/intent manifests, ranker config, and
   provenance metrics into the active node-level layout.
-- [ ] Store `model.pt`, `labels.json`/`intents_manifest.json`, `vocab.json`,
-  `faiss.index`, `examples_manifest.jsonl`, `ranker_config.json`, and
-  `metrics.json`.
+- [x] Store `model.pt`, `labels.json`/`intents_manifest.json`, `vocab.json`,
+  optional `faiss.index`/`faiss.index.json`, `examples_manifest.jsonl`,
+  `ranker_config.json`, and `metrics.json` in the service-owned active layout.
 - [x] Add immutable `model_id` and model provenance metadata for prepared
   notebook artifacts.
 - [ ] Add rollback pointer for the node-level active model.
@@ -202,8 +202,9 @@ but the productionization checklist remains mostly open.
 
 ## Immediate Next Steps
 
-1. Add persisted FAISS positive/negative indexes for the service-owned artifact
-   layout; the current runtime has a Torch in-memory k-NN ranker fallback.
+1. Add persisted FAISS negative indexes for contrastive rejection; positive
+   example retrieval now has an optional lazy `faiss.index` and a Torch cache
+   fallback.
 2. Define the system action catalog for core/client commands and include it in
    NLU authoring context.
 3. Link neural usage samples to downstream Rasa/Teacher outcomes and expose the

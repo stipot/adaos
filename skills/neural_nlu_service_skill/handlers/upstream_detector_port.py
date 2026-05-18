@@ -25,6 +25,16 @@ except Exception:  # pragma: no cover - optional runtime dependency
     nn = None
     F = None
 
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional runtime dependency
+    np = None
+
+try:
+    import faiss
+except Exception:  # pragma: no cover - optional runtime dependency
+    faiss = None
+
 
 @dataclass
 class Config:
@@ -397,20 +407,28 @@ class Detector:
                 "stoi": {str(ch): idx for idx, ch in enumerate(vocab)},
                 "examples": examples,
                 "example_vectors": None,
+                "example_index": None,
+                "example_index_backend": None,
                 "example_index_source": None,
                 "model_id": model_id,
                 "model_sha256": self._load_model_sha256(root=root, metadata=metadata),
                 "artifact_root": str(root),
             }
             if examples and os.getenv("ADAOS_NEURAL_DISABLE_EXAMPLE_INDEX", "0").strip().lower() not in {"1", "true", "yes", "on"}:
-                vectors, source = self._load_example_index(root=root, model_id=model_id, engine=engine)
-                if vectors is None:
+                index_payload = self._load_example_index(root=root, model_id=model_id, engine=engine)
+                if index_payload is None:
                     vectors = self._embed_examples(model, engine["stoi"], examples)
-                    source = "built" if vectors is not None else None
-                    if vectors is not None:
-                        self._save_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors)
-                engine["example_vectors"] = vectors
-                engine["example_index_source"] = source
+                    index_payload = self._build_example_index(
+                        root=root,
+                        model_id=model_id,
+                        engine=engine,
+                        vectors=vectors,
+                    )
+                if index_payload is not None:
+                    engine["example_vectors"] = index_payload.get("vectors")
+                    engine["example_index"] = index_payload.get("index")
+                    engine["example_index_backend"] = index_payload.get("backend")
+                    engine["example_index_source"] = index_payload.get("source")
             return engine
         except Exception:
             return None
@@ -418,6 +436,22 @@ class Detector:
     def _example_index_path(self, root: Path) -> Path:
         token = os.getenv("ADAOS_NEURAL_EXAMPLE_INDEX_PATH", "").strip()
         return Path(token).expanduser().resolve() if token else root / "example_index.pt"
+
+    def _faiss_index_path(self, root: Path) -> Path:
+        token = os.getenv("ADAOS_NEURAL_FAISS_INDEX_PATH", "").strip()
+        return Path(token).expanduser().resolve() if token else root / "faiss.index"
+
+    def _faiss_index_meta_path(self, root: Path) -> Path:
+        token = os.getenv("ADAOS_NEURAL_FAISS_INDEX_META_PATH", "").strip()
+        return Path(token).expanduser().resolve() if token else root / "faiss.index.json"
+
+    def _preferred_example_index_backend(self) -> str:
+        raw = os.getenv("ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND", "auto").strip().lower()
+        if raw in {"faiss", "faiss-cpu"}:
+            return "faiss"
+        if raw in {"torch", "torch_tensor", "tensor", "pt"}:
+            return "torch"
+        return "auto"
 
     @staticmethod
     def _examples_digest(examples: list[ExampleEntry]) -> str:
@@ -431,56 +465,187 @@ class Detector:
             digest.update(b"\0")
         return digest.hexdigest()
 
-    def _load_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> tuple[Any | None, str | None]:
-        path = self._example_index_path(root)
+    def _example_index_metadata(self, *, model_id: str, engine: dict[str, Any]) -> dict[str, Any]:
         examples: list[ExampleEntry] = engine.get("examples") or []
-        if not path.exists() or not examples:
-            return None, None
-        try:
-            payload = torch.load(str(path), map_location="cpu")
-        except Exception:
-            return None, None
-        if not isinstance(payload, dict):
-            return None, None
-        vectors = payload.get("vectors")
-        if vectors is None or not hasattr(vectors, "shape"):
-            return None, None
+        return {
+            "schema_version": 1,
+            "model_id": str(model_id),
+            "model_sha256": str(engine.get("model_sha256") or ""),
+            "example_count": len(examples),
+            "examples_digest": self._examples_digest(examples),
+        }
+
+    def _example_index_metadata_matches(self, payload: dict[str, Any], *, model_id: str, engine: dict[str, Any]) -> bool:
+        examples: list[ExampleEntry] = engine.get("examples") or []
         if int(payload.get("example_count") or -1) != len(examples):
-            return None, None
+            return False
         if str(payload.get("examples_digest") or "") != self._examples_digest(examples):
-            return None, None
+            return False
         stored_model_id = str(payload.get("model_id") or "").strip()
         if stored_model_id and stored_model_id != str(model_id):
-            return None, None
+            return False
         stored_sha = str(payload.get("model_sha256") or "").strip()
         current_sha = str(engine.get("model_sha256") or "").strip()
         if stored_sha and current_sha and stored_sha != current_sha:
-            return None, None
-        return vectors.cpu(), "disk"
+            return False
+        return True
 
-    def _save_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> None:
+    def _load_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> dict[str, Any] | None:
+        backend = self._preferred_example_index_backend()
+        if backend in {"auto", "faiss"}:
+            loaded = self._load_faiss_example_index(root=root, model_id=model_id, engine=engine)
+            if loaded is not None:
+                return loaded
+            torch_loaded = self._load_torch_example_index(root=root, model_id=model_id, engine=engine)
+            if torch_loaded is not None and faiss is not None:
+                built = self._save_faiss_example_index(
+                    root=root,
+                    model_id=model_id,
+                    engine=engine,
+                    vectors=torch_loaded.get("vectors"),
+                )
+                if built is not None:
+                    return built
+            if backend == "faiss":
+                return None
+            return torch_loaded
+        return self._load_torch_example_index(root=root, model_id=model_id, engine=engine)
+
+    def _load_torch_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> dict[str, Any] | None:
+        path = self._example_index_path(root)
+        examples: list[ExampleEntry] = engine.get("examples") or []
+        if not path.exists() or not examples:
+            return None
+        try:
+            payload = torch.load(str(path), map_location="cpu")
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        vectors = payload.get("vectors")
+        if vectors is None or not hasattr(vectors, "shape"):
+            return None
+        if not self._example_index_metadata_matches(payload, model_id=model_id, engine=engine):
+            return None
+        return {
+            "backend": "torch_tensor",
+            "source": "torch_disk",
+            "vectors": vectors.cpu(),
+            "index": None,
+        }
+
+    def _load_faiss_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> dict[str, Any] | None:
+        if faiss is None:
+            return None
+        path = self._faiss_index_path(root)
+        meta_path = self._faiss_index_meta_path(root)
+        examples: list[ExampleEntry] = engine.get("examples") or []
+        if not path.exists() or not meta_path.exists() or not examples:
+            return None
+        try:
+            meta = _json_load(meta_path)
+        except Exception:
+            return None
+        if not isinstance(meta, dict) or not self._example_index_metadata_matches(meta, model_id=model_id, engine=engine):
+            return None
+        try:
+            index = faiss.read_index(str(path))
+        except Exception:
+            return None
+        if int(getattr(index, "ntotal", -1)) != len(examples):
+            return None
+        return {
+            "backend": "faiss",
+            "source": "faiss_disk",
+            "vectors": None,
+            "index": index,
+        }
+
+    def _build_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> dict[str, Any] | None:
+        if vectors is None:
+            return None
+        backend = self._preferred_example_index_backend()
+        if backend in {"auto", "faiss"}:
+            built = self._save_faiss_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors)
+            if built is not None or backend == "faiss":
+                return built
+        if self._save_torch_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors):
+            return {
+                "backend": "torch_tensor",
+                "source": "torch_built",
+                "vectors": vectors.cpu(),
+                "index": None,
+            }
+        return None
+
+    def _save_torch_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> bool:
         if os.getenv("ADAOS_NEURAL_SAVE_EXAMPLE_INDEX", "1").strip().lower() in {"0", "false", "no", "off"}:
-            return
+            return False
         examples: list[ExampleEntry] = engine.get("examples") or []
         if vectors is None or not examples:
-            return
+            return False
         path = self._example_index_path(root)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(
                 {
-                    "schema_version": 1,
                     "backend": "torch_tensor",
-                    "model_id": str(model_id),
-                    "model_sha256": str(engine.get("model_sha256") or ""),
-                    "example_count": len(examples),
-                    "examples_digest": self._examples_digest(examples),
+                    **self._example_index_metadata(model_id=model_id, engine=engine),
                     "vectors": vectors.cpu(),
                 },
                 str(path),
             )
+            return True
         except Exception:
-            pass
+            return False
+
+    def _vectors_to_float32_numpy(self, vectors: Any) -> Any | None:
+        if np is None:
+            return None
+        try:
+            value = vectors
+            for attr in ("detach", "cpu"):
+                if hasattr(value, attr):
+                    value = getattr(value, attr)()
+            if hasattr(value, "numpy"):
+                value = value.numpy()
+            arr = np.asarray(value, dtype="float32")
+            if len(getattr(arr, "shape", ())) == 1:
+                arr = arr.reshape(1, -1)
+            return np.ascontiguousarray(arr)
+        except Exception:
+            return None
+
+    def _save_faiss_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> dict[str, Any] | None:
+        if faiss is None:
+            return None
+        examples: list[ExampleEntry] = engine.get("examples") or []
+        arr = self._vectors_to_float32_numpy(vectors)
+        if arr is None or not examples:
+            return None
+        try:
+            dim = int(arr.shape[1])
+            index = faiss.IndexFlatIP(dim)
+            index.add(arr)
+            path = self._faiss_index_path(root)
+            meta_path = self._faiss_index_meta_path(root)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            meta_path.parent.mkdir(parents=True, exist_ok=True)
+            faiss.write_index(index, str(path))
+            meta = {
+                "backend": "faiss",
+                "metric": "inner_product",
+                **self._example_index_metadata(model_id=model_id, engine=engine),
+            }
+            meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            return {
+                "backend": "faiss",
+                "source": "faiss_built",
+                "vectors": None,
+                "index": index,
+            }
+        except Exception:
+            return None
 
     def _encode_masked(self, masked_text: str, stoi: dict[str, int]) -> list[int]:
         ids = [self._cfg.BOS_IDX]
@@ -521,21 +686,71 @@ class Detector:
             return probs
         return [v / total for v in scaled]
 
-    def _nearest_examples(self, q_vec: Any, engine: dict[str, Any], *, query: str, clf_skill: str, clf_prob: float) -> list[dict[str, Any]]:
+    @staticmethod
+    def _listify_search_row(value: Any) -> list[Any]:
+        if hasattr(value, "tolist"):
+            value = value.tolist()
+        if not isinstance(value, list):
+            value = list(value or [])
+        if value and isinstance(value[0], list):
+            return list(value[0])
+        return value
+
+    def _nearest_faiss_pairs(self, q_vec: Any, engine: dict[str, Any], *, k: int) -> list[tuple[float, int]]:
+        index = engine.get("example_index")
+        if index is None:
+            return []
+        query = self._vectors_to_float32_numpy(q_vec)
+        if query is None:
+            return []
+        try:
+            distances, indexes = index.search(query, k)
+        except Exception:
+            return []
+        distance_row = self._listify_search_row(distances)
+        index_row = self._listify_search_row(indexes)
+        pairs: list[tuple[float, int]] = []
+        for sim, idx in zip(distance_row, index_row):
+            try:
+                index_value = int(idx)
+            except Exception:
+                continue
+            if index_value < 0:
+                continue
+            try:
+                pairs.append((float(sim), index_value))
+            except Exception:
+                continue
+        return pairs
+
+    def _nearest_torch_pairs(self, q_vec: Any, engine: dict[str, Any], *, k: int) -> list[tuple[float, int]]:
         vectors = engine.get("example_vectors")
-        examples: list[ExampleEntry] = engine.get("examples") or []
-        if vectors is None or not examples:
+        if vectors is None or torch is None:
             return []
         try:
             sims = torch.matmul(vectors, q_vec.cpu()[0])
-            k = min(max(int(self._cfg.FAISS_K), 1), len(examples))
             values, indexes = torch.topk(sims, k=k)
+            return [(float(sim), int(idx)) for sim, idx in zip(values.tolist(), indexes.tolist())]
         except Exception:
+            return []
+
+    def _nearest_examples(self, q_vec: Any, engine: dict[str, Any], *, query: str, clf_skill: str, clf_prob: float) -> list[dict[str, Any]]:
+        examples: list[ExampleEntry] = engine.get("examples") or []
+        if not examples:
+            return []
+        k = min(max(int(self._cfg.FAISS_K), 1), len(examples))
+        if engine.get("example_index_backend") == "faiss":
+            pairs = self._nearest_faiss_pairs(q_vec, engine, k=k)
+        else:
+            pairs = self._nearest_torch_pairs(q_vec, engine, k=k)
+        if not pairs:
             return []
         candidates: list[dict[str, Any]] = []
         lowered = query.lower()
-        for sim, idx in zip(values.tolist(), indexes.tolist()):
-            entry = examples[int(idx)]
+        for sim, idx in pairs:
+            if idx >= len(examples):
+                continue
+            entry = examples[idx]
             if any(keyword in lowered for keyword in EXCLUSION_KEYWORDS.get(entry.skill, ())):
                 continue
             is_clf_match = clf_skill == entry.skill
@@ -606,8 +821,13 @@ class Detector:
                 "model_id": str(engine.get("model_id") or "node-default"),
                 "evidence": {
                     "backend": "charcnn_bilstm",
-                    "ranker": "embedding_knn" if ranked_examples else "softmax",
+                    "ranker": (
+                        "faiss_knn"
+                        if ranked_examples and engine.get("example_index_backend") == "faiss"
+                        else "embedding_knn" if ranked_examples else "softmax"
+                    ),
                     "example_index": str(engine.get("example_index_source") or "none"),
+                    "example_index_backend": str(engine.get("example_index_backend") or "none"),
                     "softmax": clf_prob,
                     "canonicalized_text": model_text,
                     "masked_text": mask.masked,
@@ -691,11 +911,13 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.5",
+            "version": "0.2.6",
             "torch_available": torch is not None,
+            "faiss_available": faiss is not None,
             "model_loaded": bool(engine),
             "model_id": engine.get("model_id") if engine else None,
             "examples_total": len(engine.get("examples") or []) if engine else 0,
             "example_index": engine.get("example_index_source") if engine else None,
+            "example_index_backend": engine.get("example_index_backend") if engine else None,
             "artifact_root": str(self._artifacts_root()),
         }

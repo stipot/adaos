@@ -46,3 +46,90 @@ def test_detector_masks_canonicalized_text_and_slots(monkeypatch, tmp_path):
     assert result["evidence"]["masked_text"] == "wake me at {time} on {device}"
     assert result["evidence"]["canonicalized_text"] == "wake me at 7:30 on {device}"
     assert result["evidence"]["entity_resolution"]["resolved_entities"][0]["canonical_ref"] == "device:member:node-1"
+
+
+def test_detector_prefers_faiss_pairs_when_index_backend_is_faiss(monkeypatch):
+    module = _load_detector_module()
+    detector = object.__new__(module.Detector)
+    detector._cfg = module.Config()
+
+    class FakeIndex:
+        def search(self, query, k):
+            assert query == [["query-vector"]]
+            assert k == 2
+            return [[0.92, 0.41]], [[1, 0]]
+
+    monkeypatch.setattr(detector, "_vectors_to_float32_numpy", lambda _q_vec: [["query-vector"]])
+
+    examples = [
+        module.ExampleEntry(skill="timer.start", text="timer for ten minutes", masked="timer for {duration}"),
+        module.ExampleEntry(skill="weather.get", text="weather in berlin", masked="weather in {city}"),
+    ]
+    ranked = detector._nearest_examples(
+        object(),
+        {
+            "example_index_backend": "faiss",
+            "example_index": FakeIndex(),
+            "examples": examples,
+        },
+        query="weather in berlin",
+        clf_skill="weather.get",
+        clf_prob=0.9,
+    )
+
+    assert ranked[0]["intent"] == "weather.get"
+    assert ranked[0]["similarity"] == 0.92
+    assert ranked[0]["matched_example"] == "weather in {city}"
+
+
+def test_detector_health_exposes_faiss_and_index_backend(monkeypatch, tmp_path):
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    module = _load_detector_module()
+    detector = object.__new__(module.Detector)
+    detector._engine = {
+        "model_id": "unit-model",
+        "examples": [module.ExampleEntry(skill="weather.get", text="weather", masked="weather")],
+        "example_index_source": "faiss_disk",
+        "example_index_backend": "faiss",
+    }
+
+    health = detector.health()
+
+    assert health["version"] == "0.2.6"
+    assert "faiss_available" in health
+    assert health["example_index"] == "faiss_disk"
+    assert health["example_index_backend"] == "faiss"
+
+
+def test_detector_auto_backend_migrates_valid_torch_cache_to_faiss(monkeypatch, tmp_path):
+    module = _load_detector_module()
+    detector = object.__new__(module.Detector)
+    monkeypatch.setenv("ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND", "auto")
+    monkeypatch.setattr(module, "faiss", object())
+    monkeypatch.setattr(detector, "_load_faiss_example_index", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        detector,
+        "_load_torch_example_index",
+        lambda **_kwargs: {
+            "backend": "torch_tensor",
+            "source": "torch_disk",
+            "vectors": "cached-vectors",
+            "index": None,
+        },
+    )
+
+    def _save_faiss(**kwargs):
+        assert kwargs["vectors"] == "cached-vectors"
+        return {
+            "backend": "faiss",
+            "source": "faiss_built",
+            "vectors": None,
+            "index": object(),
+        }
+
+    monkeypatch.setattr(detector, "_save_faiss_example_index", _save_faiss)
+
+    payload = detector._load_example_index(root=tmp_path, model_id="unit-model", engine={})
+
+    assert payload["backend"] == "faiss"
+    assert payload["source"] == "faiss_built"

@@ -5,8 +5,8 @@ named-entity canonicalization, and fallback routing. This skill owns neural
 provider runtime code and model artifacts.
 
 The skill runs in a service-owned Python venv (`runtime.env.mode: venv`) and
-declares `torch` plus `numpy` as skill dependencies so neural runtime packages
-stay out of the hub root venv.
+declares `torch`, `numpy`, and `faiss-cpu` as skill dependencies so neural
+runtime packages stay out of the hub root venv.
 
 ## HTTP API
 
@@ -56,7 +56,9 @@ Preferred node-level layout:
 - `<ADAOS_BASE_DIR>/state/nlu/neural/intents_manifest.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/vocab.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/examples_manifest.jsonl`
-- `<ADAOS_BASE_DIR>/state/nlu/neural/example_index.pt` (lazy Torch tensor k-NN cache)
+- `<ADAOS_BASE_DIR>/state/nlu/neural/faiss.index` (optional lazy positive-example FAISS index)
+- `<ADAOS_BASE_DIR>/state/nlu/neural/faiss.index.json` (FAISS index provenance and invalidation metadata)
+- `<ADAOS_BASE_DIR>/state/nlu/neural/example_index.pt` (Torch tensor k-NN fallback cache)
 - `<ADAOS_BASE_DIR>/state/nlu/neural/ranker_config.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/metrics.json`
 
@@ -66,6 +68,9 @@ Explicit overrides:
 - `ADAOS_NEURAL_LABELS_PATH`
 - `ADAOS_NEURAL_VOCAB_PATH`
 - `ADAOS_NEURAL_EXAMPLES_PATHS` (`;` or `,` separated jsonl files)
+- `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND` (`auto`, `faiss`, or `torch`; default `auto`)
+- `ADAOS_NEURAL_FAISS_INDEX_PATH`
+- `ADAOS_NEURAL_FAISS_INDEX_META_PATH`
 - `ADAOS_NEURAL_RANKER_CONFIG_PATH`
 - `ADAOS_NLU_NEURAL_MODEL_ID`
 
@@ -91,9 +96,11 @@ The script copies `best_model*.pt` to `model.pt`, builds `labels.json` and
 service loads the model for inference.
 
 On first successful model load with examples present, the detector writes a
-lazy `example_index.pt` tensor cache. Subsequent restarts can reuse it instead
-of recomputing all example embeddings. This is a transitional cache until the
-planned FAISS positive/negative indexes are added.
+lazy positive-example index. With `faiss` available in the service venv it
+writes `faiss.index` plus `faiss.index.json`; otherwise it writes the Torch
+tensor fallback `example_index.pt`. Subsequent restarts validate the stored
+model id, model SHA, example count, and example digest before reusing either
+index, so stale notebook outputs are re-embedded automatically.
 
 To write a golden phrase smoke report for the active artifacts:
 
