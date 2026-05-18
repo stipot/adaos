@@ -55,6 +55,10 @@ Implemented now:
 - Neural usage statistics in `state/nlu/neural_usage.json`: request/fallback
   counts, latency summary, confidence bands, accept/abstain/reject counts,
   per-intent status counts, canonicalization buckets, and review samples.
+- Bridge-level Neural NLU probe through the same service discovery,
+  canonicalization payload, confidence gates, and usage-stat path as runtime
+  dispatch:
+  - `adaos interpreter neural-probe "какая погода в москве" --locale ru`
 - Notebook artifact preparation script for Neural NLU:
   `skills/neural_nlu_service_skill/scripts/prepare_artifacts.py`.
 - Rasa NLU service-skill isolation from the hub Python environment.

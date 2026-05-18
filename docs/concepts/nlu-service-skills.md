@@ -96,6 +96,10 @@ and records provenance in `metrics.json`.
 The active artifacts can be smoke-tested with
 `skills/neural_nlu_service_skill/scripts/evaluate_golden.py`, which writes
 `golden_report.json` and can fail the command with `--min-accuracy`.
+The hub-side bridge can be probed with
+`adaos interpreter neural-probe "какая погода в москве" --locale ru`; this
+uses the same service discovery/start, confidence gates, canonicalized payload,
+and usage-stat recording as runtime neural dispatch.
 
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class

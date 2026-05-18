@@ -119,3 +119,96 @@ async def test_neural_bridge_falls_back_without_hot_path_install(monkeypatch):
     assert usage[-1]["status"] == "unavailable"
     assert usage[-1]["reason"] == "neural_base_url_unresolved"
     assert usage[-1]["fallback_to_rasa"] is True
+
+
+@pytest.mark.anyio
+async def test_neural_parse_text_uses_bridge_thresholds_and_stats(monkeypatch):
+    from adaos.services.nlu import neural_service_bridge as bridge
+
+    usage = []
+    posted = {}
+
+    class Supervisor:
+        async def refresh_discovered(self, force=False):
+            posted["refresh_force"] = force
+
+        async def start(self, name):
+            posted["started"] = name
+
+        def resolve_base_url(self, name):
+            return "http://127.0.0.1:18091"
+
+    def fake_post(url, payload, *, timeout_ms):
+        posted["url"] = url
+        posted["payload"] = payload
+        return {
+            "ok": True,
+            "result": {
+                "top_intent": "weather.get",
+                "confidence": 0.81,
+                "slots": {"city": "moscow"},
+                "model_id": "unit-model",
+                "evidence": {"backend": "test"},
+            },
+        }
+
+    monkeypatch.setattr(bridge, "get_service_supervisor", lambda: Supervisor())
+    monkeypatch.setattr(bridge, "_http_post_json", fake_post)
+    monkeypatch.setattr(bridge, "record_neural_usage", lambda **kwargs: usage.append(kwargs))
+
+    result = await bridge.parse_text(
+        "weather in moscow",
+        webspace_id="desktop",
+        locale="ru",
+        entity_resolution={"normalized_text": "weather in {city}"},
+    )
+
+    assert result["ok"] is True
+    assert result["accepted"] is True
+    assert result["intent"] == "weather.get"
+    assert result["slots"] == {"city": "moscow"}
+    assert posted["payload"]["canonicalized_text"] == "weather in {city}"
+    assert usage[-1]["status"] == "accepted"
+    assert usage[-1]["intent"] == "weather.get"
+    assert usage[-1]["model_id"] == "unit-model"
+
+
+@pytest.mark.anyio
+async def test_neural_parse_text_low_confidence_falls_back(monkeypatch):
+    from adaos.services.nlu import neural_service_bridge as bridge
+
+    usage = []
+
+    class Supervisor:
+        async def refresh_discovered(self, force=False):
+            pass
+
+        async def start(self, name):
+            pass
+
+        def resolve_base_url(self, name):
+            return "http://127.0.0.1:18091"
+
+    def fake_post(url, payload, *, timeout_ms):
+        return {
+            "ok": True,
+            "result": {
+                "top_intent": "weather.get",
+                "confidence": 0.50,
+                "slots": {},
+                "model_id": "unit-model",
+            },
+        }
+
+    monkeypatch.setattr(bridge, "get_service_supervisor", lambda: Supervisor())
+    monkeypatch.setattr(bridge, "_http_post_json", fake_post)
+    monkeypatch.setattr(bridge, "record_neural_usage", lambda **kwargs: usage.append(kwargs))
+
+    result = await bridge.parse_text("maybe weather", webspace_id="desktop", record_usage_stats=True)
+
+    assert result["ok"] is False
+    assert result["accepted"] is False
+    assert result["reason"] == "neural_low_confidence"
+    assert result["fallback_to_rasa"] is True
+    assert usage[-1]["status"] == "low_confidence"
+    assert usage[-1]["fallback_to_rasa"] is True

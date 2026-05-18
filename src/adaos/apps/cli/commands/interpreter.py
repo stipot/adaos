@@ -12,6 +12,7 @@ import yaml
 
 from adaos.apps.bootstrap import get_ctx
 from adaos.services.interpreter.workspace import IntentMapping, InterpreterWorkspace
+from adaos.services.nlu import neural_service_bridge
 from adaos.services.nlu.data_registry import sync_from_scenarios_and_skills
 from adaos.services.nlu.rasa_skill_installer import ensure_rasa_service_skill_installed, is_rasa_nlu_enabled
 from adaos.services.skill.service_supervisor import get_service_supervisor
@@ -128,6 +129,31 @@ def parse(
     base = _rasa_service_url()
     result = _http_post_json(f"{base}/parse", {"text": text}, timeout_ms=30_000)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command("neural-probe")
+def neural_probe(
+    text: str = typer.Argument(..., help="Text to parse through the Neural NLU bridge."),
+    webspace_id: str = typer.Option("desktop", "--webspace-id", help="Webspace id for named-entity context."),
+    locale: Optional[str] = typer.Option(None, "--locale", help="Request locale."),
+    no_record_stats: bool = typer.Option(False, "--no-record-stats", help="Do not update neural usage statistics."),
+) -> None:
+    """
+    Probe Neural NLU through the hub bridge policy: service discovery/start,
+    canonicalization payload, confidence gates, and optional usage stats.
+    """
+    result = _run_blocking(
+        neural_service_bridge.parse_text(
+            text,
+            webspace_id=webspace_id,
+            meta={"probe": "cli.neural", "webspace_id": webspace_id},
+            locale=locale,
+            record_usage_stats=not no_record_stats,
+        )
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
 
 
 @app.command("status")
