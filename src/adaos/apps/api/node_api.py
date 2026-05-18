@@ -183,6 +183,18 @@ async def _refresh_infrascope_status_cards(
     }
 
 
+def _compact_status_card_refresh(refresh: Mapping[str, Any]) -> dict[str, Any]:
+    compact = {
+        "source": str(refresh.get("source") or ""),
+        "cardTotal": int(refresh.get("card_total") or 0),
+        "skipped": bool(refresh.get("skipped")),
+    }
+    reason = str(refresh.get("reason") or "").strip()
+    if reason:
+        compact["reason"] = reason
+    return compact
+
+
 def _coerce_optional_int(value: Any) -> int | None:
     if value is None:
         return None
@@ -1609,14 +1621,21 @@ async def node_reliability_summary(
     webspace_id: str | None = None,
     mode: str | None = None,
     since_version: int | None = None,
+    include_infrascope: bool = False,
     if_none_match: str | None = Header(default=None, alias="If-None-Match"),
 ) -> Any:
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     if str(mode or "").strip().lower() == "thin":
+        refreshes: dict[str, dict[str, Any]] = {}
+        if include_infrascope:
+            refresh = await _refresh_infrascope_status_cards(webspace_id=target_webspace_id)
+            refreshes["infrascope"] = _compact_status_card_refresh(refresh)
         payload = _thin_reliability_summary(
             webspace_id=target_webspace_id,
             since_version=since_version,
         )
+        if refreshes:
+            payload["refreshes"] = refreshes
         cache = _coerce_dict(payload.get("cache"))
         response.headers["Cache-Control"] = "no-cache"
         response.headers["ETag"] = str(cache.get("etag") or "")

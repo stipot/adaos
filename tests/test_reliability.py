@@ -53,6 +53,31 @@ def _reset_state() -> None:
     reset_reliability_runtime_state()
 
 
+def _sample_infrascope_snapshot() -> dict:
+    return {
+        "summary": {
+            "label": "Infrascope",
+            "value": "nominal",
+            "subtitle": "operator view",
+        },
+        "overview": {
+            "active_incidents": [],
+            "active_runtimes": [{"id": "runtime-a", "status": "online"}],
+        },
+        "inventory": {
+            "all": [
+                {"id": "browser-a", "kind": "browser", "status": "online"},
+                {"id": "skill-a", "kind": "skill", "status": "online"},
+            ],
+            "browsers": [{"id": "browser-a", "status": "online"}],
+            "runtimes": [{"id": "runtime-a", "status": "online"}],
+            "skills": [{"id": "skill-a", "status": "online"}],
+            "scenarios": [{"id": "desktop", "status": "online"}],
+        },
+        "operations": {"active": []},
+    }
+
+
 def test_hub_reliability_snapshot_exposes_taxonomy_and_disables_root_bound_capabilities_until_ready() -> None:
     _reset_state()
 
@@ -1870,6 +1895,67 @@ def test_node_reliability_summary_thin_mode_uses_status_cards(monkeypatch) -> No
     assert telemetry_payload["last"]["mode"] == "thin"
     assert telemetry_payload["last"]["webspaceId"] == "desktop"
     assert telemetry_payload["last"]["statusCode"] == 200
+
+
+def test_node_reliability_summary_thin_mode_can_include_infrascope(monkeypatch) -> None:
+    from adaos.apps.api import node_api
+    from adaos.apps.api.node_api import require_token, router
+    from adaos.services.status_card_registry import clear_status_card_registry
+
+    clear_status_card_registry()
+    node_api._reset_reliability_summary_metrics_for_tests()
+    monkeypatch.setattr(node_api, "_local_node_id", lambda: "node-a")
+    monkeypatch.setattr(
+        node_api,
+        "runtime_lifecycle_snapshot",
+        lambda: {
+            "node_state": "ready",
+            "accepting_new_work": True,
+            "draining": False,
+            "reason": None,
+        },
+    )
+
+    class FakeYDoc:
+        def get_map(self, name):
+            assert name == "data"
+            return {"infrascope": _sample_infrascope_snapshot()}
+
+    class FakeReadContext:
+        async def __aenter__(self):
+            return FakeYDoc()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(node_api, "async_read_ydoc", lambda _webspace_id: FakeReadContext())
+
+    app = FastAPI()
+    app.dependency_overrides[require_token] = lambda: True
+    app.include_router(router, prefix="/api/node")
+    client = TestClient(app)
+
+    resp = client.get(
+        "/api/node/reliability/summary",
+        params={"webspace_id": "desktop", "mode": "thin", "include_infrascope": "true"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["refreshes"]["infrascope"] == {
+        "source": "data/infrascope",
+        "cardTotal": 7,
+        "skipped": False,
+    }
+    assert payload["cardTotal"] == 8
+    assert payload["registryVersion"] == 8
+    assert payload["cache"]["etag"] == 'W/"status-card-registry:desktop:8"'
+    assert resp.headers["etag"] == 'W/"status-card-registry:desktop:8"'
+    assert {card["id"] for card in payload["cards"]} >= {
+        "runtime",
+        "infrascope-overview",
+        "infrascope-registry",
+    }
 
 
 def test_reliability_summary_telemetry_compares_full_and_thin_payloads() -> None:
