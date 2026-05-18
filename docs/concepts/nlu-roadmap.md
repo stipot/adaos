@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **75%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **76%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -188,8 +188,8 @@ but the productionization checklist remains mostly open.
 - [x] Record abstained/rejected samples for Teacher review and retraining.
 - [x] Add bridge-level `neural-probe` check using the runtime confidence gates
   and usage-stat path.
-- [ ] Link final Rasa miss/low-confidence outcomes back to the neural fallback
-  sample so `neural -> Rasa -> Teacher` can be measured end to end.
+- [x] Link final Rasa accept/miss outcomes back to the neural fallback sample
+  so `neural -> Rasa -> Teacher` can be measured end to end.
 
 ### Training Data Feedback
 

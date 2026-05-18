@@ -112,6 +112,8 @@ async def test_neural_bridge_falls_back_without_hot_path_install(monkeypatch):
     fallback = [payload for event_type, payload, _ in emitted if event_type == "nlp.intent.detect.rasa"][0]
     assert fallback["text"] == "unmatched"
     assert fallback["request_id"] == "rid-2"
+    assert fallback["_meta"]["neural_fallback"] is True
+    assert fallback["_meta"]["neural_fallback_reason"] == "neural_base_url_unresolved"
     assert any(
         event_type == "nlu.trace.stage" and payload["reason"] == "neural_base_url_unresolved"
         for event_type, payload, _ in emitted

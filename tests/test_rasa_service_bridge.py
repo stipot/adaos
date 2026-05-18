@@ -8,6 +8,7 @@ async def test_rasa_service_bridge_reuses_healthy_service_and_emits_detected(mon
     from adaos.services.nlu import rasa_service_bridge as bridge
 
     emitted = []
+    downstream = []
 
     class Supervisor:
         async def refresh_discovered(self, force=False):
@@ -34,12 +35,13 @@ async def test_rasa_service_bridge_reuses_healthy_service_and_emits_detected(mon
         },
     )
     monkeypatch.setattr(bridge, "bus_emit", lambda _bus, event, payload, source=None: emitted.append((event, payload, source)))
+    monkeypatch.setattr(bridge, "record_neural_fallback_outcome", lambda **kwargs: downstream.append(kwargs))
 
     await bridge._parse_and_emit(
         text="открой модалку nlu_teacher_modal",
         webspace_id="ws1",
         request_id="rid1",
-        meta={"trace": "test"},
+        meta={"trace": "test", "neural_fallback": True, "neural_fallback_reason": "neural_low_confidence"},
     )
 
     assert emitted
@@ -51,6 +53,16 @@ async def test_rasa_service_bridge_reuses_healthy_service_and_emits_detected(mon
     assert payload["webspace_id"] == "ws1"
     assert payload["request_id"] == "rid1"
     assert payload["via"] == "rasa"
+    assert downstream == [
+        {
+            "request_id": "rid1",
+            "status": "accepted",
+            "reason": "rasa_accepted",
+            "intent": "desktop.open_modal",
+            "confidence": 0.91,
+            "via": "rasa",
+        }
+    ]
 
 
 @pytest.mark.anyio

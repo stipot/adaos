@@ -106,6 +106,7 @@ def _emit_rasa_fallback(
     webspace_id: str | None,
     request_id: str | None,
     meta: Mapping[str, Any],
+    neural_reason: str | None = None,
     locale: str | None = None,
     preferred_locales: list[str] | None = None,
 ) -> None:
@@ -120,8 +121,11 @@ def _emit_rasa_fallback(
         payload["request_locale"] = locale
     if preferred_locales:
         payload["preferred_locales"] = list(preferred_locales)
-    if isinstance(meta, Mapping) and meta:
-        payload["_meta"] = dict(meta)
+    next_meta = dict(meta) if isinstance(meta, Mapping) else {}
+    next_meta["neural_fallback"] = True
+    if neural_reason:
+        next_meta["neural_fallback_reason"] = neural_reason
+    payload["_meta"] = next_meta
     bus_emit(ctx.bus, "nlp.intent.detect.rasa", payload, source="nlu.neural")
 
 
@@ -625,6 +629,7 @@ async def _on_nlp_intent_detect_neural(evt: Any) -> None:
             webspace_id=webspace_id,
             request_id=request_id,
             meta=meta,
+            neural_reason=str(result.get("reason") or "neural_failed"),
             locale=locale,
             preferred_locales=preferred_locales,
         )

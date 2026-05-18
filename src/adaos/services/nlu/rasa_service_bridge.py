@@ -11,6 +11,7 @@ from adaos.sdk.core.decorators import subscribe
 from adaos.services.agent_context import get_ctx
 from adaos.services.eventbus import emit as bus_emit
 from adaos.services.skill.service_supervisor import get_service_supervisor
+from .neural_usage_stats import record_neural_fallback_outcome
 from .rasa_skill_installer import is_rasa_nlu_enabled
 
 _log = logging.getLogger("adaos.nlu.rasa")
@@ -177,6 +178,27 @@ def _slots_from_entities(entities: Any) -> Dict[str, Any]:
     return slots
 
 
+def _record_neural_fallback_outcome_safe(
+    *,
+    meta: Mapping[str, Any],
+    request_id: str | None,
+    result: Mapping[str, Any],
+) -> None:
+    if meta.get("neural_fallback") is not True:
+        return
+    try:
+        record_neural_fallback_outcome(
+            request_id=request_id,
+            status="accepted" if result.get("ok") else "miss",
+            reason=str(result.get("reason") or ("rasa_accepted" if result.get("ok") else "rasa_miss")),
+            intent=result.get("intent") if isinstance(result.get("intent"), str) else None,
+            confidence=result.get("confidence") if isinstance(result.get("confidence"), (int, float)) else None,
+            via="rasa",
+        )
+    except Exception:
+        _log.debug("failed to record downstream Rasa outcome for neural fallback", exc_info=True)
+
+
 async def parse_text(
     text: str,
     *,
@@ -291,6 +313,7 @@ async def _parse_and_emit(
         return
 
     result = await parse_text(text, webspace_id=webspace_id, request_id=request_id, meta=meta)
+    _record_neural_fallback_outcome_safe(meta=meta, request_id=request_id, result=result)
     if not result.get("ok"):
         _emit_stage(
             ctx=ctx,

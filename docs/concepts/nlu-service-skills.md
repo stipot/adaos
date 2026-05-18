@@ -119,8 +119,9 @@ can be justified by observed drift, latency, confidence, and fallback patterns.
 The bridge persists those node-local aggregates in
 `state/nlu/neural_usage.json`: request and fallback counts, latency summary,
 confidence bands, accept/abstain/reject counts, per-intent status counts,
-canonicalization hit/miss/ambiguity/unresolved buckets, and bounded samples for
-Teacher review.
+canonicalization hit/miss/ambiguity/unresolved buckets, downstream Rasa
+accepted/miss outcomes for neural fallbacks, and bounded samples for Teacher
+review.
 
 The intended detector algorithm is the full research-notebook approach:
 

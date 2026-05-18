@@ -39,6 +39,14 @@ def _empty_stats() -> dict[str, Any]:
             "avg": None,
             "last": None,
         },
+        "downstream": {
+            "rasa_after_neural": {
+                "total": 0,
+                "by_status": {},
+                "by_reason": {},
+                "by_intent": {},
+            }
+        },
         "recent": [],
         "review_samples": [],
     }
@@ -222,8 +230,77 @@ def record_neural_usage(
         return stats
 
 
+def record_neural_fallback_outcome(
+    *,
+    request_id: str | None,
+    status: str,
+    reason: str | None = None,
+    intent: str | None = None,
+    confidence: float | None = None,
+    via: str = "rasa",
+) -> dict[str, Any]:
+    """
+    Link a downstream Rasa/Teacher outcome back to a previous neural fallback.
+
+    This does not count as a new neural request. It annotates matching recent
+    fallback samples by request id and maintains compact aggregate downstream
+    counters for rollout decisions.
+    """
+    normalized_status = str(status or "unknown").strip() or "unknown"
+    normalized_reason = str(reason or normalized_status).strip() or normalized_status
+    request_token = str(request_id or "").strip() or None
+    confidence_value = _float_or_none(confidence)
+    intent_token = str(intent).strip() if isinstance(intent, str) and intent.strip() else None
+    now = time.time()
+    outcome = {
+        "ts": now,
+        "via": str(via or "rasa").strip() or "rasa",
+        "status": normalized_status,
+        "reason": normalized_reason,
+        "intent": intent_token,
+        "confidence": round(confidence_value, 6) if confidence_value is not None else None,
+    }
+
+    path = neural_usage_stats_path()
+    with _LOCK:
+        stats = _read_json(path)
+        stats["schema_version"] = 1
+        stats["updated_at"] = now
+        downstream = stats.setdefault("downstream", {})
+        rasa = downstream.setdefault(
+            "rasa_after_neural",
+            {
+                "total": 0,
+                "by_status": {},
+                "by_reason": {},
+                "by_intent": {},
+            },
+        )
+        rasa["total"] = int(rasa.get("total") or 0) + 1
+        _bump(rasa.setdefault("by_status", {}), normalized_status)
+        _bump(rasa.setdefault("by_reason", {}), normalized_reason)
+        if intent_token:
+            _bump(rasa.setdefault("by_intent", {}), intent_token)
+
+        if request_token:
+            for key in ("recent", "review_samples"):
+                items = stats.get(key)
+                if not isinstance(items, list):
+                    continue
+                for item in reversed(items):
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("request_id") == request_token and item.get("fallback_to_rasa") is True:
+                        item["downstream_rasa"] = dict(outcome)
+                        break
+
+        _write_json(path, stats)
+        return stats
+
+
 __all__ = [
     "neural_usage_stats_path",
     "read_neural_usage_stats",
+    "record_neural_fallback_outcome",
     "record_neural_usage",
 ]
