@@ -49,6 +49,7 @@ Preferred node-level layout:
 
 - `<ADAOS_BASE_DIR>/state/nlu/neural/model.pt`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/labels.json`
+- `<ADAOS_BASE_DIR>/state/nlu/neural/intents_manifest.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/vocab.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/examples_manifest.jsonl`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/ranker_config.json`
@@ -68,3 +69,18 @@ jsonl example files using the same masking/token order as the training
 notebook. That keeps the supplied `best_model.pt` usable after copying the
 training/dev jsonl files into the artifact root or pointing the env vars to
 them.
+
+To prepare the active node-level layout from the research notebook outputs in
+the repository-local `example` directory:
+
+```powershell
+.\.venv\Scripts\python.exe skills\neural_nlu_service_skill\scripts\prepare_artifacts.py `
+  --source-root example `
+  --out-dir .adaos\state\nlu\neural
+```
+
+The script copies `best_model*.pt` to `model.pt`, builds `labels.json` and
+`vocab.json` with the notebook-compatible special token order, writes
+`examples_manifest.jsonl`, `intents_manifest.json`, `ranker_config.json`, and
+`metrics.json`. It does not require Torch; Torch is needed later when the
+service loads the model for inference.

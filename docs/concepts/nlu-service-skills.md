@@ -79,6 +79,18 @@ Target artifacts are service-owned runtime data:
 - `ranker_config.json`
 - `metrics.json`
 
+Notebook outputs can be normalized into this layout with:
+
+```powershell
+.\.venv\Scripts\python.exe skills\neural_nlu_service_skill\scripts\prepare_artifacts.py `
+  --source-root example `
+  --out-dir .adaos\state\nlu\neural
+```
+
+The script copies `best_model*.pt`, derives labels/vocab with the same masking
+and special-token order as the notebook, writes example and intent manifests,
+and records provenance in `metrics.json`.
+
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class
 can be justified by observed drift, latency, confidence, and fallback patterns.

@@ -53,6 +53,8 @@ Implemented now:
 - Neural usage statistics in `state/nlu/neural_usage.json`: request/fallback
   counts, latency summary, confidence bands, accept/abstain/reject counts,
   per-intent status counts, canonicalization buckets, and review samples.
+- Notebook artifact preparation script for Neural NLU:
+  `skills/neural_nlu_service_skill/scripts/prepare_artifacts.py`.
 - Rasa NLU service-skill isolation from the hub Python environment.
 - Dry-run probe API for safe phrase checks:
   - `POST /api/nlu/teacher/{webspace_id}/probe`

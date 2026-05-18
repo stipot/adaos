@@ -334,6 +334,25 @@ class Detector:
                     return state[key], metadata
         return state, metadata
 
+    def _load_model_id(self, *, root: Path, metadata: dict[str, Any], model_path: Path) -> str:
+        explicit = os.getenv("ADAOS_NLU_NEURAL_MODEL_ID", "").strip()
+        if explicit:
+            return explicit
+        token = str(metadata.get("model_id") or "").strip()
+        if token:
+            return token
+        metrics_path = root / "metrics.json"
+        if metrics_path.exists():
+            try:
+                metrics = _json_load(metrics_path)
+                if isinstance(metrics, dict):
+                    token = str(metrics.get("model_id") or "").strip()
+                    if token:
+                        return token
+            except Exception:
+                pass
+        return str(model_path.stem or "node-default")
+
     def _load_neural_engine(self):
         if torch is None or nn is None or F is None or NLUEncoder is None:
             return None
@@ -360,8 +379,7 @@ class Detector:
                 "stoi": {str(ch): idx for idx, ch in enumerate(vocab)},
                 "examples": examples,
                 "example_vectors": None,
-                "model_id": os.getenv("ADAOS_NLU_NEURAL_MODEL_ID", "").strip()
-                or str(metadata.get("model_id") or model_path.stem or "node-default"),
+                "model_id": self._load_model_id(root=root, metadata=metadata, model_path=model_path),
                 "artifact_root": str(root),
             }
             if examples and os.getenv("ADAOS_NEURAL_DISABLE_EXAMPLE_INDEX", "0").strip().lower() not in {"1", "true", "yes", "on"}:
@@ -578,7 +596,7 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.0",
+            "version": "0.2.1",
             "torch_available": torch is not None,
             "model_loaded": bool(engine),
             "model_id": engine.get("model_id") if engine else None,

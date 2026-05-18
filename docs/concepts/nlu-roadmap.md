@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **62%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **65%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -159,10 +159,14 @@ but the productionization checklist remains mostly open.
 ### Artifacts and ModelOps
 
 - [x] Define node-level active model layout owned by the service skill runtime.
+- [x] Add a notebook-output preparation script that writes `model.pt`,
+  `labels.json`, `vocab.json`, example/intent manifests, ranker config, and
+  provenance metrics into the active node-level layout.
 - [ ] Store `model.pt`, `labels.json`/`intents_manifest.json`, `vocab.json`,
   `faiss.index`, `examples_manifest.jsonl`, `ranker_config.json`, and
   `metrics.json`.
-- [ ] Add immutable `model_id` and model provenance metadata.
+- [x] Add immutable `model_id` and model provenance metadata for prepared
+  notebook artifacts.
 - [ ] Add rollback pointer for the node-level active model.
 - [ ] Add golden phrase regression report before model promotion.
 - [ ] Add quality gates using accuracy, macro-F1, abstain rate, and latency.
