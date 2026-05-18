@@ -39,6 +39,31 @@ def _make_client() -> TestClient:
     return TestClient(app)
 
 
+def _sample_infrascope_snapshot() -> dict:
+    return {
+        "summary": {
+            "label": "Infrascope",
+            "value": "nominal",
+            "subtitle": "operator view",
+        },
+        "overview": {
+            "active_incidents": [],
+            "active_runtimes": [{"id": "runtime-a", "status": "online"}],
+        },
+        "inventory": {
+            "all": [
+                {"id": "browser-a", "kind": "browser", "status": "online"},
+                {"id": "skill-a", "kind": "skill", "status": "online"},
+            ],
+            "browsers": [{"id": "browser-a", "status": "online"}],
+            "runtimes": [{"id": "runtime-a", "status": "online"}],
+            "skills": [{"id": "skill-a", "status": "online"}],
+            "scenarios": [{"id": "desktop", "status": "online"}],
+        },
+        "operations": {"active": []},
+    }
+
+
 def test_status_card_api_publishes_and_reads_projection() -> None:
     client = _make_client()
 
@@ -92,6 +117,66 @@ def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     assert payload["card"]["id"] == "runtime"
     assert payload["card"]["owner"] == "core:runtime"
     assert payload["snapshot"]["projection_total"] == 1
+
+
+def test_status_card_api_refreshes_infrascope_cards_from_request() -> None:
+    client = _make_client()
+
+    resp = client.post(
+        "/api/node/status-cards/infrascope/refresh",
+        json={"webspace_id": "desktop", "snapshot": _sample_infrascope_snapshot()},
+    )
+    projection_resp = client.get(
+        "/api/node/status-cards/infrascope-overview/projection",
+        params={"webspace_id": "desktop"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["source"] == "request"
+    assert payload["card_total"] == 7
+    assert payload["snapshot"]["card_total"] == 7
+    assert {card["id"] for card in payload["cards"]} >= {
+        "infrascope-overview",
+        "infrascope-inventory",
+        "infrascope-registry",
+    }
+    assert projection_resp.status_code == 200
+    projection = projection_resp.json()["record"]
+    assert projection["data"]["status"] == "online"
+    assert projection["data"]["summary"] == "Infrascope | nominal | operator view"
+
+
+def test_status_card_api_refreshes_infrascope_cards_from_yjs_snapshot(monkeypatch) -> None:
+    client = _make_client()
+
+    class FakeYDoc:
+        def get_map(self, name):
+            assert name == "data"
+            return {"infrascope": _sample_infrascope_snapshot()}
+
+    class FakeReadContext:
+        async def __aenter__(self):
+            return FakeYDoc()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "async_read_ydoc", lambda _webspace_id: FakeReadContext())
+
+    resp = client.post(
+        "/api/node/status-cards/infrascope/refresh",
+        params={"webspace_id": "desktop"},
+        json={},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["source"] == "data/infrascope"
+    assert payload["card_total"] == 7
+    assert payload["snapshot"]["projection_total"] == 7
 
 
 def test_status_card_api_sweeps_stale_cards() -> None:

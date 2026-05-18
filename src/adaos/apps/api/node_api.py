@@ -64,6 +64,7 @@ from adaos.services.status_card_registry import (
     status_card_registry_snapshot,
     sweep_status_card_registry,
 )
+from adaos.services.infrascope_status_cards import publish_infrascope_status_cards
 from adaos.services.infrastate_status_cards import publish_infrastate_status_cards
 from adaos.services.runtime_status_cards import publish_runtime_status_card
 from adaos.services.operations import submit_install_operation
@@ -133,6 +134,21 @@ def _coerce_list(value: Any) -> list[Any]:
 
 def _coerce_node_webspace_id(value: Any = None) -> str:
     return coerce_webspace_id(value, fallback=default_webspace_id())
+
+
+def _coerce_mapping_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+async def _read_infrascope_snapshot_for_status_cards(webspace_id: str) -> dict[str, Any] | None:
+    try:
+        async with async_read_ydoc(webspace_id) as ydoc:
+            data_map = ydoc.get_map("data")
+            snapshot = _coerce_mapping_dict(data_map.get("infrascope"))
+    except Exception:
+        _log.debug("failed to read infrascope snapshot from yjs webspace=%s", webspace_id, exc_info=True)
+        return None
+    return snapshot or None
 
 
 def _coerce_optional_int(value: Any) -> int | None:
@@ -1428,6 +1444,11 @@ class StatusCardPublishRequest(BaseModel):
     updated_at: float | None = None
 
 
+class InfrascopeStatusCardsRefreshRequest(BaseModel):
+    webspace_id: str | None = None
+    snapshot: dict[str, Any] | None = None
+
+
 def _raise_400(detail: str) -> None:
     raise HTTPException(status_code=400, detail=detail)
 
@@ -2202,6 +2223,37 @@ async def node_status_cards_publish(payload: StatusCardPublishRequest) -> dict[s
         "accepted": True,
         "webspace_id": target_webspace_id,
         "card": card.to_dict(),
+        "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
+    }
+
+
+@router.post("/status-cards/infrascope/refresh", dependencies=[Depends(require_token)])
+async def node_status_cards_refresh_infrascope(
+    payload: InfrascopeStatusCardsRefreshRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    ensure_status_card_dispatcher_handler()
+    request_payload = payload or InfrascopeStatusCardsRefreshRequest()
+    target_webspace_id = _coerce_node_webspace_id(request_payload.webspace_id or webspace_id)
+    source = "request"
+    snapshot = _coerce_mapping_dict(request_payload.snapshot)
+    if not snapshot:
+        source = "data/infrascope"
+        snapshot = await _read_infrascope_snapshot_for_status_cards(target_webspace_id) or {}
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="infrascope_snapshot_not_found")
+    cards = publish_infrascope_status_cards(
+        snapshot,
+        webspace_id=target_webspace_id,
+        updated_at=time.time(),
+    )
+    return {
+        "ok": True,
+        "accepted": True,
+        "source": source,
+        "webspace_id": target_webspace_id,
+        "card_total": len(cards),
+        "cards": [card.to_dict() for card in cards],
         "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
     }
 
