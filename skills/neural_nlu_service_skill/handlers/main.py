@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
-from .upstream_detector_port import Detector
+try:
+    from .upstream_detector_port import Detector
+except ImportError:  # pragma: no cover - direct-file validation/import fallback
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from upstream_detector_port import Detector
 
 _DETECTOR = Detector()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AdaOSNeuralNLU/0.1"
+    server_version = "AdaOSNeuralNLU/0.2"
 
     def _json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -21,9 +27,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def log_message(self, _format: str, *args: Any) -> None:  # noqa: A003
+        if os.getenv("ADAOS_NEURAL_HTTP_LOG", "0").strip().lower() in {"1", "true", "yes", "on"}:
+            super().log_message(_format, *args)
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
-            self._json(200, {"ok": True, "service": "neural_nlu_service_skill"})
+            self._json(200, _DETECTOR.health())
             return
         self._json(404, {"ok": False, "error": "not_found"})
 
@@ -50,8 +60,11 @@ class Handler(BaseHTTPRequestHandler):
             text=text.strip(),
             webspace_id=payload.get("webspace_id") if isinstance(payload, dict) else None,
             locale=payload.get("locale") if isinstance(payload, dict) else None,
+            canonicalized_text=payload.get("canonicalized_text") if isinstance(payload, dict) else None,
+            entity_resolution=payload.get("entities") if isinstance(payload, dict) else None,
         )
-        self._json(200, {"ok": True, "result": result})
+        response = {"ok": True, **result, "result": result}
+        self._json(200, response)
 
 
 if __name__ == "__main__":

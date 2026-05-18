@@ -26,7 +26,8 @@ skill source trees under the Python package.
 
 Concrete NLU engines are providers:
 
-- `neural_nlu_service_skill` is a registry/workspace service skill.
+- `neural_nlu_service_skill` is a registry/workspace service skill sourced from
+  `skills/neural_nlu_service_skill` and installed into `.adaos/workspace`.
 - `rasa_nlu_service_skill` is a registry/workspace service skill.
 - Model artifacts and indexes are service-owned runtime data, not core package
   data.
@@ -42,6 +43,13 @@ Implemented now:
 
 - Regex-first event pipeline with optional Rasa service-skill fallback.
 - Optional neural delegation event behind `ADAOS_NLU_NEURAL`.
+- Neural NLU service-skill install preparation from normal workspace/registry
+  source during install flow.
+- Neural bridge discovery/start of installed service only; no hot-path
+  workspace mutation or A/B slot preparation.
+- Neural `/parse` contract with `top_intent`, `confidence`, `alternatives`,
+  `slots`, `model_id`, `evidence`, canonicalized text, and named-entity
+  evidence.
 - Rasa NLU service-skill isolation from the hub Python environment.
 - Dry-run probe API for safe phrase checks:
   - `POST /api/nlu/teacher/{webspace_id}/probe`
@@ -58,10 +66,10 @@ Not implemented yet:
 - Stable template inventory for regex, Rasa examples, neural labels, and lookup sets.
 - Root MCP token/session flow for governed LLM-assisted authoring.
 
-The neural stage is part of the target architecture and should be installed by
-default once the provider is moved out of core package data. Until then the
-practical baseline remains `regex -> Rasa -> fallback/Teacher` unless the
-operator explicitly enables the experimental neural stage.
+The neural stage is now sourced as a normal service skill and prepared during
+install by default. Runtime dispatch still requires `ADAOS_NLU_NEURAL=1` so
+nodes can roll out the neural stage deliberately while Rasa remains the
+long-term fallback.
 
 ## Event flow (high level)
 
@@ -88,6 +96,8 @@ operator explicitly enables the experimental neural stage.
    - calls `neural_nlu_service_skill:/parse`
    - the service skill is installed/prepared by install/update flows, not by
      the hot parse path;
+   - passes named-entity `canonicalized_text` and `resolved_entities` evidence
+     into the provider request;
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights plus
      FAISS ranking artifacts when installed;
    - default deployment uses one active model per node, with usage telemetry

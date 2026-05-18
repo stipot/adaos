@@ -47,6 +47,7 @@ from adaos.services.runtime_refresh import rebuild_webspace_projection_sync, ref
 from adaos.services.scenario.manager import ScenarioManager
 from adaos.services.setup.presets import get_preset
 from adaos.services.skill.manager import SkillManager
+from adaos.services.nlu.neural_skill_installer import ensure_neural_service_skill_installed
 from adaos.services.nlu.rasa_skill_installer import ensure_rasa_service_skill_installed
 from adaos.services.nlu.rasa_training_bridge import train_rasa_nlu_once
 from adaos.services.yjs.bootstrap import ensure_webspace_seeded_from_scenario
@@ -103,38 +104,60 @@ def _sync_workspace_sparse_to_registry(ctx) -> dict:
     return _workspace_sync_sparse_to_registry(ctx)
 
 
+def _bootstrap_neural_nlu_after_install(installed: dict, *, enabled: bool) -> None:
+    if not enabled:
+        os.environ["ADAOS_NLU_NEURAL"] = "0"
+        installed.setdefault("nlu", {})["neural"] = {"ok": True, "skipped": True, "reason": "disabled_by_cli"}
+        return
+
+    try:
+        target = ensure_neural_service_skill_installed()
+        if target is None:
+            installed.setdefault("nlu", {})["neural"] = {
+                "ok": False,
+                "skipped": True,
+                "reason": "neural_service_skill_not_installed",
+            }
+            installed["warnings"].append("neural nlu service-skill was not installed")
+            return
+        installed.setdefault("nlu", {})["neural"] = {
+            "ok": True,
+            "skill": str(target),
+            "trained": False,
+        }
+    except Exception as exc:
+        installed.setdefault("nlu", {})["neural"] = {"ok": False, "error": str(exc)}
+        installed["warnings"].append(f"neural nlu bootstrap: {exc}")
+
+
 def _bootstrap_rasa_nlu_after_install(installed: dict, *, enabled: bool, train: bool) -> None:
     if not enabled:
         os.environ["ADAOS_NLU_RASA"] = "0"
-        installed["nlu"] = {"rasa": {"ok": True, "skipped": True, "reason": "disabled_by_cli"}}
+        installed.setdefault("nlu", {})["rasa"] = {"ok": True, "skipped": True, "reason": "disabled_by_cli"}
         return
 
     try:
         target = ensure_rasa_service_skill_installed()
         if target is None:
-            installed["nlu"] = {
-                "rasa": {
-                    "ok": False,
-                    "skipped": True,
-                    "reason": "rasa_service_skill_not_installed",
-                }
+            installed.setdefault("nlu", {})["rasa"] = {
+                "ok": False,
+                "skipped": True,
+                "reason": "rasa_service_skill_not_installed",
             }
             installed["warnings"].append("rasa nlu service-skill was not installed")
             return
 
         if train:
             result = asyncio.run(train_rasa_nlu_once(reason="post-install", note="rasa-post-install"))
-            installed["nlu"] = {"rasa": result}
+            installed.setdefault("nlu", {})["rasa"] = result
             if not bool(result.get("ok")) and not bool(result.get("skipped")):
                 installed["warnings"].append(f"rasa nlu train: {result.get('reason') or 'failed'}")
             return
 
-        installed["nlu"] = {
-            "rasa": {
-                "ok": target is not None,
-                "skill": str(target) if target is not None else None,
-                "trained": False,
-            }
+        installed.setdefault("nlu", {})["rasa"] = {
+            "ok": target is not None,
+            "skill": str(target) if target is not None else None,
+            "trained": False,
         }
     except Exception as exc:
         installed.setdefault("nlu", {})["rasa"] = {"ok": False, "error": str(exc)}
@@ -147,6 +170,7 @@ def install(
     webspace_id: Optional[str] = typer.Option(None, "--webspace", help="target webspace id (default: 'default')"),
     setup_skills: bool = typer.Option(False, "--setup", help="run skill setup hooks (may prompt / require IO)"),
     autostart: bool = typer.Option(False, "--autostart", help="enable OS autostart after install"),
+    neural_nlu: bool = typer.Option(True, "--neural-nlu/--no-neural-nlu", help="prepare default Neural NLU service-skill"),
     rasa_nlu: bool = typer.Option(True, "--rasa-nlu/--no-rasa-nlu", help="prepare optional Rasa NLU service-skill"),
     train_nlu: bool = typer.Option(True, "--train-nlu/--no-train-nlu", help="train Rasa NLU after installing scenarios/skills"),
     json_output: bool = typer.Option(False, "--json", help=_("cli.option.json")),
@@ -219,6 +243,7 @@ def install(
     except Exception as exc:
         installed["warnings"].append(f"webspace rebuild: {exc}")
 
+    _bootstrap_neural_nlu_after_install(installed, enabled=neural_nlu)
     _bootstrap_rasa_nlu_after_install(installed, enabled=rasa_nlu, train=train_nlu and rasa_nlu)
 
     if autostart:
@@ -240,6 +265,12 @@ def install(
         slot = item.get("slot") or "n/a"
         typer.echo(f"skill: {item['id']} (slot {slot})")
     nlu = installed.get("nlu") if isinstance(installed.get("nlu"), dict) else {}
+    neural = nlu.get("neural") if isinstance(nlu.get("neural"), dict) else {}
+    if neural:
+        if neural.get("skipped"):
+            typer.echo(f"nlu/neural: skipped ({neural.get('reason') or 'unknown'})")
+        else:
+            typer.echo(f"nlu/neural: {'ready' if neural.get('ok') else 'failed'}")
     rasa = nlu.get("rasa") if isinstance(nlu.get("rasa"), dict) else {}
     if rasa:
         if rasa.get("skipped"):

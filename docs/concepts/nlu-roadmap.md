@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **49%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **58%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -13,8 +13,8 @@ but the productionization checklist remains mostly open.
 - [x] Rasa service-skill prepared in A/B skill runtime slots.
 - [x] Confidence/fallback path to `nlp.intent.not_obtained`.
 - [x] Baseline desktop intents for opening modals and node-scoped modals.
-- [ ] Remove runtime-provider delivery through `src/adaos/interpreter_data`.
-- [ ] Ensure parse bridges only discover/start installed service skills and do
+- [x] Remove Neural NLU runtime-provider delivery through `src/adaos/interpreter_data`.
+- [x] Ensure Neural NLU parse bridge only discovers/starts installed service skills and does
   not mutate workspace skills or A/B slots on demand.
 
 ## Phase 2: Operator Feedback Loop
@@ -98,7 +98,7 @@ but the productionization checklist remains mostly open.
   Rasa/neural retraining.
 - [x] Track the full target design in
   [Named Entities and Canonical Naming](../architecture/named-entities.md).
-- [ ] Feed canonicalized text and entity evidence into the neural provider
+- [x] Feed canonicalized text and entity evidence into the neural provider
   contract.
 - [ ] Ensure Rasa and neural training fingerprints exclude runtime aliases by
   default.
@@ -123,42 +123,42 @@ but the productionization checklist remains mostly open.
 
 ### Provider Boundary
 
-- [ ] Move `neural_nlu_service_skill` out of `src/adaos/interpreter_data` into
+- [x] Move `neural_nlu_service_skill` out of `src/adaos/interpreter_data` into
   normal registry/workspace skill delivery.
-- [ ] Add default-on `adaos install` preparation for Neural NLU.
-- [ ] Add `--no-neural-nlu` install option for constrained devices.
-- [ ] Make the neural bridge discover/start only installed service skills.
-- [ ] Remove hot-path workspace mutation/bootstrap from neural parse handling.
-- [ ] Keep provider dependencies (`torch`, `faiss-cpu`, etc.) out of the hub
+- [x] Add default-on `adaos install` preparation for Neural NLU.
+- [x] Add `--no-neural-nlu` install option for constrained devices.
+- [x] Make the neural bridge discover/start only installed service skills.
+- [x] Remove hot-path workspace mutation/bootstrap from neural parse handling.
+- [x] Keep provider dependencies (`torch`, `faiss-cpu`, etc.) out of the hub
   root venv.
 
 ### Inference Contract
 
-- [ ] Freeze `/parse` request/response schema with `top_intent`,
+- [x] Freeze `/parse` request/response schema with `top_intent`,
   `confidence`, `alternatives`, `slots`, `model_id`, and `evidence`.
-- [ ] Pass named-entity canonicalization evidence into `/parse`.
-- [ ] Return matched examples, score components, and canonicalized text in
+- [x] Pass named-entity canonicalization evidence into `/parse`.
+- [x] Return matched examples, score components, and canonicalized text in
   `evidence`.
-- [ ] Add confidence gates for accept/abstain/reject.
-- [ ] Add neural abstain/error fallback to Rasa.
+- [x] Add confidence gates for accept/abstain/reject.
+- [x] Add neural abstain/error fallback to Rasa.
 - [ ] Route Rasa miss/low confidence to NLU Teacher.
 
 ### Notebook Approach Port
 
-- [ ] Port masking logic into provider-owned runtime code.
-- [ ] Port Char-CNN + BiLSTM model loader.
-- [ ] Fix and test special-token compatibility between training and runtime.
-- [ ] Port supervised-contrastive embedding projection usage.
+- [x] Port masking logic into provider-owned runtime code.
+- [x] Port Char-CNN + BiLSTM model loader.
+- [x] Fix and test special-token compatibility between training and runtime.
+- [x] Port supervised-contrastive embedding projection usage.
 - [ ] Add FAISS positive example index.
 - [ ] Add FAISS negative example indexes.
-- [ ] Add weighted ranker over softmax, k-NN similarity, and action/skill
+- [x] Add weighted ranker over softmax, k-NN similarity, and action/skill
   priors.
 - [ ] Add intent/action id mapping from research labels to AdaOS canonical
   intents and system actions.
 
 ### Artifacts and ModelOps
 
-- [ ] Define node-level active model layout owned by the service skill runtime.
+- [x] Define node-level active model layout owned by the service skill runtime.
 - [ ] Store `model.pt`, `labels.json`/`intents_manifest.json`, `vocab.json`,
   `faiss.index`, `examples_manifest.jsonl`, `ranker_config.json`, and
   `metrics.json`.
@@ -191,21 +191,17 @@ but the productionization checklist remains mostly open.
 
 ## Immediate Next Steps
 
-1. Remove `src/adaos/interpreter_data` from the provider delivery path and
-   document the migration path for existing experimental templates.
-2. Add default-on Neural NLU install preparation plus a `--no-neural-nlu`
-   escape hatch.
-3. Port the full notebook ranker into the neural provider:
-   masking, Char-CNN/BiLSTM, FAISS positives/negatives, priors, and evidence.
-4. Define the system action catalog for core/client commands and include it in
+1. Add persisted FAISS positive/negative indexes for the service-owned artifact
+   layout; the current runtime has a Torch in-memory k-NN ranker fallback.
+2. Define the system action catalog for core/client commands and include it in
    NLU authoring context.
-5. Add neural usage statistics and stage latency before making rollout
+3. Add neural usage statistics and stage latency before making rollout
    decisions about per-locale/webspace/profile models.
-6. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
+4. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-7. Add "save correct example" backend action with skill/scenario/system-action
+5. Add "save correct example" backend action with skill/scenario/system-action
    target selection and audit metadata.
-8. Add golden phrase reports and model promotion gates.
+6. Add golden phrase reports and model promotion gates.
 
 ## Last Completed Slice
 

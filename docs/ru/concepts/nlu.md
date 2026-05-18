@@ -23,7 +23,7 @@ This document describes the current production MVP direction for intent detectio
    - otherwise emits `nlp.intent.detect.rasa`
 4. Neural bridge:
    - calls `neural_nlu_service_skill:/parse`
-   - if the skill is missing, hub bootstraps it from packaged template (`adaos.interpreter_data/neural_nlu_service_skill`)
+   - if the skill is missing, hub falls back to Rasa; install/update flows prepare the service skill from the workspace/registry source
    - upstream detector code is ported into `handlers/upstream_detector_port.py` (service-side runtime module)
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights via:
      - `ADAOS_NEURAL_MODEL_PATH` (state_dict `.pt`)

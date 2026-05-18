@@ -99,6 +99,31 @@ def _resolve_webspace_id(payload: Mapping[str, Any]) -> str:
     return default_webspace_id()
 
 
+def _request_locale(payload: Mapping[str, Any]) -> str | None:
+    meta = payload.get("_meta") if isinstance(payload.get("_meta"), dict) else {}
+    token = payload.get("request_locale") or payload.get("locale") or meta.get("request_locale") or meta.get("locale")
+    if isinstance(token, str) and token.strip():
+        return token.strip()
+    return None
+
+
+def _preferred_locales(payload: Mapping[str, Any]) -> list[str]:
+    meta = payload.get("_meta") if isinstance(payload.get("_meta"), dict) else {}
+    raw = payload.get("preferred_locales") or meta.get("preferred_locales")
+    if isinstance(raw, str):
+        items: list[Any] = raw.split(",")
+    elif isinstance(raw, (list, tuple, set)):
+        items = list(raw)
+    else:
+        items = []
+    out: list[str] = []
+    for item in items:
+        token = str(item or "").strip()
+        if token and token not in out:
+            out.append(token)
+    return out
+
+
 def _request_id(payload: Mapping[str, Any], *, text: str, webspace_id: str) -> str:
     rid = payload.get("request_id") or payload.get("id")
     if isinstance(rid, str) and rid.strip():
@@ -388,6 +413,8 @@ async def _on_detect_request(evt: Any) -> None:
     text = text.strip()
 
     meta = payload.get("_meta") if isinstance(payload.get("_meta"), dict) else {}
+    locale = _request_locale(payload)
+    preferred_locales = _preferred_locales(payload)
 
     ctx = get_ctx()
     webspace_id = _resolve_webspace_id(payload)
@@ -453,9 +480,10 @@ async def _on_detect_request(evt: Any) -> None:
         reason=downstream_event,
         meta=meta,
     )
-    bus_emit(
-        ctx.bus,
-        downstream_event,
-        {"text": text, "webspace_id": webspace_id, "request_id": rid, "_meta": meta},
-        source="nlu.pipeline",
-    )
+    downstream_payload: dict[str, Any] = {"text": text, "webspace_id": webspace_id, "request_id": rid, "_meta": meta}
+    if locale:
+        downstream_payload["locale"] = locale
+        downstream_payload["request_locale"] = locale
+    if preferred_locales:
+        downstream_payload["preferred_locales"] = preferred_locales
+    bus_emit(ctx.bus, downstream_event, downstream_payload, source="nlu.pipeline")

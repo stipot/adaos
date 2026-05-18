@@ -34,7 +34,8 @@ The hub NLU pipeline uses:
 
 Target skill:
 
-- Skill: `.adaos/workspace/skills/neural_nlu_service_skill`
+- Source skill: `skills/neural_nlu_service_skill`
+- Installed skill: `.adaos/workspace/skills/neural_nlu_service_skill`
 - Active source: `.adaos/workspace/skills/.runtime/neural_nlu_service_skill/v<major>.<minor>/slots/<A|B>/src/skills/neural_nlu_service_skill`
 - Supervisor: `src/adaos/services/skill/service_supervisor.py`
 - Bridge: `src/adaos/services/nlu/neural_service_bridge.py`
@@ -45,6 +46,8 @@ Target install policy:
 - `--no-neural-nlu` or `ADAOS_NLU_NEURAL=0` may disable the stage on weak
   devices.
 - The bridge starts only an already installed/active service skill.
+- The bridge does not copy templates, create workspace skills, or prepare A/B
+  slots on `nlp.intent.detect.neural`.
 - If the service skill is missing or unhealthy, the bridge falls back to Rasa.
 
 Runtime / environment:
@@ -56,9 +59,15 @@ Runtime / environment:
 HTTP API:
 
 - `GET /health`
-- `POST /parse` `{ "text": "...", "webspace_id": "...", "locale": "ru", "entities": {...} }`
+- `POST /parse` `{ "text": "...", "webspace_id": "...", "locale": "ru", "canonicalized_text": "...", "entities": {...} }`
 - optional `POST /reindex`
 - optional `POST /train` or an offline artifact build command
+
+Responses include `top_intent`, `confidence`, `alternatives`, `slots`,
+`model_id`, and `evidence`, with the same payload mirrored under `result` for
+older bridge compatibility. The evidence includes canonicalized text,
+model-facing masked text, score components, and matched examples when the
+example index is available.
 
 Target artifacts are service-owned runtime data:
 
