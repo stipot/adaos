@@ -212,3 +212,97 @@ async def test_neural_parse_text_low_confidence_falls_back(monkeypatch):
     assert result["fallback_to_rasa"] is True
     assert usage[-1]["status"] == "low_confidence"
     assert usage[-1]["fallback_to_rasa"] is True
+
+
+@pytest.mark.anyio
+async def test_neural_diagnose_readiness_reports_artifacts_and_health(monkeypatch, tmp_path):
+    from adaos.services.nlu import neural_service_bridge as bridge
+
+    root = tmp_path / "state" / "nlu" / "neural"
+    root.mkdir(parents=True)
+    for name in (
+        "model.pt",
+        "labels.json",
+        "vocab.json",
+        "examples_manifest.jsonl",
+        "ranker_config.json",
+        "faiss.index",
+        "faiss.index.json",
+    ):
+        (root / name).write_text("x", encoding="utf-8")
+    (root / "metrics.json").write_text(
+        '{"model_id":"unit-model","examples_total":3,"labels_total":2}',
+        encoding="utf-8",
+    )
+    (root / "golden_report.json").write_text(
+        '{"accuracy":1.0,"passed":2,"total":2}',
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    class Supervisor:
+        async def refresh_discovered(self, force=False):
+            calls.append(("refresh", force))
+
+        async def start(self, name):
+            calls.append(("start", name))
+
+        async def stop(self, name):
+            calls.append(("stop", name))
+
+        def resolve_base_url(self, name):
+            return "http://127.0.0.1:18091"
+
+    monkeypatch.setattr(bridge, "get_ctx", lambda: SimpleNamespace(paths=SimpleNamespace(state_dir=lambda: tmp_path / "state")))
+    monkeypatch.setattr(bridge, "get_service_supervisor", lambda: Supervisor())
+    monkeypatch.setattr(
+        bridge,
+        "_http_get_json",
+        lambda url, *, timeout_ms: {
+            "ok": True,
+            "model_loaded": True,
+            "torch_available": True,
+            "faiss_available": True,
+            "example_index_backend": "faiss",
+        },
+    )
+
+    result = await bridge.diagnose_readiness(start_service=True, stop_after=True)
+
+    assert result["ok"] is True
+    assert result["artifacts"]["index_backend"] == "faiss"
+    assert result["artifacts"]["metrics"]["model_id"] == "unit-model"
+    assert result["artifacts"]["golden_report"]["accuracy"] == 1.0
+    assert result["service"]["health"]["model_loaded"] is True
+    assert calls == [
+        ("refresh", True),
+        ("start", "neural_nlu_service_skill"),
+        ("stop", "neural_nlu_service_skill"),
+    ]
+
+
+@pytest.mark.anyio
+async def test_neural_diagnose_readiness_fails_when_required_artifact_missing(monkeypatch, tmp_path):
+    from adaos.services.nlu import neural_service_bridge as bridge
+
+    root = tmp_path / "state" / "nlu" / "neural"
+    root.mkdir(parents=True)
+    for name in ("labels.json", "vocab.json", "examples_manifest.jsonl", "ranker_config.json", "metrics.json"):
+        (root / name).write_text("x", encoding="utf-8")
+
+    class Supervisor:
+        async def refresh_discovered(self, force=False):
+            pass
+
+        def resolve_base_url(self, name):
+            return "http://127.0.0.1:18091"
+
+    monkeypatch.setattr(bridge, "get_ctx", lambda: SimpleNamespace(paths=SimpleNamespace(state_dir=lambda: tmp_path / "state")))
+    monkeypatch.setattr(bridge, "get_service_supervisor", lambda: Supervisor())
+
+    result = await bridge.diagnose_readiness(start_service=False)
+
+    assert result["ok"] is False
+    assert result["artifacts"]["missing_required"] == ["model.pt"]
+    assert result["checks"]["service_installed"] is True

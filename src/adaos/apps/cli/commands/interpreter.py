@@ -156,6 +156,25 @@ def neural_probe(
         raise typer.Exit(code=1)
 
 
+@app.command("neural-readiness")
+def neural_readiness(
+    start_service: bool = typer.Option(False, "--start", help="Start the service and include /health readiness."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after the readiness check."),
+) -> None:
+    """
+    Inspect Neural NLU artifacts, service discovery, and optional live health.
+    """
+    result = _run_blocking(
+        neural_service_bridge.diagnose_readiness(
+            start_service=start_service,
+            stop_after=stop_after,
+        )
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
 @app.command("status")
 def status(show_skills: bool = typer.Option(False, "--show-skills", help="Показать снимок установленных скиллов.")) -> None:
     """Показывает актуальность обучения и количество данных."""

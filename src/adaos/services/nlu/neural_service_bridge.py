@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, Mapping
 from urllib.request import Request, urlopen
 
@@ -83,6 +84,20 @@ def _http_post_json(url: str, payload: dict, *, timeout_ms: int) -> dict:
     with urlopen(req, timeout=timeout_ms / 1000.0) as resp:
         raw = resp.read().decode("utf-8", errors="ignore")
         return json.loads(raw)
+
+
+def _http_get_json(url: str, *, timeout_ms: int) -> dict | None:
+    req = Request(url, method="GET")
+    try:
+        with urlopen(req, timeout=timeout_ms / 1000.0) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _emit_rasa_fallback(
@@ -210,6 +225,145 @@ async def _ensure_neural_service_base_url(supervisor: Any) -> str | None:
             return None
         await supervisor.start("neural_nlu_service_skill")
         return supervisor.resolve_base_url("neural_nlu_service_skill")
+
+
+def _neural_artifact_root() -> Path:
+    try:
+        state_dir = Path(get_ctx().paths.state_dir()).expanduser().resolve()
+        return state_dir / "nlu" / "neural"
+    except Exception:
+        base_dir = os.getenv("ADAOS_BASE_DIR", "").strip()
+        if base_dir:
+            return Path(base_dir).expanduser().resolve() / "state" / "nlu" / "neural"
+        return Path.home() / ".adaos" / "state" / "nlu" / "neural"
+
+
+def _file_snapshot(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"exists": False, "size": 0}
+    try:
+        stat = path.stat()
+    except Exception:
+        return {"exists": True, "size": None}
+    return {"exists": True, "size": int(stat.st_size), "mtime": float(stat.st_mtime)}
+
+
+def _read_json_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _artifact_readiness(root: Path) -> dict[str, Any]:
+    required = [
+        "model.pt",
+        "labels.json",
+        "vocab.json",
+        "examples_manifest.jsonl",
+        "ranker_config.json",
+        "metrics.json",
+    ]
+    optional = [
+        "intents_manifest.json",
+        "faiss.index",
+        "faiss.index.json",
+        "example_index.pt",
+        "golden_report.json",
+    ]
+    files = {name: _file_snapshot(root / name) for name in [*required, *optional]}
+    missing_required = [name for name in required if not bool(files[name].get("exists"))]
+    faiss_ready = bool(files["faiss.index"].get("exists") and files["faiss.index.json"].get("exists"))
+    torch_ready = bool(files["example_index.pt"].get("exists"))
+    index_backend = "faiss" if faiss_ready else "torch_tensor" if torch_ready else None
+    metrics = _read_json_file(root / "metrics.json") or {}
+    golden = _read_json_file(root / "golden_report.json") or {}
+    warnings: list[str] = []
+    if not index_backend and not missing_required:
+        warnings.append("example_index_missing_until_first_model_load")
+    if faiss_ready and torch_ready:
+        warnings.append("both_faiss_and_torch_indexes_present")
+    return {
+        "ok": not missing_required,
+        "root": str(root),
+        "missing_required": missing_required,
+        "index_backend": index_backend,
+        "files": files,
+        "metrics": {
+            "model_id": metrics.get("model_id"),
+            "model_sha256": metrics.get("model_sha256"),
+            "examples_total": metrics.get("examples_total"),
+            "labels_total": metrics.get("labels_total"),
+            "created_at": metrics.get("created_at"),
+        },
+        "golden_report": {
+            "exists": bool(golden),
+            "accuracy": golden.get("accuracy"),
+            "passed": golden.get("passed"),
+            "total": golden.get("total"),
+        },
+        "warnings": warnings,
+    }
+
+
+async def diagnose_readiness(*, start_service: bool = False, stop_after: bool = False) -> Dict[str, Any]:
+    """Return operator-facing readiness for artifacts, service discovery, and health."""
+    artifact_root = _neural_artifact_root()
+    artifacts = _artifact_readiness(artifact_root)
+    supervisor = get_service_supervisor()
+    service: dict[str, Any] = {
+        "name": "neural_nlu_service_skill",
+        "installed": False,
+        "base_url": None,
+        "health": None,
+    }
+    warnings = list(artifacts.get("warnings") or [])
+    try:
+        await supervisor.refresh_discovered(force=True)
+        base_url = supervisor.resolve_base_url("neural_nlu_service_skill")
+    except Exception as exc:
+        base_url = None
+        warnings.append(f"service_discovery_failed:{type(exc).__name__}")
+
+    if base_url:
+        service["installed"] = True
+        service["base_url"] = base_url
+        if start_service:
+            try:
+                await supervisor.start("neural_nlu_service_skill")
+                service["base_url"] = supervisor.resolve_base_url("neural_nlu_service_skill") or base_url
+            except Exception as exc:
+                warnings.append(f"service_start_failed:{type(exc).__name__}")
+        if start_service:
+            service["health"] = _http_get_json(f"{service['base_url']}/health", timeout_ms=2_000)
+    else:
+        warnings.append("service_base_url_unresolved")
+
+    if stop_after and start_service:
+        try:
+            await supervisor.stop("neural_nlu_service_skill")
+        except Exception as exc:
+            warnings.append(f"service_stop_failed:{type(exc).__name__}")
+
+    health = service.get("health") if isinstance(service.get("health"), Mapping) else {}
+    health_ok = bool(health.get("ok")) if start_service else True
+    model_loaded = bool(health.get("model_loaded")) if start_service else True
+    ok = bool(artifacts.get("ok")) and bool(service.get("installed")) and health_ok and model_loaded
+    return {
+        "ok": ok,
+        "artifacts": artifacts,
+        "service": service,
+        "checks": {
+            "artifacts": bool(artifacts.get("ok")),
+            "service_installed": bool(service.get("installed")),
+            "health_ok": health_ok,
+            "model_loaded": model_loaded,
+        },
+        "warnings": warnings,
+    }
 
 
 async def parse_text(

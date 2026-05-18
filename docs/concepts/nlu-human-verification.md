@@ -34,6 +34,19 @@ Expected result:
 - Rasa baseline export/tests pass.
 - Lookup table export/API tests pass.
 
+Neural provider readiness can be checked without dispatching an action:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-readiness --start --stop-after
+```
+
+Expected result:
+
+- `ok=true`.
+- `checks.model_loaded=true`.
+- `artifacts.index_backend` is `faiss` when `faiss-cpu` is installed, or
+  `torch_tensor` on fallback-only nodes.
+
 ## 2. API Smoke Check
 
 Start the hub API in the normal development environment, then use the same bearer token configured for local API access.

@@ -109,6 +109,9 @@ The hub-side bridge can be probed with
 `adaos interpreter neural-probe "какая погода в москве" --locale ru`; this
 uses the same service discovery/start, confidence gates, canonicalized payload,
 and usage-stat recording as runtime neural dispatch.
+For operator diagnostics, `adaos interpreter neural-readiness --start
+--stop-after` returns a JSON readiness snapshot covering required artifacts,
+index backend, service discovery, live `/health`, and model load status.
 
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class

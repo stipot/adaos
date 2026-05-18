@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **74%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **75%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -46,6 +46,8 @@ but the productionization checklist remains mostly open.
   - `rasa`
   - `dispatcher action/reject`
 - [ ] Trace UI should show `voice text -> regex/neural/rasa -> intent -> action`.
+- [x] Add machine-readable Neural NLU readiness check for artifacts, service
+  discovery, live health, model load, and index backend.
 - [ ] Add latency per stage and service timing.
 - [ ] Add golden phrase regression reports.
 - [x] Add neural usage statistics: request count, latency, confidence
