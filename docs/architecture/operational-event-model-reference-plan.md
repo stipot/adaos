@@ -198,6 +198,16 @@ Goal:
 Migrate Infrascope only after the shared model has already been exercised by
 platform emitters.
 
+Progress:
+
+- first tracked status-card adapter covers overview, incidents, inventory,
+  operations, browser runtime, runtime objects, and registry sections
+- `/api/node/status-cards/infrascope/refresh` publishes these cards through the
+  node API from either an explicit snapshot payload or the existing
+  `data/infrascope` projection
+- live skill refresh hookup and browser demand wiring remain before this slice
+  can replace the monolithic active view
+
 Required artifacts:
 
 - projection-family inventory for overview, inventory, inspector, topology, and
@@ -361,7 +371,7 @@ Use this checklist for every implementation slice touching the event model.
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, and telemetry reset added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
-| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry; client/live-skill hookup remains |
+| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry; API refresh path can publish from request payload or `data/infrascope`; client/live-skill hookup remains |
 
 ## Completion Definition
 
