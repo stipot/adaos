@@ -55,6 +55,10 @@ def test_prepare_artifacts_builds_notebook_compatible_layout(tmp_path):
     assert metrics["model_id"] == "unit-model"
     assert metrics["examples_total"] == 3
     assert metrics["label_counts"]["weather.get"] == 2
+    intent_map = json.loads((out_dir / "intent_map.json").read_text(encoding="utf-8"))
+    assert intent_map["intents"][0]["label"] == "timer.start"
+    assert intent_map["intents"][0]["canonical_intent"] == "timer.start"
+    assert "intent_map.json" in metrics["artifact_files"]
 
     manifest_lines = (out_dir / "examples_manifest.jsonl").read_text(encoding="utf-8").splitlines()
     manifest = [json.loads(line) for line in manifest_lines]

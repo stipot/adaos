@@ -33,7 +33,12 @@ def test_evaluate_cases_reports_accuracy_and_compact_evidence():
                     "top_intent": "weather.get",
                     "confidence": 0.9,
                     "slots": {"city": "moscow"},
-                    "evidence": {"backend": "test", "ranker": "softmax", "example_index": "disk"},
+                    "evidence": {
+                        "backend": "test",
+                        "ranker": "softmax",
+                        "example_index": "disk",
+                        "source_intent": "weather.raw",
+                    },
                 }
             return {"top_intent": "timer.start", "confidence": 0.8, "slots": {}, "evidence": {"backend": "test"}}
 
@@ -53,4 +58,5 @@ def test_evaluate_cases_reports_accuracy_and_compact_evidence():
     assert report["passed"] == 2
     assert report["accuracy"] == 0.666667
     assert report["cases"][0]["example_index"] == "disk"
+    assert report["cases"][0]["source_intent"] == "weather.raw"
     assert report["health"]["model_loaded"] is True

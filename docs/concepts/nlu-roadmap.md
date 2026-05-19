@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **76%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **77%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -157,7 +157,7 @@ but the productionization checklist remains mostly open.
 - [ ] Add FAISS negative example indexes.
 - [x] Add weighted ranker over softmax, k-NN similarity, and action/skill
   priors.
-- [ ] Add intent/action id mapping from research labels to AdaOS canonical
+- [x] Add intent/action id mapping from research labels to AdaOS canonical
   intents and system actions.
 
 ### Artifacts and ModelOps
@@ -168,7 +168,8 @@ but the productionization checklist remains mostly open.
   provenance metrics into the active node-level layout.
 - [x] Store `model.pt`, `labels.json`/`intents_manifest.json`, `vocab.json`,
   optional `faiss.index`/`faiss.index.json`, `examples_manifest.jsonl`,
-  `ranker_config.json`, and `metrics.json` in the service-owned active layout.
+  `intent_map.json`, `ranker_config.json`, and `metrics.json` in the
+  service-owned active layout.
 - [x] Add immutable `model_id` and model provenance metadata for prepared
   notebook artifacts.
 - [ ] Add rollback pointer for the node-level active model.
@@ -209,13 +210,13 @@ but the productionization checklist remains mostly open.
    fallback.
 2. Define the system action catalog for core/client commands and include it in
    NLU authoring context.
-3. Link neural usage samples to downstream Rasa/Teacher outcomes and expose the
-   aggregate stats in operator diagnostics.
+3. Expose aggregate neural readiness and usage statistics in operator
+   diagnostics.
 4. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
 5. Add "save correct example" backend action with skill/scenario/system-action
    target selection and audit metadata.
-6. Add golden phrase reports and model promotion gates.
+6. Add full model promotion gates using macro-F1, abstain rate, and latency.
 
 ## Last Completed Slice
 
@@ -230,4 +231,6 @@ but the productionization checklist remains mostly open.
 - Neural bridge records node-local aggregate usage stats in `state/nlu/neural_usage.json`, including latency,
   confidence bands, accept/abstain/reject counts, fallback ratio, canonicalization buckets, and review samples.
 - Neural service skill now declares service-owned venv execution and keeps Torch/Numpy dependencies outside the hub root venv.
+- Neural artifacts now include `intent_map.json` so notebook labels can map to AdaOS canonical intents and optional
+  action ids while evidence preserves the original source label.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

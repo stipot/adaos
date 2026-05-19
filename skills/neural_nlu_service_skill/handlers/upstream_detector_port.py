@@ -218,6 +218,56 @@ def _coerce_vocab(payload: Any) -> list[str]:
     return []
 
 
+def _coerce_intent_map(payload: Any) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+
+    def add(label: Any, mapping: Any) -> None:
+        source_label = str(label or "").strip()
+        if not source_label:
+            return
+        if isinstance(mapping, str):
+            canonical = mapping.strip()
+            out[source_label] = {
+                "canonical_intent": canonical or source_label,
+                "action_id": None,
+                "target": None,
+            }
+            return
+        if isinstance(mapping, dict):
+            canonical = str(
+                mapping.get("canonical_intent")
+                or mapping.get("intent")
+                or mapping.get("id")
+                or mapping.get("canonical")
+                or source_label
+            ).strip() or source_label
+            out[source_label] = {
+                "canonical_intent": canonical,
+                "action_id": mapping.get("action_id") or mapping.get("action") or mapping.get("system_action"),
+                "target": mapping.get("target"),
+            }
+
+    if isinstance(payload, dict):
+        raw = payload.get("intents") if isinstance(payload.get("intents"), (list, dict)) else payload.get("labels")
+        if raw is None:
+            raw = payload.get("map") if isinstance(payload.get("map"), dict) else payload
+        if isinstance(raw, dict):
+            for label, mapping in raw.items():
+                add(label, mapping)
+        elif isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                label = item.get("label") or item.get("source_label") or item.get("model_label") or item.get("id")
+                add(label, item)
+    elif isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, dict):
+                label = item.get("label") or item.get("source_label") or item.get("model_label") or item.get("id")
+                add(label, item)
+    return out
+
+
 def _split_paths(raw: str) -> list[Path]:
     if not raw.strip():
         return []
@@ -380,6 +430,62 @@ class Detector:
                 pass
         return ""
 
+    def _load_intent_map(self, *, root: Path, labels: list[str]) -> dict[str, dict[str, Any]]:
+        path = Path(os.getenv("ADAOS_NEURAL_INTENT_MAP_PATH", "").strip() or root / "intent_map.json")
+        mapping: dict[str, dict[str, Any]] = {}
+        if path.exists():
+            try:
+                mapping = _coerce_intent_map(_json_load(path))
+            except Exception:
+                mapping = {}
+        for label in labels:
+            token = str(label or "").strip()
+            if token and token not in mapping:
+                mapping[token] = {
+                    "canonical_intent": token,
+                    "action_id": None,
+                    "target": None,
+                }
+        return mapping
+
+    def _map_intent(self, label: str, engine: dict[str, Any]) -> dict[str, Any]:
+        raw_label = str(label or "").strip()
+        mapping = engine.get("intent_map") if isinstance(engine.get("intent_map"), dict) else {}
+        entry = mapping.get(raw_label) if isinstance(mapping, dict) else None
+        if not isinstance(entry, dict):
+            entry = {}
+        canonical = str(entry.get("canonical_intent") or raw_label).strip() or raw_label
+        return {
+            "source_label": raw_label,
+            "canonical_intent": canonical,
+            "action_id": entry.get("action_id"),
+            "target": entry.get("target"),
+        }
+
+    def _map_alternatives(self, alternatives: list[dict[str, Any]], *, top_intent: str, engine: dict[str, Any]) -> list[dict[str, Any]]:
+        mapped: list[dict[str, Any]] = []
+        seen = {top_intent}
+        for item in alternatives:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("intent") or "").strip()
+            if not label:
+                continue
+            intent_meta = self._map_intent(label, engine)
+            canonical = str(intent_meta.get("canonical_intent") or label).strip()
+            if not canonical or canonical in seen:
+                continue
+            seen.add(canonical)
+            out = dict(item)
+            out["intent"] = canonical
+            if canonical != label:
+                out["source_label"] = label
+            action_id = intent_meta.get("action_id")
+            if action_id:
+                out["action_id"] = action_id
+            mapped.append(out)
+        return mapped[:4]
+
     def _load_neural_engine(self):
         if torch is None or nn is None or F is None or NLUEncoder is None:
             return None
@@ -401,9 +507,11 @@ class Detector:
             model.load_state_dict(state)
             model.eval()
             model_id = self._load_model_id(root=root, metadata=metadata, model_path=model_path)
+            intent_map = self._load_intent_map(root=root, labels=labels)
             engine = {
                 "model": model,
                 "labels": labels,
+                "intent_map": intent_map,
                 "stoi": {str(ch): idx for idx, ch in enumerate(vocab)},
                 "examples": examples,
                 "example_vectors": None,
@@ -802,16 +910,19 @@ class Detector:
             clf_prob = float(weighted[clf_idx])
             ranked_examples = self._nearest_examples(z, engine, query=text, clf_skill=clf_skill, clf_prob=clf_prob)
             if ranked_examples and ranked_examples[0]["confidence"] >= max(0.0, float(self._cfg.THRESHOLD)):
-                top_intent = str(ranked_examples[0]["intent"])
+                source_top_intent = str(ranked_examples[0]["intent"])
                 confidence = float(ranked_examples[0]["confidence"])
             else:
-                top_intent = clf_skill
+                source_top_intent = clf_skill
                 confidence = clf_prob
-            alternatives = [
+            raw_alternatives = [
                 {"intent": str(labels[i]), "confidence": float(weighted[i])}
                 for i in order
-                if str(labels[i]) != top_intent
+                if str(labels[i]) != source_top_intent
             ][:4]
+            intent_meta = self._map_intent(source_top_intent, engine)
+            top_intent = str(intent_meta.get("canonical_intent") or source_top_intent)
+            alternatives = self._map_alternatives(raw_alternatives, top_intent=top_intent, engine=engine)
             return {
                 "top_intent": top_intent,
                 "confidence": float(confidence),
@@ -832,6 +943,8 @@ class Detector:
                     "canonicalized_text": model_text,
                     "masked_text": mask.masked,
                     "matched_examples": [item.get("matched_example") for item in ranked_examples[:3]],
+                    "source_intent": source_top_intent,
+                    "intent_mapping": intent_meta,
                     "score_components": {
                         "rank_alpha": self._cfg.RANK_ALPHA,
                         "rank_beta": self._cfg.RANK_BETA,
@@ -884,6 +997,15 @@ class Detector:
         evidence.setdefault("backend", "adapter")
         evidence.setdefault("canonicalized_text", model_text)
         evidence.setdefault("entity_resolution", entity_resolution)
+        evidence.setdefault(
+            "intent_mapping",
+            {
+                "source_label": result.get("top_intent") or result.get("intent") or "",
+                "canonical_intent": result.get("top_intent") or result.get("intent") or "",
+                "action_id": None,
+                "target": None,
+            },
+        )
         result["evidence"] = evidence
         return result
 
@@ -911,7 +1033,7 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.6",
+            "version": "0.2.7",
             "torch_available": torch is not None,
             "faiss_available": faiss is not None,
             "model_loaded": bool(engine),
@@ -919,5 +1041,6 @@ class Detector:
             "examples_total": len(engine.get("examples") or []) if engine else 0,
             "example_index": engine.get("example_index_source") if engine else None,
             "example_index_backend": engine.get("example_index_backend") if engine else None,
+            "intent_map_loaded": bool(engine.get("intent_map")) if engine else False,
             "artifact_root": str(self._artifacts_root()),
         }

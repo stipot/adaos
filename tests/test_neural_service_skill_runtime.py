@@ -95,7 +95,7 @@ def test_detector_health_exposes_faiss_and_index_backend(monkeypatch, tmp_path):
 
     health = detector.health()
 
-    assert health["version"] == "0.2.6"
+    assert health["version"] == "0.2.7"
     assert "faiss_available" in health
     assert health["example_index"] == "faiss_disk"
     assert health["example_index_backend"] == "faiss"
@@ -133,3 +133,40 @@ def test_detector_auto_backend_migrates_valid_torch_cache_to_faiss(monkeypatch, 
 
     assert payload["backend"] == "faiss"
     assert payload["source"] == "faiss_built"
+
+
+def test_detector_maps_research_labels_to_canonical_intents():
+    module = _load_detector_module()
+    detector = object.__new__(module.Detector)
+    engine = {
+        "intent_map": {
+            "weather.get": {
+                "canonical_intent": "desktop.open_weather",
+                "action_id": "host.open_weather",
+                "target": {"kind": "system_action"},
+            },
+            "time.now": {
+                "canonical_intent": "desktop.show_time",
+                "action_id": "host.show_time",
+            },
+        }
+    }
+
+    mapped = detector._map_intent("weather.get", engine)
+    alternatives = detector._map_alternatives(
+        [
+            {"intent": "weather.get", "confidence": 0.4},
+            {"intent": "time.now", "confidence": 0.3},
+            {"intent": "alarm.set", "confidence": 0.1},
+        ],
+        top_intent="desktop.open_weather",
+        engine=engine,
+    )
+
+    assert mapped["canonical_intent"] == "desktop.open_weather"
+    assert mapped["source_label"] == "weather.get"
+    assert mapped["action_id"] == "host.open_weather"
+    assert alternatives[0]["intent"] == "desktop.show_time"
+    assert alternatives[0]["source_label"] == "time.now"
+    assert alternatives[0]["action_id"] == "host.show_time"
+    assert alternatives[1]["intent"] == "alarm.set"

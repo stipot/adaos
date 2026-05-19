@@ -56,6 +56,9 @@ Implemented now:
 - Neural `/parse` contract with `top_intent`, `confidence`, `alternatives`,
   `slots`, `model_id`, `evidence`, canonicalized text, and named-entity
   evidence.
+- Neural intent mapping through `intent_map.json`, so research/notebook labels
+  can be translated to AdaOS canonical intents and optional action ids while
+  preserving the original model label in evidence.
 - Neural usage statistics in `state/nlu/neural_usage.json`: request/fallback
   counts, latency summary, confidence bands, accept/abstain/reject counts,
   per-intent status counts, canonicalization buckets, downstream Rasa outcomes
@@ -120,6 +123,8 @@ long-term fallback.
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights plus
      a lazy FAISS positive-example index when `faiss` is installed, or the
      Torch tensor k-NN fallback otherwise;
+   - maps model/research labels through the service-owned `intent_map.json`
+     before returning canonical `top_intent` values to the bridge;
    - default deployment uses one active model per node, with usage telemetry
      collected so later per-locale/webspace/profile splits can be justified by
      evidence.
@@ -218,6 +223,11 @@ The system action catalog is still data, not provider code. Regex, Rasa,
 neural, Teacher, and MCP authoring can all consume it. This lets AdaOS train
 and explain built-in UI/kernel commands without baking them into a particular
 NLU engine.
+
+The current neural provider uses service-owned `intent_map.json` as the
+node-level bridge from research labels to canonical intents and optional
+`action_id` values. This keeps model labels stable while the system action
+catalog matures into the shared source of truth for built-in commands.
 
 NLU Teacher should write accepted corrections back to the owning artifact:
 

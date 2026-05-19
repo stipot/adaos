@@ -142,6 +142,21 @@ def prepare_artifacts(
     _json_write(out_dir / "labels.json", labels)
     _json_write(out_dir / "vocab.json", vocab)
     _json_write(
+        out_dir / "intent_map.json",
+        {
+            "schema_version": 1,
+            "intents": [
+                {
+                    "label": label,
+                    "canonical_intent": label,
+                    "action_id": None,
+                    "target": None,
+                }
+                for label in labels
+            ],
+        },
+    )
+    _json_write(
         out_dir / "intents_manifest.json",
         {
             "schema_version": 1,
@@ -187,6 +202,7 @@ def prepare_artifacts(
             "model.pt",
             "labels.json",
             "vocab.json",
+            "intent_map.json",
             "intents_manifest.json",
             "examples_manifest.jsonl",
             "ranker_config.json",

@@ -273,6 +273,7 @@ def _artifact_readiness(root: Path) -> dict[str, Any]:
     ]
     optional = [
         "intents_manifest.json",
+        "intent_map.json",
         "faiss.index",
         "faiss.index.json",
         "example_index.pt",

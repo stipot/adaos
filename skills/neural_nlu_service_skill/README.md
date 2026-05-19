@@ -53,6 +53,7 @@ Preferred node-level layout:
 
 - `<ADAOS_BASE_DIR>/state/nlu/neural/model.pt`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/labels.json`
+- `<ADAOS_BASE_DIR>/state/nlu/neural/intent_map.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/intents_manifest.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/vocab.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/examples_manifest.jsonl`
@@ -66,6 +67,7 @@ Explicit overrides:
 
 - `ADAOS_NEURAL_MODEL_PATH`
 - `ADAOS_NEURAL_LABELS_PATH`
+- `ADAOS_NEURAL_INTENT_MAP_PATH`
 - `ADAOS_NEURAL_VOCAB_PATH`
 - `ADAOS_NEURAL_EXAMPLES_PATHS` (`;` or `,` separated jsonl files)
 - `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND` (`auto`, `faiss`, or `torch`; default `auto`)
@@ -91,9 +93,31 @@ the repository-local `example` directory:
 
 The script copies `best_model*.pt` to `model.pt`, builds `labels.json` and
 `vocab.json` with the notebook-compatible special token order, writes
-`examples_manifest.jsonl`, `intents_manifest.json`, `ranker_config.json`, and
-`metrics.json`. It does not require Torch; Torch is needed later when the
-service loads the model for inference.
+`intent_map.json`, `examples_manifest.jsonl`, `intents_manifest.json`,
+`ranker_config.json`, and `metrics.json`. It does not require Torch; Torch is
+needed later when the service loads the model for inference.
+
+`intent_map.json` maps model/research labels to AdaOS canonical intents and
+optional action ids. The preparation script writes identity mappings by
+default, and operators can edit the artifact without retraining the model:
+
+```json
+{
+  "schema_version": 1,
+  "intents": [
+    {
+      "label": "weather.get",
+      "canonical_intent": "desktop.open_weather",
+      "action_id": "host.open_weather",
+      "target": {"kind": "system_action"}
+    }
+  ]
+}
+```
+
+The provider returns the canonical intent in `top_intent` and keeps the model
+label under `evidence.source_intent` plus the full mapping under
+`evidence.intent_mapping`.
 
 On first successful model load with examples present, the detector writes a
 lazy positive-example index. With `faiss` available in the service venv it

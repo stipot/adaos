@@ -76,6 +76,8 @@ def evaluate_cases(detector: Any, cases: Iterable[dict[str, str]]) -> dict[str, 
                 "backend": evidence.get("backend"),
                 "ranker": evidence.get("ranker"),
                 "example_index": evidence.get("example_index"),
+                "source_intent": evidence.get("source_intent"),
+                "intent_mapping": evidence.get("intent_mapping"),
             }
         )
     total = len(rows)

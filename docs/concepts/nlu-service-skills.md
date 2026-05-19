@@ -66,13 +66,16 @@ HTTP API:
 Responses include `top_intent`, `confidence`, `alternatives`, `slots`,
 `model_id`, and `evidence`, with the same payload mirrored under `result` for
 older bridge compatibility. The evidence includes canonicalized text,
-model-facing masked text, score components, and matched examples when the
-example index is available.
+model-facing masked text, score components, matched examples when the example
+index is available, and intent mapping details such as the original
+`source_intent`.
 
 Target artifacts are service-owned runtime data:
 
 - `model.pt`
 - `labels.json` / `intents_manifest.json`
+- `intent_map.json` for mapping model labels to AdaOS canonical intents and
+  optional action ids
 - `vocab.json`
 - `faiss.index` and `faiss.index.json` for the optional lazy positive-example
   FAISS index
@@ -91,8 +94,15 @@ Notebook outputs can be normalized into this layout with:
 ```
 
 The script copies `best_model*.pt`, derives labels/vocab with the same masking
-and special-token order as the notebook, writes example and intent manifests,
-and records provenance in `metrics.json`.
+and special-token order as the notebook, writes identity `intent_map.json`
+mappings, writes example and intent manifests, and records provenance in
+`metrics.json`.
+
+Operators can edit `intent_map.json` without retraining when a notebook label
+must route to a different AdaOS canonical intent or system action. The provider
+returns the mapped canonical intent in `top_intent`; the raw model label remains
+available as `evidence.source_intent`, and the full mapping is returned as
+`evidence.intent_mapping`.
 
 On first successful model load, the neural skill validates and reuses an
 existing positive-example index when the model id, model SHA, example count,

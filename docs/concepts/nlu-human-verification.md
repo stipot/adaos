@@ -47,6 +47,19 @@ Expected result:
 - `artifacts.index_backend` is `faiss` when `faiss-cpu` is installed, or
   `torch_tensor` on fallback-only nodes.
 
+Neural intent mapping can be checked through the same bridge path:
+
+```powershell
+.\.venv\Scripts\python.exe -m adaos interpreter neural-probe "какая погода в москве" --locale ru --no-record-stats
+```
+
+Expected result:
+
+- `ok=true`.
+- `top_intent` is the canonical intent from `intent_map.json`.
+- `evidence.source_intent` shows the original model/research label.
+- `evidence.intent_mapping` shows the mapping entry used for the response.
+
 ## 2. API Smoke Check
 
 Start the hub API in the normal development environment, then use the same bearer token configured for local API access.
