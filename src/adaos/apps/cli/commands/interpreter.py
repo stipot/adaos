@@ -131,8 +131,9 @@ def parse(
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
-@app.command("neural-probe")
+@app.command("neural-probe", context_settings={"allow_extra_args": True, "ignore_unknown_options": False})
 def neural_probe(
+    ctx: typer.Context,
     text: str = typer.Argument(..., help="Text to parse through the Neural NLU bridge."),
     webspace_id: str = typer.Option("desktop", "--webspace-id", help="Webspace id for named-entity context."),
     locale: Optional[str] = typer.Option(None, "--locale", help="Request locale."),
@@ -142,6 +143,11 @@ def neural_probe(
     Probe Neural NLU through the hub bridge policy: service discovery/start,
     canonicalization payload, confidence gates, and optional usage stats.
     """
+    extra = [str(item) for item in getattr(ctx, "args", []) or []]
+    if extra:
+        if any(part.startswith("-") for part in extra):
+            raise typer.BadParameter(f"unexpected extra arguments: {' '.join(extra)}")
+        text = " ".join([text, *extra]).strip()
     result = _run_blocking(
         neural_service_bridge.parse_text(
             text,
