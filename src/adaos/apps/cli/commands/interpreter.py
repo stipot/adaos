@@ -14,6 +14,7 @@ from adaos.apps.bootstrap import get_ctx
 from adaos.services.interpreter.workspace import IntentMapping, InterpreterWorkspace
 from adaos.services.nlu import neural_service_bridge
 from adaos.services.nlu.data_registry import sync_from_scenarios_and_skills
+from adaos.services.nlu.neural_usage_stats import neural_usage_stats_path, read_neural_usage_stats
 from adaos.services.nlu.rasa_skill_installer import ensure_rasa_service_skill_installed, is_rasa_nlu_enabled
 from adaos.services.skill.service_supervisor import get_service_supervisor
 
@@ -104,6 +105,18 @@ def _http_post_json(url: str, payload: dict, *, timeout_ms: int = 600_000) -> di
         return json.loads(raw)
 
 
+def _compact_neural_usage_for_cli(stats: dict, *, recent_limit: int, samples_limit: int) -> dict:
+    out = dict(stats) if isinstance(stats, dict) else {}
+    out["path"] = str(neural_usage_stats_path())
+    recent = out.get("recent")
+    if isinstance(recent, list):
+        out["recent"] = recent[-max(0, int(recent_limit)) :] if recent_limit else []
+    samples = out.get("review_samples")
+    if isinstance(samples, list):
+        out["review_samples"] = samples[-max(0, int(samples_limit)) :] if samples_limit else []
+    return out
+
+
 @app.command("sync-nlu")
 def sync_nlu() -> None:
     """
@@ -176,6 +189,38 @@ def neural_readiness(
             stop_after=stop_after,
         )
     )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
+@app.command("neural-diagnostics")
+def neural_diagnostics(
+    start_service: bool = typer.Option(False, "--start", help="Start the service and include /health readiness."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after the readiness check."),
+    recent: int = typer.Option(10, "--recent", min=0, help="How many recent usage records to include."),
+    review_samples: int = typer.Option(10, "--review-samples", min=0, help="How many review samples to include."),
+) -> None:
+    """
+    Return one operator-facing Neural NLU diagnostics payload: readiness plus
+    node-local usage aggregates.
+    """
+    readiness = _run_blocking(
+        neural_service_bridge.diagnose_readiness(
+            start_service=start_service,
+            stop_after=stop_after,
+        )
+    )
+    usage = _compact_neural_usage_for_cli(
+        read_neural_usage_stats(),
+        recent_limit=recent,
+        samples_limit=review_samples,
+    )
+    result = {
+        "ok": bool(readiness.get("ok")),
+        "readiness": readiness,
+        "usage_stats": usage,
+    }
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
     if not result.get("ok"):
         raise typer.Exit(code=1)

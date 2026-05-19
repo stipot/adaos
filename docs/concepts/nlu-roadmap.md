@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **78%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **79%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -192,6 +192,8 @@ but the productionization checklist remains mostly open.
   and usage-stat path.
 - [x] Link final Rasa accept/miss outcomes back to the neural fallback sample
   so `neural -> Rasa -> Teacher` can be measured end to end.
+- [x] Add operator diagnostics that combine Neural readiness and usage
+  aggregates.
 
 ### Training Data Feedback
 
@@ -208,13 +210,11 @@ but the productionization checklist remains mostly open.
 
 1. Define the system action catalog for core/client commands and include it in
    NLU authoring context.
-2. Expose aggregate neural readiness and usage statistics in operator
-   diagnostics.
-3. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
+2. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-4. Add "save correct example" backend action with skill/scenario/system-action
+3. Add "save correct example" backend action with skill/scenario/system-action
    target selection and audit metadata.
-5. Add full model promotion gates using macro-F1, abstain rate, and latency.
+4. Add full model promotion gates using macro-F1, abstain rate, and latency.
 
 ## Last Completed Slice
 
@@ -232,4 +232,5 @@ but the productionization checklist remains mostly open.
 - Neural artifacts now include `intent_map.json` so notebook labels can map to AdaOS canonical intents and optional
   action ids while evidence preserves the original source label.
 - Neural runtime now persists negative example indexes and records contrastive nearest-other-intent evidence.
+- `adaos interpreter neural-diagnostics` now combines readiness and node-local usage aggregates for operators.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

@@ -128,6 +128,9 @@ and usage-stat recording as runtime neural dispatch.
 For operator diagnostics, `adaos interpreter neural-readiness --start
 --stop-after` returns a JSON readiness snapshot covering required artifacts,
 index backend, service discovery, live `/health`, and model load status.
+`adaos interpreter neural-diagnostics --start --stop-after` wraps that
+readiness snapshot together with node-local usage aggregates from
+`state/nlu/neural_usage.json`.
 
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class

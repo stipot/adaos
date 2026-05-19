@@ -49,6 +49,20 @@ Expected result:
 - `artifacts.negative_index_backend` follows the same `faiss` or
   `torch_tensor` backend after the first model load.
 
+Readiness plus aggregate usage diagnostics can be checked with:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-diagnostics --start --stop-after --recent 5 --review-samples 5
+```
+
+Expected result:
+
+- `ok=true`.
+- `readiness.checks.model_loaded=true`.
+- `usage_stats.totals.requests` and `usage_stats.latency_ms` reflect recorded
+  bridge/probe traffic when usage recording is enabled.
+- `usage_stats.path` points to `state/nlu/neural_usage.json`.
+
 Neural intent mapping can be checked through the same bridge path:
 
 ```powershell

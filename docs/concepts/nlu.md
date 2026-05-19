@@ -72,6 +72,9 @@ Implemented now:
 - Machine-readable Neural NLU readiness check for artifacts, service
   discovery, optional `/health`, model load, and active index backend:
   - `adaos interpreter neural-readiness --start --stop-after`
+- Operator-facing Neural NLU diagnostics that combine readiness with
+  node-local usage aggregates:
+  - `adaos interpreter neural-diagnostics --start --stop-after`
 - Notebook artifact preparation script for Neural NLU:
   `skills/neural_nlu_service_skill/scripts/prepare_artifacts.py`.
 - Rasa NLU service-skill isolation from the hub Python environment.
