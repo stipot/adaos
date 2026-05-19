@@ -37,6 +37,8 @@ def test_evaluate_cases_reports_accuracy_and_compact_evidence():
                         "backend": "test",
                         "ranker": "softmax",
                         "example_index": "disk",
+                        "negative_example_index": "negative_disk",
+                        "negative_penalty": 0.03,
                         "source_intent": "weather.raw",
                     },
                 }
@@ -58,5 +60,7 @@ def test_evaluate_cases_reports_accuracy_and_compact_evidence():
     assert report["passed"] == 2
     assert report["accuracy"] == 0.666667
     assert report["cases"][0]["example_index"] == "disk"
+    assert report["cases"][0]["negative_example_index"] == "negative_disk"
+    assert report["cases"][0]["negative_penalty"] == 0.03
     assert report["cases"][0]["source_intent"] == "weather.raw"
     assert report["health"]["model_loaded"] is True

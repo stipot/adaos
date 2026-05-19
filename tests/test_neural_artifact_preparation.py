@@ -59,6 +59,9 @@ def test_prepare_artifacts_builds_notebook_compatible_layout(tmp_path):
     assert intent_map["intents"][0]["label"] == "timer.start"
     assert intent_map["intents"][0]["canonical_intent"] == "timer.start"
     assert "intent_map.json" in metrics["artifact_files"]
+    ranker_config = json.loads((out_dir / "ranker_config.json").read_text(encoding="utf-8"))
+    assert ranker_config["negative_margin_threshold"] > 0
+    assert ranker_config["negative_penalty"] > 0
 
     manifest_lines = (out_dir / "examples_manifest.jsonl").read_text(encoding="utf-8").splitlines()
     manifest = [json.loads(line) for line in manifest_lines]

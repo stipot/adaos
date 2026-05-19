@@ -76,6 +76,8 @@ def evaluate_cases(detector: Any, cases: Iterable[dict[str, str]]) -> dict[str, 
                 "backend": evidence.get("backend"),
                 "ranker": evidence.get("ranker"),
                 "example_index": evidence.get("example_index"),
+                "negative_example_index": evidence.get("negative_example_index"),
+                "negative_penalty": evidence.get("negative_penalty"),
                 "source_intent": evidence.get("source_intent"),
                 "intent_mapping": evidence.get("intent_mapping"),
             }

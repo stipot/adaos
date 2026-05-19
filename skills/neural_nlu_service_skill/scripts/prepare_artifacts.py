@@ -175,6 +175,9 @@ def prepare_artifacts(
             "rank_gamma": _CFG.RANK_GAMMA,
             "threshold": _CFG.THRESHOLD,
             "faiss_k": _CFG.FAISS_K,
+            "negative_k_multiplier": _CFG.NEGATIVE_K_MULTIPLIER,
+            "negative_margin_threshold": _CFG.NEGATIVE_MARGIN_THRESHOLD,
+            "negative_penalty": _CFG.NEGATIVE_PENALTY,
         },
     )
 

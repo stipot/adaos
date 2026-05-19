@@ -276,26 +276,37 @@ def _artifact_readiness(root: Path) -> dict[str, Any]:
         "intent_map.json",
         "faiss.index",
         "faiss.index.json",
+        "negative_faiss.index",
+        "negative_faiss.index.json",
         "example_index.pt",
+        "negative_example_index.pt",
         "golden_report.json",
     ]
     files = {name: _file_snapshot(root / name) for name in [*required, *optional]}
     missing_required = [name for name in required if not bool(files[name].get("exists"))]
     faiss_ready = bool(files["faiss.index"].get("exists") and files["faiss.index.json"].get("exists"))
     torch_ready = bool(files["example_index.pt"].get("exists"))
+    negative_faiss_ready = bool(files["negative_faiss.index"].get("exists") and files["negative_faiss.index.json"].get("exists"))
+    negative_torch_ready = bool(files["negative_example_index.pt"].get("exists"))
     index_backend = "faiss" if faiss_ready else "torch_tensor" if torch_ready else None
+    negative_index_backend = "faiss" if negative_faiss_ready else "torch_tensor" if negative_torch_ready else None
     metrics = _read_json_file(root / "metrics.json") or {}
     golden = _read_json_file(root / "golden_report.json") or {}
     warnings: list[str] = []
     if not index_backend and not missing_required:
         warnings.append("example_index_missing_until_first_model_load")
+    if index_backend and not negative_index_backend:
+        warnings.append("negative_example_index_missing_until_first_model_load")
     if faiss_ready and torch_ready:
         warnings.append("both_faiss_and_torch_indexes_present")
+    if negative_faiss_ready and negative_torch_ready:
+        warnings.append("both_negative_faiss_and_torch_indexes_present")
     return {
         "ok": not missing_required,
         "root": str(root),
         "missing_required": missing_required,
         "index_backend": index_backend,
+        "negative_index_backend": negative_index_backend,
         "files": files,
         "metrics": {
             "model_id": metrics.get("model_id"),

@@ -59,7 +59,10 @@ Preferred node-level layout:
 - `<ADAOS_BASE_DIR>/state/nlu/neural/examples_manifest.jsonl`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/faiss.index` (optional lazy positive-example FAISS index)
 - `<ADAOS_BASE_DIR>/state/nlu/neural/faiss.index.json` (FAISS index provenance and invalidation metadata)
+- `<ADAOS_BASE_DIR>/state/nlu/neural/negative_faiss.index` (optional lazy negative-example FAISS index)
+- `<ADAOS_BASE_DIR>/state/nlu/neural/negative_faiss.index.json` (negative index provenance and invalidation metadata)
 - `<ADAOS_BASE_DIR>/state/nlu/neural/example_index.pt` (Torch tensor k-NN fallback cache)
+- `<ADAOS_BASE_DIR>/state/nlu/neural/negative_example_index.pt` (Torch tensor negative k-NN fallback cache)
 - `<ADAOS_BASE_DIR>/state/nlu/neural/ranker_config.json`
 - `<ADAOS_BASE_DIR>/state/nlu/neural/metrics.json`
 
@@ -73,6 +76,9 @@ Explicit overrides:
 - `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND` (`auto`, `faiss`, or `torch`; default `auto`)
 - `ADAOS_NEURAL_FAISS_INDEX_PATH`
 - `ADAOS_NEURAL_FAISS_INDEX_META_PATH`
+- `ADAOS_NEURAL_NEGATIVE_FAISS_INDEX_PATH`
+- `ADAOS_NEURAL_NEGATIVE_FAISS_INDEX_META_PATH`
+- `ADAOS_NEURAL_NEGATIVE_EXAMPLE_INDEX_PATH`
 - `ADAOS_NEURAL_RANKER_CONFIG_PATH`
 - `ADAOS_NLU_NEURAL_MODEL_ID`
 
@@ -119,12 +125,19 @@ The provider returns the canonical intent in `top_intent` and keeps the model
 label under `evidence.source_intent` plus the full mapping under
 `evidence.intent_mapping`.
 
-On first successful model load with examples present, the detector writes a
-lazy positive-example index. With `faiss` available in the service venv it
-writes `faiss.index` plus `faiss.index.json`; otherwise it writes the Torch
-tensor fallback `example_index.pt`. Subsequent restarts validate the stored
-model id, model SHA, example count, and example digest before reusing either
-index, so stale notebook outputs are re-embedded automatically.
+On first successful model load with examples present, the detector writes lazy
+positive and negative example indexes. With `faiss` available in the service
+venv it writes `faiss.index` / `negative_faiss.index` plus their JSON metadata;
+otherwise it writes Torch tensor fallbacks `example_index.pt` and
+`negative_example_index.pt`. Subsequent restarts validate the stored model id,
+model SHA, example count, and example digest before reusing either index, so
+stale notebook outputs are re-embedded automatically. Negative retrieval is
+used as a contrastive signal: if the nearest other-intent example is too close
+to the accepted example, the detector applies a small configurable confidence
+penalty and records the evidence under `evidence.nearest_negative_examples`.
+`ranker_config.json:negative_k_multiplier=0` means the negative search scans
+the full example index; set it to a positive integer to cap the search at
+`faiss_k * negative_k_multiplier`.
 
 To write a golden phrase smoke report for the active artifacts:
 

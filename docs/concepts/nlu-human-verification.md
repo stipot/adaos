@@ -46,6 +46,8 @@ Expected result:
 - `checks.model_loaded=true`.
 - `artifacts.index_backend` is `faiss` when `faiss-cpu` is installed, or
   `torch_tensor` on fallback-only nodes.
+- `artifacts.negative_index_backend` follows the same `faiss` or
+  `torch_tensor` backend after the first model load.
 
 Neural intent mapping can be checked through the same bridge path:
 
@@ -59,6 +61,8 @@ Expected result:
 - `top_intent` is the canonical intent from `intent_map.json`.
 - `evidence.source_intent` shows the original model/research label.
 - `evidence.intent_mapping` shows the mapping entry used for the response.
+- `evidence.nearest_negative_examples` is present when the contrastive
+  negative index is available.
 
 ## 2. API Smoke Check
 

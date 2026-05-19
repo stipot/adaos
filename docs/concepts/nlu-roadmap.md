@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **77%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **78%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -154,7 +154,7 @@ but the productionization checklist remains mostly open.
 - [x] Persist a lazy Torch tensor positive-example k-NN cache as an
   intermediate step before FAISS indexes.
 - [x] Add optional lazy FAISS positive example index with Torch tensor fallback.
-- [ ] Add FAISS negative example indexes.
+- [x] Add FAISS negative example indexes.
 - [x] Add weighted ranker over softmax, k-NN similarity, and action/skill
   priors.
 - [x] Add intent/action id mapping from research labels to AdaOS canonical
@@ -167,9 +167,10 @@ but the productionization checklist remains mostly open.
   `labels.json`, `vocab.json`, example/intent manifests, ranker config, and
   provenance metrics into the active node-level layout.
 - [x] Store `model.pt`, `labels.json`/`intents_manifest.json`, `vocab.json`,
-  optional `faiss.index`/`faiss.index.json`, `examples_manifest.jsonl`,
-  `intent_map.json`, `ranker_config.json`, and `metrics.json` in the
-  service-owned active layout.
+  optional `faiss.index`/`faiss.index.json`,
+  `negative_faiss.index`/`negative_faiss.index.json`,
+  `examples_manifest.jsonl`, `intent_map.json`, `ranker_config.json`, and
+  `metrics.json` in the service-owned active layout.
 - [x] Add immutable `model_id` and model provenance metadata for prepared
   notebook artifacts.
 - [ ] Add rollback pointer for the node-level active model.
@@ -205,18 +206,15 @@ but the productionization checklist remains mostly open.
 
 ## Immediate Next Steps
 
-1. Add persisted FAISS negative indexes for contrastive rejection; positive
-   example retrieval now has an optional lazy `faiss.index` and a Torch cache
-   fallback.
-2. Define the system action catalog for core/client commands and include it in
+1. Define the system action catalog for core/client commands and include it in
    NLU authoring context.
-3. Expose aggregate neural readiness and usage statistics in operator
+2. Expose aggregate neural readiness and usage statistics in operator
    diagnostics.
-4. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
+3. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-5. Add "save correct example" backend action with skill/scenario/system-action
+4. Add "save correct example" backend action with skill/scenario/system-action
    target selection and audit metadata.
-6. Add full model promotion gates using macro-F1, abstain rate, and latency.
+5. Add full model promotion gates using macro-F1, abstain rate, and latency.
 
 ## Last Completed Slice
 
@@ -233,4 +231,5 @@ but the productionization checklist remains mostly open.
 - Neural service skill now declares service-owned venv execution and keeps Torch/Numpy dependencies outside the hub root venv.
 - Neural artifacts now include `intent_map.json` so notebook labels can map to AdaOS canonical intents and optional
   action ids while evidence preserves the original source label.
+- Neural runtime now persists negative example indexes and records contrastive nearest-other-intent evidence.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

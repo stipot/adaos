@@ -127,6 +127,8 @@ Versioned runtime artifacts:
 - `model.pt`
 - `faiss.index`
 - `faiss.index.json` for index provenance/invalidation metadata
+- `negative_faiss.index`
+- `negative_faiss.index.json` for negative-index provenance/invalidation metadata
 - `intents_manifest.json`
 - `intent_map.json` for mapping research labels to canonical intents and
   optional system action ids
@@ -135,12 +137,12 @@ Versioned runtime artifacts:
 - `ranker_config.json`
 - `metrics.json`
 
-Current implementation note: the service can already create and reuse a lazy
-positive-example `faiss.index` when `faiss` is installed in the service venv.
-If FAISS is unavailable, it falls back to the persisted Torch tensor
-`example_index.pt`. The active artifact layout also includes `intent_map.json`
-so notebook labels can map to AdaOS canonical intents and optional action ids
-without changing the model. Negative FAISS indexes remain a target item.
+Current implementation note: the service can already create and reuse lazy
+positive-example and negative-example FAISS indexes when `faiss` is installed
+in the service venv. If FAISS is unavailable, it falls back to persisted Torch
+tensor caches. The active artifact layout also includes `intent_map.json` so
+notebook labels can map to AdaOS canonical intents and optional action ids
+without changing the model.
 
 Model lifecycle:
 

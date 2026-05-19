@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _load_detector_module():
     path = Path("skills/neural_nlu_service_skill/handlers/upstream_detector_port.py").resolve()
@@ -82,6 +84,60 @@ def test_detector_prefers_faiss_pairs_when_index_backend_is_faiss(monkeypatch):
     assert ranked[0]["matched_example"] == "weather in {city}"
 
 
+def test_detector_negative_examples_use_faiss_index_and_filter_top_skill(monkeypatch):
+    module = _load_detector_module()
+    detector = object.__new__(module.Detector)
+    detector._cfg = module.Config()
+
+    class FakeIndex:
+        def search(self, query, k):
+            assert query == [["query-vector"]]
+            assert k == 3
+            return [[0.94, 0.91, 0.82]], [[1, 0, 2]]
+
+    monkeypatch.setattr(detector, "_vectors_to_float32_numpy", lambda _q_vec: [["query-vector"]])
+
+    examples = [
+        module.ExampleEntry(skill="timer.start", text="timer for ten minutes", masked="timer for {duration}"),
+        module.ExampleEntry(skill="weather.get", text="weather in berlin", masked="weather in {city}"),
+        module.ExampleEntry(skill="news.get", text="latest news", masked="latest news"),
+    ]
+    detector._cfg.FAISS_K = 1
+    detector._cfg.NEGATIVE_K_MULTIPLIER = 3
+
+    negatives = detector._nearest_negative_examples(
+        object(),
+        {
+            "negative_example_index_backend": "faiss",
+            "negative_example_index": FakeIndex(),
+            "examples": examples,
+        },
+        top_skill="weather.get",
+    )
+
+    assert [item["intent"] for item in negatives] == ["timer.start", "news.get"]
+    assert negatives[0]["similarity"] == 0.91
+
+
+def test_detector_negative_signal_penalizes_close_negative_margin():
+    module = _load_detector_module()
+    detector = object.__new__(module.Detector)
+    detector._cfg = module.Config()
+    detector._cfg.NEGATIVE_MARGIN_THRESHOLD = 0.05
+    detector._cfg.NEGATIVE_PENALTY = 0.03
+
+    confidence, signal = detector._negative_contrastive_signal(
+        ranked_examples=[{"intent": "weather.get", "similarity": 0.90}],
+        negative_examples=[{"intent": "timer.start", "similarity": 0.89}],
+        source_top_intent="weather.get",
+        confidence=0.85,
+    )
+
+    assert confidence == pytest.approx(0.82)
+    assert signal["negative_penalty"] == pytest.approx(0.03)
+    assert signal["positive_negative_margin"] == pytest.approx(0.01)
+
+
 def test_detector_health_exposes_faiss_and_index_backend(monkeypatch, tmp_path):
     monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
     module = _load_detector_module()
@@ -91,14 +147,18 @@ def test_detector_health_exposes_faiss_and_index_backend(monkeypatch, tmp_path):
         "examples": [module.ExampleEntry(skill="weather.get", text="weather", masked="weather")],
         "example_index_source": "faiss_disk",
         "example_index_backend": "faiss",
+        "negative_example_index_source": "negative_faiss_disk",
+        "negative_example_index_backend": "faiss",
     }
 
     health = detector.health()
 
-    assert health["version"] == "0.2.7"
+    assert health["version"] == "0.2.8"
     assert "faiss_available" in health
     assert health["example_index"] == "faiss_disk"
     assert health["example_index_backend"] == "faiss"
+    assert health["negative_example_index"] == "negative_faiss_disk"
+    assert health["negative_example_index_backend"] == "faiss"
 
 
 def test_detector_auto_backend_migrates_valid_torch_cache_to_faiss(monkeypatch, tmp_path):

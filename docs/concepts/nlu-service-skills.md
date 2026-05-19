@@ -79,9 +79,12 @@ Target artifacts are service-owned runtime data:
 - `vocab.json`
 - `faiss.index` and `faiss.index.json` for the optional lazy positive-example
   FAISS index
+- `negative_faiss.index` and `negative_faiss.index.json` for the optional lazy
+  negative-example FAISS index
 - `examples_manifest.jsonl`
 - `example_index.pt` as the Torch tensor k-NN fallback cache when FAISS is not
   installed in the service venv
+- `negative_example_index.pt` as the Torch tensor negative k-NN fallback cache
 - `ranker_config.json`
 - `metrics.json`
 
@@ -105,12 +108,15 @@ available as `evidence.source_intent`, and the full mapping is returned as
 `evidence.intent_mapping`.
 
 On first successful model load, the neural skill validates and reuses an
-existing positive-example index when the model id, model SHA, example count,
-and example digest still match. If `faiss` is importable in the service venv,
-the preferred `auto` backend writes `faiss.index`; otherwise it writes
-`example_index.pt`. `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=torch` forces the
-Torch fallback, while `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=faiss` requires the
-FAISS backend.
+existing positive/negative example index pair when the model id, model SHA,
+example count, and example digest still match. If `faiss` is importable in the
+service venv, the preferred `auto` backend writes `faiss.index` and
+`negative_faiss.index`; otherwise it writes `example_index.pt` and
+`negative_example_index.pt`. `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=torch` forces
+the Torch fallback, while `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=faiss` requires
+the FAISS backend. Negative retrieval records nearest other-intent examples and
+can apply a small confidence penalty when the positive/negative margin is too
+small.
 
 The active artifacts can be smoke-tested with
 `skills/neural_nlu_service_skill/scripts/evaluate_golden.py`, which writes

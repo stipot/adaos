@@ -53,6 +53,9 @@ class Config:
     RANK_GAMMA: float = 0.1
     THRESHOLD: float = 0.4
     FAISS_K: int = 5
+    NEGATIVE_K_MULTIPLIER: int = 0
+    NEGATIVE_MARGIN_THRESHOLD: float = 0.04
+    NEGATIVE_PENALTY: float = 0.03
 
 
 @dataclass
@@ -304,7 +307,16 @@ class Detector:
             return cfg
         if not isinstance(data, dict):
             return cfg
-        for key in ("RANK_ALPHA", "RANK_BETA", "RANK_GAMMA", "THRESHOLD", "FAISS_K"):
+        for key in (
+            "RANK_ALPHA",
+            "RANK_BETA",
+            "RANK_GAMMA",
+            "THRESHOLD",
+            "FAISS_K",
+            "NEGATIVE_K_MULTIPLIER",
+            "NEGATIVE_MARGIN_THRESHOLD",
+            "NEGATIVE_PENALTY",
+        ):
             value = data.get(key) or data.get(key.lower())
             if isinstance(value, (int, float)):
                 setattr(cfg, key, type(getattr(cfg, key))(value))
@@ -518,11 +530,16 @@ class Detector:
                 "example_index": None,
                 "example_index_backend": None,
                 "example_index_source": None,
+                "negative_example_vectors": None,
+                "negative_example_index": None,
+                "negative_example_index_backend": None,
+                "negative_example_index_source": None,
                 "model_id": model_id,
                 "model_sha256": self._load_model_sha256(root=root, metadata=metadata),
                 "artifact_root": str(root),
             }
             if examples and os.getenv("ADAOS_NEURAL_DISABLE_EXAMPLE_INDEX", "0").strip().lower() not in {"1", "true", "yes", "on"}:
+                vectors = None
                 index_payload = self._load_example_index(root=root, model_id=model_id, engine=engine)
                 if index_payload is None:
                     vectors = self._embed_examples(model, engine["stoi"], examples)
@@ -537,19 +554,45 @@ class Detector:
                     engine["example_index"] = index_payload.get("index")
                     engine["example_index_backend"] = index_payload.get("backend")
                     engine["example_index_source"] = index_payload.get("source")
+                negative_payload = self._load_example_index(root=root, model_id=model_id, engine=engine, role="negative")
+                if negative_payload is None:
+                    negative_vectors = vectors if vectors is not None else (index_payload or {}).get("vectors")
+                    if negative_vectors is None:
+                        negative_vectors = self._embed_examples(model, engine["stoi"], examples)
+                    negative_payload = self._build_example_index(
+                        root=root,
+                        model_id=model_id,
+                        engine=engine,
+                        vectors=negative_vectors,
+                        role="negative",
+                    )
+                if negative_payload is not None:
+                    engine["negative_example_vectors"] = negative_payload.get("vectors")
+                    engine["negative_example_index"] = negative_payload.get("index")
+                    engine["negative_example_index_backend"] = negative_payload.get("backend")
+                    engine["negative_example_index_source"] = negative_payload.get("source")
             return engine
         except Exception:
             return None
 
-    def _example_index_path(self, root: Path) -> Path:
+    def _example_index_path(self, root: Path, *, role: str = "positive") -> Path:
+        if role == "negative":
+            token = os.getenv("ADAOS_NEURAL_NEGATIVE_EXAMPLE_INDEX_PATH", "").strip()
+            return Path(token).expanduser().resolve() if token else root / "negative_example_index.pt"
         token = os.getenv("ADAOS_NEURAL_EXAMPLE_INDEX_PATH", "").strip()
         return Path(token).expanduser().resolve() if token else root / "example_index.pt"
 
-    def _faiss_index_path(self, root: Path) -> Path:
+    def _faiss_index_path(self, root: Path, *, role: str = "positive") -> Path:
+        if role == "negative":
+            token = os.getenv("ADAOS_NEURAL_NEGATIVE_FAISS_INDEX_PATH", "").strip()
+            return Path(token).expanduser().resolve() if token else root / "negative_faiss.index"
         token = os.getenv("ADAOS_NEURAL_FAISS_INDEX_PATH", "").strip()
         return Path(token).expanduser().resolve() if token else root / "faiss.index"
 
-    def _faiss_index_meta_path(self, root: Path) -> Path:
+    def _faiss_index_meta_path(self, root: Path, *, role: str = "positive") -> Path:
+        if role == "negative":
+            token = os.getenv("ADAOS_NEURAL_NEGATIVE_FAISS_INDEX_META_PATH", "").strip()
+            return Path(token).expanduser().resolve() if token else root / "negative_faiss.index.json"
         token = os.getenv("ADAOS_NEURAL_FAISS_INDEX_META_PATH", "").strip()
         return Path(token).expanduser().resolve() if token else root / "faiss.index.json"
 
@@ -573,18 +616,23 @@ class Detector:
             digest.update(b"\0")
         return digest.hexdigest()
 
-    def _example_index_metadata(self, *, model_id: str, engine: dict[str, Any]) -> dict[str, Any]:
+    def _example_index_metadata(self, *, model_id: str, engine: dict[str, Any], role: str = "positive") -> dict[str, Any]:
         examples: list[ExampleEntry] = engine.get("examples") or []
         return {
             "schema_version": 1,
+            "index_role": "negative_examples" if role == "negative" else "positive_examples",
             "model_id": str(model_id),
             "model_sha256": str(engine.get("model_sha256") or ""),
             "example_count": len(examples),
             "examples_digest": self._examples_digest(examples),
         }
 
-    def _example_index_metadata_matches(self, payload: dict[str, Any], *, model_id: str, engine: dict[str, Any]) -> bool:
+    def _example_index_metadata_matches(self, payload: dict[str, Any], *, model_id: str, engine: dict[str, Any], role: str = "positive") -> bool:
         examples: list[ExampleEntry] = engine.get("examples") or []
+        stored_role = str(payload.get("index_role") or "").strip()
+        expected_role = "negative_examples" if role == "negative" else "positive_examples"
+        if stored_role and stored_role != expected_role:
+            return False
         if int(payload.get("example_count") or -1) != len(examples):
             return False
         if str(payload.get("examples_digest") or "") != self._examples_digest(examples):
@@ -598,29 +646,30 @@ class Detector:
             return False
         return True
 
-    def _load_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> dict[str, Any] | None:
+    def _load_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], role: str = "positive") -> dict[str, Any] | None:
         backend = self._preferred_example_index_backend()
         if backend in {"auto", "faiss"}:
-            loaded = self._load_faiss_example_index(root=root, model_id=model_id, engine=engine)
+            loaded = self._load_faiss_example_index(root=root, model_id=model_id, engine=engine, role=role)
             if loaded is not None:
                 return loaded
-            torch_loaded = self._load_torch_example_index(root=root, model_id=model_id, engine=engine)
+            torch_loaded = self._load_torch_example_index(root=root, model_id=model_id, engine=engine, role=role)
             if torch_loaded is not None and faiss is not None:
                 built = self._save_faiss_example_index(
                     root=root,
                     model_id=model_id,
                     engine=engine,
                     vectors=torch_loaded.get("vectors"),
+                    role=role,
                 )
                 if built is not None:
                     return built
             if backend == "faiss":
                 return None
             return torch_loaded
-        return self._load_torch_example_index(root=root, model_id=model_id, engine=engine)
+        return self._load_torch_example_index(root=root, model_id=model_id, engine=engine, role=role)
 
-    def _load_torch_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> dict[str, Any] | None:
-        path = self._example_index_path(root)
+    def _load_torch_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], role: str = "positive") -> dict[str, Any] | None:
+        path = self._example_index_path(root, role=role)
         examples: list[ExampleEntry] = engine.get("examples") or []
         if not path.exists() or not examples:
             return None
@@ -633,20 +682,20 @@ class Detector:
         vectors = payload.get("vectors")
         if vectors is None or not hasattr(vectors, "shape"):
             return None
-        if not self._example_index_metadata_matches(payload, model_id=model_id, engine=engine):
+        if not self._example_index_metadata_matches(payload, model_id=model_id, engine=engine, role=role):
             return None
         return {
             "backend": "torch_tensor",
-            "source": "torch_disk",
+            "source": "negative_torch_disk" if role == "negative" else "torch_disk",
             "vectors": vectors.cpu(),
             "index": None,
         }
 
-    def _load_faiss_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any]) -> dict[str, Any] | None:
+    def _load_faiss_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], role: str = "positive") -> dict[str, Any] | None:
         if faiss is None:
             return None
-        path = self._faiss_index_path(root)
-        meta_path = self._faiss_index_meta_path(root)
+        path = self._faiss_index_path(root, role=role)
+        meta_path = self._faiss_index_meta_path(root, role=role)
         examples: list[ExampleEntry] = engine.get("examples") or []
         if not path.exists() or not meta_path.exists() or not examples:
             return None
@@ -654,7 +703,7 @@ class Detector:
             meta = _json_load(meta_path)
         except Exception:
             return None
-        if not isinstance(meta, dict) or not self._example_index_metadata_matches(meta, model_id=model_id, engine=engine):
+        if not isinstance(meta, dict) or not self._example_index_metadata_matches(meta, model_id=model_id, engine=engine, role=role):
             return None
         try:
             index = faiss.read_index(str(path))
@@ -664,41 +713,41 @@ class Detector:
             return None
         return {
             "backend": "faiss",
-            "source": "faiss_disk",
+            "source": "negative_faiss_disk" if role == "negative" else "faiss_disk",
             "vectors": None,
             "index": index,
         }
 
-    def _build_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> dict[str, Any] | None:
+    def _build_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any, role: str = "positive") -> dict[str, Any] | None:
         if vectors is None:
             return None
         backend = self._preferred_example_index_backend()
         if backend in {"auto", "faiss"}:
-            built = self._save_faiss_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors)
+            built = self._save_faiss_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors, role=role)
             if built is not None or backend == "faiss":
                 return built
-        if self._save_torch_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors):
+        if self._save_torch_example_index(root=root, model_id=model_id, engine=engine, vectors=vectors, role=role):
             return {
                 "backend": "torch_tensor",
-                "source": "torch_built",
+                "source": "negative_torch_built" if role == "negative" else "torch_built",
                 "vectors": vectors.cpu(),
                 "index": None,
             }
         return None
 
-    def _save_torch_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> bool:
+    def _save_torch_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any, role: str = "positive") -> bool:
         if os.getenv("ADAOS_NEURAL_SAVE_EXAMPLE_INDEX", "1").strip().lower() in {"0", "false", "no", "off"}:
             return False
         examples: list[ExampleEntry] = engine.get("examples") or []
         if vectors is None or not examples:
             return False
-        path = self._example_index_path(root)
+        path = self._example_index_path(root, role=role)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(
                 {
                     "backend": "torch_tensor",
-                    **self._example_index_metadata(model_id=model_id, engine=engine),
+                    **self._example_index_metadata(model_id=model_id, engine=engine, role=role),
                     "vectors": vectors.cpu(),
                 },
                 str(path),
@@ -724,7 +773,7 @@ class Detector:
         except Exception:
             return None
 
-    def _save_faiss_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any) -> dict[str, Any] | None:
+    def _save_faiss_example_index(self, *, root: Path, model_id: str, engine: dict[str, Any], vectors: Any, role: str = "positive") -> dict[str, Any] | None:
         if faiss is None:
             return None
         examples: list[ExampleEntry] = engine.get("examples") or []
@@ -735,20 +784,20 @@ class Detector:
             dim = int(arr.shape[1])
             index = faiss.IndexFlatIP(dim)
             index.add(arr)
-            path = self._faiss_index_path(root)
-            meta_path = self._faiss_index_meta_path(root)
+            path = self._faiss_index_path(root, role=role)
+            meta_path = self._faiss_index_meta_path(root, role=role)
             path.parent.mkdir(parents=True, exist_ok=True)
             meta_path.parent.mkdir(parents=True, exist_ok=True)
             faiss.write_index(index, str(path))
             meta = {
                 "backend": "faiss",
                 "metric": "inner_product",
-                **self._example_index_metadata(model_id=model_id, engine=engine),
+                **self._example_index_metadata(model_id=model_id, engine=engine, role=role),
             }
             meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             return {
                 "backend": "faiss",
-                "source": "faiss_built",
+                "source": "negative_faiss_built" if role == "negative" else "faiss_built",
                 "vectors": None,
                 "index": index,
             }
@@ -804,8 +853,8 @@ class Detector:
             return list(value[0])
         return value
 
-    def _nearest_faiss_pairs(self, q_vec: Any, engine: dict[str, Any], *, k: int) -> list[tuple[float, int]]:
-        index = engine.get("example_index")
+    def _nearest_faiss_pairs(self, q_vec: Any, engine: dict[str, Any], *, k: int, index_key: str = "example_index") -> list[tuple[float, int]]:
+        index = engine.get(index_key)
         if index is None:
             return []
         query = self._vectors_to_float32_numpy(q_vec)
@@ -831,8 +880,8 @@ class Detector:
                 continue
         return pairs
 
-    def _nearest_torch_pairs(self, q_vec: Any, engine: dict[str, Any], *, k: int) -> list[tuple[float, int]]:
-        vectors = engine.get("example_vectors")
+    def _nearest_torch_pairs(self, q_vec: Any, engine: dict[str, Any], *, k: int, vectors_key: str = "example_vectors") -> list[tuple[float, int]]:
+        vectors = engine.get(vectors_key)
         if vectors is None or torch is None:
             return []
         try:
@@ -880,6 +929,78 @@ class Detector:
         candidates.sort(key=lambda item: float(item.get("confidence") or 0.0), reverse=True)
         return candidates
 
+    def _nearest_negative_examples(self, q_vec: Any, engine: dict[str, Any], *, top_skill: str) -> list[dict[str, Any]]:
+        examples: list[ExampleEntry] = engine.get("examples") or []
+        if not examples or not str(top_skill or "").strip():
+            return []
+        multiplier = int(self._cfg.NEGATIVE_K_MULTIPLIER)
+        if multiplier <= 0:
+            k = len(examples)
+        else:
+            k = min(max(int(self._cfg.FAISS_K) * multiplier, 1), len(examples))
+        if engine.get("negative_example_index_backend") == "faiss":
+            pairs = self._nearest_faiss_pairs(q_vec, engine, k=k, index_key="negative_example_index")
+        else:
+            pairs = self._nearest_torch_pairs(q_vec, engine, k=k, vectors_key="negative_example_vectors")
+        negatives: list[dict[str, Any]] = []
+        seen_skills: set[str] = set()
+        for sim, idx in pairs:
+            if idx >= len(examples):
+                continue
+            entry = examples[idx]
+            if entry.skill == top_skill or entry.skill in seen_skills:
+                continue
+            seen_skills.add(entry.skill)
+            negatives.append(
+                {
+                    "intent": entry.skill,
+                    "similarity": float(sim),
+                    "matched_example": entry.masked,
+                    "raw_example": entry.text,
+                }
+            )
+            if len(negatives) >= 3:
+                break
+        return negatives
+
+    def _negative_contrastive_signal(
+        self,
+        *,
+        ranked_examples: list[dict[str, Any]],
+        negative_examples: list[dict[str, Any]],
+        source_top_intent: str,
+        confidence: float,
+    ) -> tuple[float, dict[str, Any]]:
+        signal: dict[str, Any] = {
+            "negative_penalty": 0.0,
+            "nearest_negative_examples": negative_examples[:3],
+        }
+        positive_similarity: float | None = None
+        for item in ranked_examples:
+            if str(item.get("intent") or "") != source_top_intent:
+                continue
+            try:
+                sim = float(item.get("similarity"))
+            except Exception:
+                continue
+            positive_similarity = sim if positive_similarity is None else max(positive_similarity, sim)
+        if positive_similarity is not None:
+            signal["positive_similarity"] = positive_similarity
+        if not negative_examples or positive_similarity is None:
+            return float(confidence), signal
+        try:
+            negative_similarity = float(negative_examples[0].get("similarity"))
+        except Exception:
+            return float(confidence), signal
+        margin = float(positive_similarity - negative_similarity)
+        signal["negative_similarity"] = negative_similarity
+        signal["positive_negative_margin"] = margin
+        if margin <= max(float(self._cfg.NEGATIVE_MARGIN_THRESHOLD), 0.0):
+            penalty = max(0.0, min(float(self._cfg.NEGATIVE_PENALTY), 1.0))
+            signal["negative_penalty"] = penalty
+            return float(max(0.0, confidence - penalty)), signal
+        return float(confidence), signal
+
     @staticmethod
     def _flatten_slots(slots: dict[str, list[str]]) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -915,6 +1036,13 @@ class Detector:
             else:
                 source_top_intent = clf_skill
                 confidence = clf_prob
+            negative_examples = self._nearest_negative_examples(z, engine, top_skill=source_top_intent)
+            confidence, negative_signal = self._negative_contrastive_signal(
+                ranked_examples=ranked_examples,
+                negative_examples=negative_examples,
+                source_top_intent=source_top_intent,
+                confidence=float(confidence),
+            )
             raw_alternatives = [
                 {"intent": str(labels[i]), "confidence": float(weighted[i])}
                 for i in order
@@ -939,10 +1067,13 @@ class Detector:
                     ),
                     "example_index": str(engine.get("example_index_source") or "none"),
                     "example_index_backend": str(engine.get("example_index_backend") or "none"),
+                    "negative_example_index": str(engine.get("negative_example_index_source") or "none"),
+                    "negative_example_index_backend": str(engine.get("negative_example_index_backend") or "none"),
                     "softmax": clf_prob,
                     "canonicalized_text": model_text,
                     "masked_text": mask.masked,
                     "matched_examples": [item.get("matched_example") for item in ranked_examples[:3]],
+                    **negative_signal,
                     "source_intent": source_top_intent,
                     "intent_mapping": intent_meta,
                     "score_components": {
@@ -1033,7 +1164,7 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.7",
+            "version": "0.2.8",
             "torch_available": torch is not None,
             "faiss_available": faiss is not None,
             "model_loaded": bool(engine),
@@ -1041,6 +1172,8 @@ class Detector:
             "examples_total": len(engine.get("examples") or []) if engine else 0,
             "example_index": engine.get("example_index_source") if engine else None,
             "example_index_backend": engine.get("example_index_backend") if engine else None,
+            "negative_example_index": engine.get("negative_example_index_source") if engine else None,
+            "negative_example_index_backend": engine.get("negative_example_index_backend") if engine else None,
             "intent_map_loaded": bool(engine.get("intent_map")) if engine else False,
             "artifact_root": str(self._artifacts_root()),
         }

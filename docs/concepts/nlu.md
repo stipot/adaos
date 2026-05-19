@@ -53,6 +53,8 @@ Implemented now:
 - Neural positive-example retrieval now supports an optional lazy `faiss.index`
   with a Torch tensor cache fallback when `faiss` is not installed in the
   service venv.
+- Neural negative-example retrieval now persists a parallel FAISS/Torch index
+  and records contrastive evidence for close other-intent examples.
 - Neural `/parse` contract with `top_intent`, `confidence`, `alternatives`,
   `slots`, `model_id`, `evidence`, canonicalized text, and named-entity
   evidence.
@@ -121,8 +123,8 @@ long-term fallback.
    - passes named-entity `canonicalized_text` and `resolved_entities` evidence
      into the provider request;
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights plus
-     a lazy FAISS positive-example index when `faiss` is installed, or the
-     Torch tensor k-NN fallback otherwise;
+     lazy FAISS positive/negative example indexes when `faiss` is installed,
+     or Torch tensor k-NN fallbacks otherwise;
    - maps model/research labels through the service-owned `intent_map.json`
      before returning canonical `top_intent` values to the bridge;
    - default deployment uses one active model per node, with usage telemetry
