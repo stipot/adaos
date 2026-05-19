@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **79%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **81%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -79,9 +79,10 @@ but the productionization checklist remains mostly open.
 - [x] Overlay live YJS desktop registry values on top of manifest lookups for Teacher API.
 - [ ] Expose stable template ids for regex, Rasa examples, neural labels, and lookup sets.
 - [ ] Implement stale-write protection using template fingerprints.
-- [ ] Define the system action catalog for core/client commands such as move,
-  hide, open, pin, switch, and other shell actions.
-- [ ] Include system action examples in NLU authoring context without treating
+- [x] Define the system action catalog for currently runtime-backed core/client
+  commands such as open, switch, reload, reset, and install toggle. Move,
+  hide, and pin remain blocked on runtime host actions.
+- [x] Include system action examples in NLU authoring context without treating
   those actions as user skills.
 
 ## Phase 4a: Runtime Named Entities and Canonicalization
@@ -199,7 +200,7 @@ but the productionization checklist remains mostly open.
 
 - [ ] Export skill-owned examples from skills.
 - [ ] Export scenario-owned examples from scenarios.
-- [ ] Export core/client command examples from the system action catalog.
+- [x] Export core/client command examples from the system action catalog.
 - [ ] Export named-entity classes as masks, not as local alias training data.
 - [ ] Let Teacher-approved corrections update regex, Neural, and Rasa datasets
   through the owning artifact.
@@ -208,13 +209,13 @@ but the productionization checklist remains mostly open.
 
 ## Immediate Next Steps
 
-1. Define the system action catalog for core/client commands and include it in
-   NLU authoring context.
-2. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
+1. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-3. Add "save correct example" backend action with skill/scenario/system-action
+2. Add "save correct example" backend action with skill/scenario/system-action
    target selection and audit metadata.
-4. Add full model promotion gates using macro-F1, abstain rate, and latency.
+3. Add full model promotion gates using macro-F1, abstain rate, and latency.
+4. Add runtime-backed host actions for move/hide/pin before exporting them as
+   active NLU commands.
 
 ## Last Completed Slice
 
@@ -233,4 +234,6 @@ but the productionization checklist remains mostly open.
   action ids while evidence preserves the original source label.
 - Neural runtime now persists negative example indexes and records contrastive nearest-other-intent evidence.
 - `adaos interpreter neural-diagnostics` now combines readiness and node-local usage aggregates for operators.
+- A versioned system action catalog now exposes active host actions, system-owned NLU examples, and dispatcher mappings for
+  default desktop commands such as modal open, scenario switch, app install toggle, webspace reload, and webspace reset.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

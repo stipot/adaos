@@ -213,6 +213,9 @@ If `service.self_managed.doctor.enabled: true`, these issues can also trigger:
 ## Training flow
 
 1. `adaos.services.nlu.data_registry.sync_from_scenarios_and_skills()` syncs NLU data into interpreter workspace files.
+   It also exports active system-action examples from
+   `adaos.services.nlu.system_actions_catalog`, so core/client commands are
+   trainable without being represented as user skills.
 2. `adaos.services.nlu.rasa_training_bridge` triggers training by calling the service `/train`.
 3. `adaos install` prepares the service-skill/runtime slot and runs one post-install train by default. Use
    `--no-train-nlu` to skip training after preparation.

@@ -31,6 +31,7 @@ def test_default_desktop_nlu_sync_exports_modal_intents_to_rasa_project() -> Non
     summary = sync_from_scenarios_and_skills(ctx)
 
     assert summary["scenario_intents"] >= 2
+    assert summary["system_action_intents"] >= 4
 
     ws = InterpreterWorkspace(ctx)
     project = ws.build_rasa_project()
@@ -42,6 +43,8 @@ def test_default_desktop_nlu_sync_exports_modal_intents_to_rasa_project() -> Non
     assert "[apps_catalog](modal_id)" in open_modal_examples
     assert "[nlu_teacher_modal](modal_id)" in open_modal_examples
     assert "[member-1](node_ref)" in open_node_modal_examples
+    assert "reload desktop" in _examples_for(dataset, "desktop.reload_webspace")
+    assert "switch to [web_desktop](scenario_id)" in _examples_for(dataset, "desktop.switch_scenario")
     assert "- apps_catalog" in _lookup_examples_for(dataset, "modal_id")
     assert "- nlu_teacher_modal" in _lookup_examples_for(dataset, "modal_id")
     assert "- nlu_teacher_app" in _lookup_examples_for(dataset, "app_id")
@@ -83,6 +86,34 @@ async def test_default_desktop_nlu_dispatches_named_node_modal_open() -> None:
             "webspace_id": "desktop",
             "slots": {"modal_id": "apps_catalog", "node_ref": "member-1"},
             "text": "open apps_catalog on node member-1",
+            "_meta": {"webspace_id": "desktop", "scenario_id": "web_desktop"},
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_default_desktop_nlu_dispatches_system_webspace_reload() -> None:
+    from adaos.services.agent_context import get_ctx
+    from adaos.services.nlu.dispatcher import _on_nlp_intent_detected
+
+    ctx = get_ctx()
+    emitted: list[dict] = []
+    ctx.bus.subscribe("desktop.webspace.reload", lambda ev: emitted.append(dict(ev.payload or {})))
+
+    await _on_nlp_intent_detected(
+        {
+            "intent": "desktop.reload_webspace",
+            "confidence": 0.95,
+            "slots": {},
+            "text": "reload desktop",
+            "webspace_id": "desktop",
+        }
+    )
+
+    assert emitted == [
+        {
+            "webspace_id": "desktop",
+            "text": "reload desktop",
             "_meta": {"webspace_id": "desktop", "scenario_id": "web_desktop"},
         }
     ]

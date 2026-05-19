@@ -101,13 +101,16 @@ def _intent_mappings_from_nlu(scenario_id: str, nlu_section: Mapping[str, Any]) 
         examples = spec.get("examples") or []
         if not isinstance(examples, list):
             examples = []
+        mapping_scenario = scenario_id
+        if spec.get("scope") == "system" and spec.get("action_id"):
+            mapping_scenario = "system"
         mappings.append(
             IntentMapping(
                 intent=intent_id,
                 description=spec.get("description"),
                 skill=None,
                 tool=None,
-                scenario=scenario_id,
+                scenario=mapping_scenario,
                 examples=[str(e) for e in examples if isinstance(e, str) and e.strip()],
             )
         )
@@ -154,17 +157,26 @@ def sync_from_scenarios_and_skills(ctx: AgentContext) -> Dict[str, Any]:
     ws = InterpreterWorkspace(ctx)
     skill_count = _sync_skill_nlu_metadata(ctx)
     scenario_mappings = _collect_scenario_intents(ctx)
+    system_action_count = len(
+        {
+            mapping.intent
+            for mapping in scenario_mappings
+            if mapping.scenario == "system" and isinstance(mapping.intent, str) and mapping.intent
+        }
+    )
 
     for mapping in scenario_mappings:
         ws.upsert_intent(mapping)
 
     _log.info(
-        "nlu registry sync: skills_intents=%d scenario_intents=%d",
+        "nlu registry sync: skills_intents=%d scenario_intents=%d system_action_intents=%d",
         skill_count,
         len(scenario_mappings),
+        system_action_count,
     )
     return {
         "skills_intents": skill_count,
         "scenario_intents": len(scenario_mappings),
+        "system_action_intents": system_action_count,
     }
 

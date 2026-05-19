@@ -104,17 +104,20 @@ The script copies `best_model*.pt` to `model.pt`, builds `labels.json` and
 needed later when the service loads the model for inference.
 
 `intent_map.json` maps model/research labels to AdaOS canonical intents and
-optional action ids. The preparation script writes identity mappings by
-default, and operators can edit the artifact without retraining the model:
+optional action ids. For core/client commands, `action_id` should match the
+versioned system action catalog in
+`src/adaos/services/nlu/system_actions_catalog.py`. The preparation script
+writes identity mappings by default, and operators can edit the artifact
+without retraining the model:
 
 ```json
 {
   "schema_version": 1,
   "intents": [
     {
-      "label": "weather.get",
-      "canonical_intent": "desktop.open_weather",
-      "action_id": "host.open_weather",
+      "label": "desktop.reload",
+      "canonical_intent": "desktop.reload_webspace",
+      "action_id": "host.desktop.webspace.reload",
       "target": {"kind": "system_action"}
     }
   ]

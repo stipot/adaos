@@ -40,6 +40,7 @@ LLM teacher receives a compact context snapshot (per webspace), including:
 - existing regex rules (from skills/scenarios + legacy per-webspace cache)
 - routing hints (`intent_routes`: scenario intent -> callSkill topic -> skill)
 - system actions visible in the current scenario (`system_actions`) and a published host action catalog (`host_actions`)
+  with stable action ids, linked intents, slots, host event names, and training examples
 - skill manifests (`skills_manifest`: tools/events/llm_policy summary for installed skills)
 
 Goal: prefer improving existing intents (regex rule / dataset revision) over creating a new capability, when possible.
@@ -64,7 +65,7 @@ Target controls:
 - **Save example**: persists the curated example into scenario or skill training content, without mutating code.
 
 The first implementation can be intentionally narrow: support dry-run phrase checks, show ranking/entities for Rasa, and save examples for the
-default desktop modal intents. Broader tool/action authoring should wait until Root MCP descriptors are available.
+default desktop modal and runtime-backed system action intents. Broader tool/action authoring should wait until Root MCP descriptors are available.
 
 ## Current dry-run API
 

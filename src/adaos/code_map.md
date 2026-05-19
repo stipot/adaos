@@ -324,7 +324,7 @@
 [services/nlu/rasa_training_bridge.py](services/nlu/rasa_training_bridge.py)
 [services/nlu/regex_rules_runtime.py](services/nlu/regex_rules_runtime.py)
 [funcs: record_regex_rule_hit](services/nlu/regex_usage_runtime.py)
-[funcs: describe_system_actions](services/nlu/system_actions_catalog.py)
+[funcs: describe_system_actions, system_action_nlu_intents, find_system_action_by_id, find_system_action_by_intent](services/nlu/system_actions_catalog.py)
 [services/nlu/teacher_bridge.py](services/nlu/teacher_bridge.py)
 [funcs: rebuild_threads, rebuild_events_by_candidate, make_event, append_event](services/nlu/teacher_events.py)
 [services/nlu/teacher_runtime.py](services/nlu/teacher_runtime.py)

@@ -82,6 +82,12 @@ Implemented now:
   - `POST /api/nlu/teacher/{webspace_id}/probe`
 - Lookup API with live desktop-registry overlay:
   - `GET /api/nlu/teacher/{webspace_id}/lookups`
+- Versioned system action catalog at
+  `src/adaos/services/nlu/system_actions_catalog.py` for runtime-backed host
+  commands. The catalog exposes stable action ids, host event names, slots,
+  examples, and dispatcher mappings for default desktop actions such as modal
+  open, scenario switch, app install toggle, webspace reload, and webspace
+  reset.
 - Stage trace persistence in `data.nlu_trace.items[]`.
 - Schema-driven NLU Teacher modal that shows missed requests, candidates, raw event payloads, and Apply actions.
 
@@ -167,8 +173,8 @@ Human verification steps are tracked in [nlu-human-verification.md](./nlu-human-
 
 ## Dynamic lookup tables
 
-AdaOS now exports baseline NLU lookup tables from workspace desktop/scenario manifests, with packaged desktop manifests as an empty-workspace
-fallback. The lookup sets are:
+AdaOS now exports baseline NLU lookup tables from workspace desktop/scenario manifests, with packaged/default desktop ids as an
+empty-workspace fallback. The lookup sets are:
 
 - `modal_id`
 - `node_ref`
@@ -219,15 +225,17 @@ Curated examples should live where the behavior is owned:
   rules, and training metadata.
 - Scenario-owned flows: the owning scenario stores scenario-level NLU examples
   and routing hints.
-- Core/client actions such as moving, hiding, opening, pinning, switching, and
-  other shell behavior should not be faked as user skills. They should be
-  described in a versioned **system action catalog** with stable action ids,
-  argument schemas, aliases, and training examples.
+- Core/client actions such as opening, switching, reloading/resetting the
+  desktop, and toggling installed apps are described in a versioned **system
+  action catalog** with stable action ids, argument schemas, aliases, and
+  training examples. Move, hide, and pin must be added only after matching
+  runtime host actions exist.
 
-The system action catalog is still data, not provider code. Regex, Rasa,
-neural, Teacher, and MCP authoring can all consume it. This lets AdaOS train
-and explain built-in UI/kernel commands without baking them into a particular
-NLU engine.
+The system action catalog is data, not provider code. Regex, Rasa, neural,
+Teacher, and MCP authoring can all consume it. The default desktop NLU merges
+active catalog intents into its dispatcher config, while interpreter export
+keeps those examples system-owned instead of pretending they came from a user
+skill.
 
 The current neural provider uses service-owned `intent_map.json` as the
 node-level bridge from research labels to canonical intents and optional
@@ -288,7 +296,8 @@ Teacher receives scenario + skill context, including:
 - built-in regex rules (`nlu.pipeline`)
 - selected skill-level NLU artifacts (e.g. `interpreter/intents.yml`)
 - intent routing hints (`intent_routes`: scenario intent -> callSkill topic -> skill)
-- system/host actions catalog (`system_actions`, `host_actions`)
+- system/host actions catalog (`system_actions`, `host_actions`), including
+  stable action ids, linked intents, slots, and training examples
 
 Teacher state is projected into YJS under `data.nlu_teacher.*` for UI inspection, and also persisted on disk
 under `.adaos/state/skills/nlu_teacher/<webspace_id>.json` so it survives YJS reload/reset.
