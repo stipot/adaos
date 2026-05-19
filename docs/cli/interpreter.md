@@ -22,6 +22,7 @@ bridge falls back and the operator should run `adaos install` or the managed upd
 ```bash
 adaos interpreter status
 adaos interpreter sync-nlu
+adaos interpreter export-neural-training
 adaos interpreter train --engine rasa
 adaos interpreter parse "open modal nlu_teacher_modal"
 adaos interpreter intent list
@@ -29,12 +30,20 @@ adaos interpreter intent list
 
 The CLI builds the Rasa project from installed skill/scenario training content, then calls `rasa_nlu_service_skill:/train`. The service owns its dependencies and model loading; the hub process stays free of Rasa/TensorFlow dependency conflicts.
 
+`adaos interpreter export-neural-training` writes a provider-neutral Neural
+training bundle under `.adaos/state/interpreter/neural_training`. It uses the
+same synced skill/scenario/system examples as Rasa export, strips Rasa-style
+entity annotations into plain text, and preserves owner metadata for future
+review/rebuild tooling. It does not modify active Neural artifacts under
+`.adaos/state/nlu/neural`.
+
 ## Runtime locations
 
 - Workspace template copy: `.adaos/workspace/skills/rasa_nlu_service_skill`
 - Active slot source: `.adaos/workspace/skills/.runtime/rasa_nlu_service_skill/v<major>.<minor>/slots/<A|B>/src/skills/rasa_nlu_service_skill`
 - Bucket service venv: `.adaos/workspace/skills/.runtime/rasa_nlu_service_skill/v<major>.<minor>/venv`
 - Generated project: `.adaos/state/interpreter/rasa_project`
+- Neural training bundle: `.adaos/state/interpreter/neural_training`
 - Model artifact: `.adaos/models/interpreter/interpreter_latest.tar.gz`
 - Service log: `.adaos/logs/service.rasa_nlu_service_skill.log`
 

@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **81%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **83%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -198,8 +198,8 @@ but the productionization checklist remains mostly open.
 
 ### Training Data Feedback
 
-- [ ] Export skill-owned examples from skills.
-- [ ] Export scenario-owned examples from scenarios.
+- [x] Export skill-owned examples from skills.
+- [x] Export scenario-owned examples from scenarios.
 - [x] Export core/client command examples from the system action catalog.
 - [ ] Export named-entity classes as masks, not as local alias training data.
 - [ ] Let Teacher-approved corrections update regex, Neural, and Rasa datasets
@@ -213,8 +213,10 @@ but the productionization checklist remains mostly open.
    Rasa, and action-preview evidence.
 2. Add "save correct example" backend action with skill/scenario/system-action
    target selection and audit metadata.
-3. Add full model promotion gates using macro-F1, abstain rate, and latency.
-4. Add runtime-backed host actions for move/hide/pin before exporting them as
+3. Wire the exported Neural training bundle into governed rebuild/reindex
+   tooling after operator approval.
+4. Add full model promotion gates using macro-F1, abstain rate, and latency.
+5. Add runtime-backed host actions for move/hide/pin before exporting them as
    active NLU commands.
 
 ## Last Completed Slice
@@ -236,4 +238,6 @@ but the productionization checklist remains mostly open.
 - `adaos interpreter neural-diagnostics` now combines readiness and node-local usage aggregates for operators.
 - A versioned system action catalog now exposes active host actions, system-owned NLU examples, and dispatcher mappings for
   default desktop commands such as modal open, scenario switch, app install toggle, webspace reload, and webspace reset.
+- `adaos interpreter export-neural-training` writes a curated Neural training bundle from skill, scenario, and system-action
+  examples under `state/interpreter/neural_training` without mutating active provider artifacts.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

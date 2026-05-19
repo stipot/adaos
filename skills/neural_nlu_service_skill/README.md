@@ -153,3 +153,15 @@ To write a golden phrase smoke report for the active artifacts:
 By default the report is written to
 `<ADAOS_BASE_DIR>/state/nlu/neural/golden_report.json`. A custom JSONL can be
 provided with `--cases`; each line should contain `text` and `expected_intent`.
+
+Curated examples from AdaOS skill/scenario/system ownership can be exported
+without mutating the active model with:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter export-neural-training
+```
+
+This writes `state/interpreter/neural_training/examples_manifest.jsonl`,
+`labels.json`, `intents_manifest.json`, and `summary.json`. Future rebuild or
+reindex commands can consume that bundle explicitly; the active
+`state/nlu/neural` layout is not changed by the export.

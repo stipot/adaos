@@ -88,6 +88,12 @@ Implemented now:
   examples, and dispatcher mappings for default desktop actions such as modal
   open, scenario switch, app install toggle, webspace reload, and webspace
   reset.
+- Curated Neural training export:
+  - `adaos interpreter export-neural-training`
+  - writes skill/scenario/system-owned examples to
+    `state/interpreter/neural_training/examples_manifest.jsonl`
+  - strips Rasa entity annotations into plain text while preserving
+    `raw_example` and owner metadata.
 - Stage trace persistence in `data.nlu_trace.items[]`.
 - Schema-driven NLU Teacher modal that shows missed requests, candidates, raw event payloads, and Apply actions.
 
@@ -241,6 +247,11 @@ The current neural provider uses service-owned `intent_map.json` as the
 node-level bridge from research labels to canonical intents and optional
 `action_id` values. This keeps model labels stable while the system action
 catalog matures into the shared source of truth for built-in commands.
+
+The curated Neural export is not an active model promotion step. It produces a
+reviewable/rebuildable bundle under `state/interpreter/neural_training`; the
+active provider layout under `state/nlu/neural` is updated only by explicit
+artifact preparation or future governed rebuild/reindex tooling.
 
 NLU Teacher should write accepted corrections back to the owning artifact:
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -23,6 +24,13 @@ def _utc_now() -> str:
 def _hash_payload(payload: Any) -> str:
     data = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
     return hashlib.sha256(data).hexdigest()
+
+
+_RASA_ENTITY_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+
+
+def _plain_training_text(example: str) -> str:
+    return _RASA_ENTITY_RE.sub(r"\1", example).strip()
 
 
 @dataclass(slots=True)
@@ -475,6 +483,125 @@ class InterpreterWorkspace:
             encoding="utf-8",
         )
         return project
+
+    # ----------------------------------------------------- neural data export
+    def export_neural_training_data(self) -> Dict[str, Any]:
+        """
+        Export curated interpreter examples as a Neural NLU training bundle.
+
+        The bundle is deliberately separate from the active provider artifacts
+        under ``state/nlu/neural``. It gives rebuild/reindex tooling a stable
+        source of skill/scenario/system-owned examples without mutating the
+        running model.
+        """
+        self.generate_dataset_from_skills()
+        manual = self.list_intents()
+        auto = self.collect_skill_intents()
+        combined: Dict[str, IntentMapping] = {m.intent: m for m in auto if m.intent}
+        for mapping in manual:
+            combined[mapping.intent] = mapping
+
+        out_dir = self.root / "neural_training"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        rows: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for mapping in sorted(combined.values(), key=lambda item: item.intent):
+            if not mapping.intent:
+                continue
+            owner: dict[str, Any]
+            if mapping.skill:
+                owner = {"type": "skill", "id": mapping.skill}
+            elif mapping.scenario == "system":
+                action_id = None
+                try:
+                    from adaos.services.nlu.system_actions_catalog import find_system_action_by_intent
+
+                    action = find_system_action_by_intent(mapping.intent)
+                    if isinstance(action, dict) and isinstance(action.get("id"), str):
+                        action_id = action["id"]
+                except Exception:
+                    action_id = None
+                owner = {"type": "system_action", **({"id": action_id} if action_id else {})}
+            elif mapping.scenario:
+                owner = {"type": "scenario", "id": mapping.scenario}
+            else:
+                owner = {"type": "interpreter"}
+            for raw_example in mapping.examples:
+                if not isinstance(raw_example, str) or not raw_example.strip():
+                    continue
+                text = _plain_training_text(raw_example)
+                if not text:
+                    continue
+                key = (mapping.intent, text)
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(
+                    {
+                        "schema_version": 1,
+                        "intent": mapping.intent,
+                        "text": text,
+                        "raw_example": raw_example.strip(),
+                        "split": "train",
+                        "owner": owner,
+                        "source": "interpreter_workspace",
+                        "example_id": "nlu." + hashlib.sha1(f"{mapping.intent}\0{text}".encode("utf-8")).hexdigest()[:16],
+                    }
+                )
+
+        examples_path = out_dir / "examples_manifest.jsonl"
+        with examples_path.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+        intent_counts: dict[str, int] = {}
+        owners_by_intent: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            intent = str(row.get("intent") or "")
+            if not intent:
+                continue
+            intent_counts[intent] = intent_counts.get(intent, 0) + 1
+            owner = row.get("owner")
+            if isinstance(owner, dict) and intent not in owners_by_intent:
+                owners_by_intent[intent] = owner
+        labels = sorted(intent_counts)
+        labels_path = out_dir / "labels.json"
+        labels_path.write_text(json.dumps(labels, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        intents_manifest = {
+            "schema_version": 1,
+            "labels": labels,
+            "intents": [
+                {
+                    "id": intent,
+                    "label": intent,
+                    "examples": int(intent_counts[intent]),
+                    "owner": owners_by_intent.get(intent) or {"type": "interpreter"},
+                }
+                for intent in labels
+            ],
+        }
+        intents_path = out_dir / "intents_manifest.json"
+        intents_path.write_text(json.dumps(intents_manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        summary = {
+            "ok": True,
+            "out_dir": str(out_dir),
+            "examples_path": str(examples_path),
+            "labels_path": str(labels_path),
+            "intents_manifest_path": str(intents_path),
+            "examples_total": len(rows),
+            "intents_total": len(labels),
+            "owners": {
+                "skill": sum(1 for row in rows if (row.get("owner") or {}).get("type") == "skill"),
+                "scenario": sum(1 for row in rows if (row.get("owner") or {}).get("type") == "scenario"),
+                "system_action": sum(1 for row in rows if (row.get("owner") or {}).get("type") == "system_action"),
+                "interpreter": sum(1 for row in rows if (row.get("owner") or {}).get("type") == "interpreter"),
+            },
+        }
+        (out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
 
     # ---------------------------------------------------------------- training
     def record_training(self, *, note: str | None = None, extra: Dict[str, Any] | None = None) -> Dict[str, Any]:

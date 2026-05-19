@@ -127,8 +127,20 @@ def sync_nlu() -> None:
     summary = sync_from_scenarios_and_skills(ctx)
     typer.echo(
         f"NLU sync: skills_intents={summary['skills_intents']} "
-        f"scenario_intents={summary['scenario_intents']}"
+        f"scenario_intents={summary['scenario_intents']} "
+        f"system_action_intents={summary.get('system_action_intents', 0)}"
     )
+
+
+@app.command("export-neural-training")
+def export_neural_training() -> None:
+    """
+    Export curated skill/scenario/system NLU examples as a Neural NLU training bundle.
+    """
+    ctx = get_ctx()
+    sync_from_scenarios_and_skills(ctx)
+    summary = _workspace().export_neural_training_data()
+    typer.echo(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
 @app.command("parse")

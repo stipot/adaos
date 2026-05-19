@@ -220,6 +220,11 @@ If `service.self_managed.doctor.enabled: true`, these issues can also trigger:
 3. `adaos install` prepares the service-skill/runtime slot and runs one post-install train by default. Use
    `--no-train-nlu` to skip training after preparation.
 
+For Neural NLU, `adaos interpreter export-neural-training` writes the same
+curated ownership-aware examples into
+`state/interpreter/neural_training/examples_manifest.jsonl`. This is a rebuild
+input, not a mutation of the active `state/nlu/neural` model artifacts.
+
 The parse and train bridges do not install or prepare Rasa. If the service-skill is missing, they return fallback
 reasons such as `rasa_base_url_unresolved` and let the operator run the install/update path intentionally.
 

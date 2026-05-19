@@ -60,3 +60,24 @@ def test_neural_diagnostics_combines_readiness_and_usage(monkeypatch):
     assert payload["usage_stats"]["totals"]["requests"] == 3
     assert payload["usage_stats"]["recent"] == [{"id": 2}, {"id": 3}]
     assert payload["usage_stats"]["review_samples"] == [{"id": "b"}]
+
+
+def test_export_neural_training_cli(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 0, "scenario_intents": 1, "system_action_intents": 1},
+    )
+
+    class FakeWorkspace:
+        def export_neural_training_data(self):
+            return {"ok": True, "examples_total": 3, "intents_total": 2}
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(interpreter.app, ["export-neural-training"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {"ok": True, "examples_total": 3, "intents_total": 2}
