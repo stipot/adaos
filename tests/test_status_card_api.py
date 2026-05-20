@@ -385,6 +385,41 @@ def test_status_card_details_refresh_requests_stream_snapshot(monkeypatch) -> No
     assert events[0].payload["card_id"] == "infrastate-yjs"
 
 
+def test_status_card_details_refresh_requests_tool_snapshot_for_infrascope(monkeypatch) -> None:
+    client = _make_client()
+    events = []
+
+    class Bus:
+        def publish(self, event):
+            events.append(event)
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "get_ctx", lambda: types.SimpleNamespace(bus=Bus()))
+    client.post(
+        "/api/node/status-cards/infrascope/refresh",
+        json={"webspace_id": "desktop", "snapshot": _sample_infrascope_snapshot()},
+    )
+
+    resp = client.post(
+        "/api/node/status-cards/infrascope-overview/details/refresh",
+        params={"webspace_id": "desktop"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["accepted"] is True
+    assert payload["details_ref"]["kind"] == "tool"
+    assert payload["details_ref"]["receiver"] == "infrascope_skill"
+    assert payload["requested_event"]["type"] == "status-card.details.tool.requested"
+    assert payload["requested_event"]["payload"]["tool"] == "get_snapshot"
+    assert payload["requested_event"]["payload"]["arguments"] == {"webspace_id": "desktop"}
+    assert events[0].payload["receiver"] == "infrascope_skill"
+    assert events[0].payload["tool"] == "get_snapshot"
+    assert events[0].payload["card_id"] == "infrascope-overview"
+    assert events[0].payload["webspace_id"] == "desktop"
+
+
 def test_status_card_details_refresh_reports_api_details_ref() -> None:
     client = _make_client()
     client.post(

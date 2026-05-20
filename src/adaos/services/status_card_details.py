@@ -41,7 +41,7 @@ def request_status_card_details_refresh(
             "details_ref": None,
         }
     kind = str(details_ref.get("kind") or "").strip().lower()
-    if kind != "stream":
+    if kind not in {"stream", "tool"}:
         return {
             "ok": True,
             "accepted": False,
@@ -57,7 +57,17 @@ def request_status_card_details_refresh(
             "accepted": False,
             "webspace_id": webspace_id,
             "card_id": card.id,
-            "reason": "stream_receiver_missing",
+            "reason": f"{kind}_receiver_missing",
+            "details_ref": details_ref,
+        }
+    tool_name = str(details_ref.get("tool") or "").strip()
+    if kind == "tool" and not tool_name:
+        return {
+            "ok": True,
+            "accepted": False,
+            "webspace_id": webspace_id,
+            "card_id": card.id,
+            "reason": "tool_name_missing",
             "details_ref": details_ref,
         }
     publish = getattr(bus, "publish", None)
@@ -79,8 +89,11 @@ def request_status_card_details_refresh(
         "card_id": card.id,
         "details_ref": details_ref,
     }
+    if kind == "tool":
+        event_payload["tool"] = tool_name
+        event_payload["arguments"] = dict(params)
     event = Event(
-        type="webio.stream.snapshot.requested",
+        type="status-card.details.tool.requested" if kind == "tool" else "webio.stream.snapshot.requested",
         payload=event_payload,
         source="status-card.details",
         ts=ts,
