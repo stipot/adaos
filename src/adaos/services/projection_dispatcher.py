@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable, Mapping
 
 from adaos.domain import EventEnvelope, normalize_event_envelope
 from adaos.services.projection_demand import ProjectionDemandConsumer, projection_demand_consumers
+from adaos.services.projection_records import write_projection_record_if_valid
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,6 +359,8 @@ async def dispatch_demanded_projection_refresh(
             if inspect.isawaitable(value):
                 value = await value
             result = _result_from_handler_output(context, value)
+            if isinstance(result.record, Mapping):
+                write_projection_record_if_valid(result.record)
             refreshed.append(result)
             _inc_stat("refreshed_total")
             _set_lifecycle(context=context, status=str(result.status or "ready"), reason=result.reason)

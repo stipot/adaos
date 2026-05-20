@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from adaos.domain import Event, make_client_subscription_record, make_projection_subscription
+from adaos.domain import Event, make_client_subscription_record, make_projection_record, make_projection_subscription
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_dispatcher import (
     clear_projection_dispatcher,
@@ -9,11 +9,13 @@ from adaos.services.projection_dispatcher import (
     projection_dispatcher_snapshot,
     register_projection_refresh_handler,
 )
+from adaos.services.projection_records import clear_projection_record_registry, get_projection_record
 
 
 def setup_function() -> None:
     clear_projection_demand_registry()
     clear_projection_dispatcher()
+    clear_projection_record_registry()
 
 
 def _write_demand(
@@ -130,6 +132,29 @@ def test_dispatcher_records_ready_lifecycle_and_pressure_stats() -> None:
     assert snapshot["stats"]["refreshed_total"] == 1
     assert snapshot["lifecycle"][0]["status"] == "ready"
     assert snapshot["lifecycle"][0]["projection_key"] == "status-card:runtime"
+
+
+def test_dispatcher_materializes_canonical_projection_records() -> None:
+    _write_demand("desktop", "status-card:runtime")
+
+    def _handler(context):
+        return make_projection_record(
+            projection_key=context.projection_key,
+            kind="status-card",
+            webspace_id=context.webspace_id,
+            data={"summary": "Runtime ready"},
+            updated_at=context.requested_at,
+        ).to_dict()
+
+    register_projection_refresh_handler("status-card:runtime", _handler)
+
+    event = Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0)
+    report = _run(dispatch_demanded_projection_refresh(event, now=20.0))
+    stored = get_projection_record(webspace_id="desktop", projection_key="status-card:runtime")
+
+    assert report.refreshed[0].record["meta"]["projection_key"] == "status-card:runtime"
+    assert stored is not None
+    assert stored.data == {"summary": "Runtime ready"}
 
 
 def test_dispatcher_uses_wildcard_family_handler() -> None:

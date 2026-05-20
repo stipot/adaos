@@ -61,6 +61,11 @@ from adaos.services.projection_dispatcher import (
     register_projection_refresh_handler,
 )
 from adaos.services.projection_diagnostics import projection_operator_diagnostics
+from adaos.services.projection_records import (
+    get_projection_record,
+    projection_record_registry_snapshot,
+    write_projection_record,
+)
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
@@ -1568,6 +1573,13 @@ class ProjectionDispatchRequest(BaseModel):
     projection_keys: list[str] | None = None
 
 
+class ProjectionRecordWriteRequest(BaseModel):
+    status: str = "ready"
+    data: Any = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict)
+    error: dict[str, Any] | str | None = None
+
+
 class StatusCardPublishRequest(BaseModel):
     id: str = Field(..., min_length=1)
     owner: str = Field(..., min_length=1)
@@ -2493,6 +2505,47 @@ async def node_status_card_details_refresh(card_id: str, webspace_id: str | None
     if result.get("reason") == "status_card_not_found":
         raise HTTPException(status_code=404, detail="status_card_not_found")
     return result
+
+
+@router.get("/projection-records", dependencies=[Depends(require_token)])
+async def node_projection_records_snapshot(webspace_id: str | None = None) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return projection_record_registry_snapshot(webspace_id=target_webspace_id)
+
+
+@router.get("/projection-records/item", dependencies=[Depends(require_token)])
+async def node_projection_record_item(projection_key: str, webspace_id: str | None = None) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    record = get_projection_record(webspace_id=target_webspace_id, projection_key=projection_key)
+    if record is None:
+        raise HTTPException(status_code=404, detail="projection_record_not_found")
+    return {
+        "ok": True,
+        "webspace_id": target_webspace_id,
+        "record": record.to_dict(),
+    }
+
+
+@router.post("/projection-records", dependencies=[Depends(require_token)])
+async def node_projection_record_write(payload: ProjectionRecordWriteRequest) -> dict[str, Any]:
+    try:
+        record = write_projection_record(
+            {
+                "status": payload.status,
+                "data": payload.data,
+                "meta": payload.meta,
+                "error": payload.error,
+            }
+        )
+    except ValueError as exc:
+        _raise_400(str(exc))
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": record.meta.webspace_id,
+        "record": record.to_dict(),
+        "snapshot": projection_record_registry_snapshot(webspace_id=record.meta.webspace_id),
+    }
 
 
 @router.get("/projection-dispatcher", dependencies=[Depends(require_token)])
