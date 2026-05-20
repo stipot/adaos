@@ -3101,6 +3101,29 @@ Actions:
   `pressure_stop_and_switch` condition, records the reason in status/manifest,
   and prioritizes restoring the control plane. Skill runtime migration remains
   visible follow-up work, not an optimization of the noisy pressure fixtures.
+- 2026-05-20 `.30` incident checkpoint: after a manual restart the stand still
+  reproduced memory growth and YJS Red because supervisor state amplified
+  itself, not because YJS/Stream routing was replaced. `runtime.json` had grown
+  to about 291 MiB and `hub_root_watchdog.jsonl` to about 41 MiB; strace showed
+  the supervisor repeatedly reading those files while watchdog events embedded
+  `required_upstream_link.watchdog.recent_events`, which in turn contained
+  previous watchdog events. This wedged the control plane (`8776` timeouts) and
+  made browser UI recovery unreliable.
+- The fix is `7818eacf` (`Compact supervisor watchdog state`): watchdog JSONL
+  reads are bounded tail reads, watchdog events/state are compacted before
+  persistence, recursive `recent_events` are removed from embedded
+  `required_upstream_link.watchdog`, and persisted supervisor `runtime.json`
+  now has a size guard with a compact/truncated fallback. The incident payloads
+  were archived on `.30` under
+  `/root/.adaos/state/incidents/watchdog-state-bloat-20260520T084307Z/`.
+- `.30` rollout result for `7818eacf`: active slot `A`, root supervisor on
+  `/root/adaos/.venv`, runtime from slot `A`, `runtime.json` stable at about
+  23 KiB, `hub_root_watchdog.jsonl` empty, supervisor RSS about 96 MiB, runtime
+  RSS about 448 MiB, swap about 32 MiB. Local reliability summary reports
+  `stateSync=attached/complete/ready/fresh`, `yjsPressure=ok/idle`, and
+  eventbus backlog `0`. The remaining red-browser investigation should focus
+  on `browserControlRoute=degraded/reconnecting` plus node-visible browser
+  runtime-debug cursor/logs, not on adding an alternate YJS or Stream transport.
 
 Human verification:
 
@@ -3155,6 +3178,15 @@ Human verification:
   only if RSS reaches a plateau, reliability metrics remain available, and YJS
   guard/stream/eventbus counters attribute noisy fixtures without starving the
   status/control plane.
+- [x] Bound supervisor watchdog persisted state after the `.30` state-bloat
+  incident; confirm supervisor recovery does not require reading unbounded
+  watchdog history into memory.
+- [ ] Re-run the `.30` 180-second browser-attached check after `7818eacf` and
+  record both server-side YJS truth (`stateSync`, `yjsPressure`, eventbus
+  backlog) and browser-side truth (`yjs.signal`, `client_yws_attempt_id`,
+  close/reconnect reason). If server-side YJS remains healthy while the visible
+  browser indicator is red, treat it as a browser-control-route/debug-log
+  investigation before changing YJS/Stream data routes.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show

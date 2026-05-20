@@ -343,6 +343,13 @@ The supervisor should persist explicit local attempt state, separate from transi
 - `state/supervisor/update_attempt.json`
 - `state/supervisor/last_result.json`
 
+`runtime.json` is a compact control-plane snapshot, not an append-only
+diagnostic dump. It must stay bounded and must not embed recursive watchdog
+history such as `required_upstream_link.watchdog.recent_events` containing prior
+watchdog events. Detailed watchdog history belongs in JSONL files that are read
+through bounded tail readers; persisted runtime state should keep only current
+decision/status summaries and stable refs to larger diagnostics.
+
 Recommended fields for `update_attempt.json`:
 
 - `attempt_id`
