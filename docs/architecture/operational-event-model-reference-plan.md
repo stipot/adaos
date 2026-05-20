@@ -209,6 +209,9 @@ Progress:
   from `data/infrascope` while returning the current materialized registry
 - `/api/node/reliability/summary?mode=thin&include_infrascope=true` can pull
   the same Infrascope cards into the lightweight polling summary
+- `/api/node/status-cards/infrascope/refresh` supports explicit `card_ids`
+  and `demanded_only=true` refreshes so early Infrascope checks do not have to
+  republish the full card family
 - live skill refresh hookup and browser demand wiring remain before this slice
   can replace the monolithic active view
 
@@ -375,7 +378,7 @@ Use this checklist for every implementation slice touching the event model.
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
-| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry; API refresh path can publish from request payload or `data/infrascope`; status-card snapshot and thin summary can refresh from `data/infrascope` on read; client/live-skill hookup remains |
+| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry; API refresh path can publish from request payload or `data/infrascope`; explicit `card_ids` and `demanded_only` refreshes are supported; status-card snapshot and thin summary can refresh from `data/infrascope` on read; client/live-skill hookup remains |
 
 ## Completion Definition
 
