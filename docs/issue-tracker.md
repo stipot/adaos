@@ -793,6 +793,14 @@ Observed behavior:
   available RAM. The latest auto sampled-profile sessions on both stands had
   only start artifacts, exposing a finalize/attribution gap that must be
   closed before we call the core guard observability milestone complete.
+- 2026-05-20 rollout checkpoint for `8d4e7cd`: `.40` validated on slot B and
+  returned to a stable memory profile (runtime about `250-300 MiB`, supervisor
+  about `85 MiB`). `.30` hit the pressure path: stop-and-switch skipped
+  candidate prewarm, deferred skill runtime migration/pip work entered disk
+  wait, the supervisor launch timeout fired, and the update rolled back to
+  slot B. A temporary `.env` override now applies the same
+  `browser.session.changed` bounded/supersede policy on `.30`, but `.30` still
+  needs a clean patched-slot validation after the I/O pressure clears.
 
 Working hypothesis:
 
@@ -976,6 +984,11 @@ Actions:
   profile and record a local incident when the runtime does not leave a
   finalize marker, so policy profiles cannot silently end with only a start
   snapshot.
+- [ ] Make core update pressure-aware during memory incidents: when the
+  supervisor chooses stop-and-switch because warm prewarm is unsafe, defer
+  heavy skill runtime migration/pip work or extend/annotate the launch timeout
+  so rollback is not triggered by expected disk wait without a clear recovery
+  path.
 
 #### HMG-006: Fix skill-level amplifiers in snapshot and webio hot paths
 
