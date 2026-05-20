@@ -386,17 +386,21 @@ for a YJS or stream regression.
 `browsers_skill` is the first compatibility-era reference for the desired
 shape, but during the current guard rollout it also remains a deliberate
 pressure fixture. Its `browser.session.changed` and device/session refresh paths
-are useful for proving quarantine, route attribution, and hot-event budgeting
-before the skill is fully optimized.
+are useful for proving quarantine, route attribution, and hot-event budgeting.
+The first optimization wave keeps only compact browser counts in Yjs; browser
+device rows, client rows, and selected-browser details are stream receivers and
+therefore only become load when the modal subscribes to them.
 
 - small projection slots instead of one `data/browsers` object
+- browser rows/details as bounded snapshot-on-subscribe streams
 - per-slot fingerprint suppression
 - separated stream snapshot path
 - single-flight background refresh
 - limited fanout for bootstrap events
 
-The SDK should extract and generalize this pattern, then migrate the skill back
-onto the shared helper layer.
+The SDK should extract and generalize this pattern, then finish migrating the
+skill back onto the shared helper layer with shared hot-event status cards and
+diagnostic streams.
 
 ### `infrastate_skill`
 

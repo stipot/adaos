@@ -2489,7 +2489,9 @@ Human verification:
 
 #### STATUS-005B: Convert `browsers_skill` after core guard observability
 
-Status: planned.
+Status: in progress.
+
+Progress: 28%.
 
 Dependency:
 
@@ -2516,10 +2518,17 @@ Current useful pattern and target:
 
 Actions:
 
-- [ ] Inventory current `browsers_skill` Yjs branches, stream receivers, action
+- [x] Inventory current `browsers_skill` Yjs branches, stream receivers, action
   responses, and event subscriptions.
-- [ ] Add a data-route plan for `browser.session.changed`, device rename/adopt,
+- [x] Add a data-route plan for `browser.session.changed`, device rename/adopt,
   access-link changes, and session/auth state.
+- [x] Move browser device rows, browser client rows, selected-browser summary,
+  and selected-browser name from steady-state Yjs projections to bounded
+  snapshot-on-subscribe stream receivers. Yjs now keeps only the compact
+  `browsers.summary` projection.
+- [x] Publish refreshed values only to active stream receivers, so browser lists
+  are load-tested by opening the Browsers modal rather than by idle runtime
+  refreshes.
 - [ ] Apply shared `HotEventBudget` to browser session churn before publishing
   operator status or stream variables.
 - [ ] Identify status cards: browser runtime, session/auth, access-link
@@ -2528,6 +2537,15 @@ Actions:
   coalesced operator state.
 - [ ] Add two-browser regression tests proving repeated session changes do not
   rebuild broad Yjs state or shake the status indicator.
+
+Human verification:
+
+- Open the Browsers modal after a client update. `browsers.devices`,
+  `browsers.clients`, `browsers.current_summary`, and `browsers.current_name`
+  should subscribe and fill from streams; the summary tile should remain Yjs.
+- During a soak, include `adaos node reliability-metrics --webspace desktop
+  --receiver browsers.devices` (and `browsers.clients` when active). Idle
+  periods without an open modal are not valid load evidence for these streams.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import importlib.util
 import inspect
 import sys
@@ -26,7 +27,9 @@ def _load_browsers_skill_module():
         fake_ctx.selected_user = object()
         sys.modules["adaos.sdk.data.ctx"] = fake_ctx
 
-    if "adaos.services.workspaces.index" not in sys.modules:
+    try:
+        importlib.import_module("adaos.services.workspaces.index")
+    except Exception:
         fake_index = types.ModuleType("adaos.services.workspaces.index")
         fake_index.list_workspaces = lambda: []
         sys.modules["adaos.services.workspaces.index"] = fake_index
@@ -94,8 +97,9 @@ def test_browsers_skill_detach_link_refreshes_snapshot_without_nameerror(monkeyp
     assert result["ok"] is True
     assert result["device_ref"] == "member:member-1"
     assert mod._SELECTED_BROWSER_BY_WS["desktop"] == "browser-1"
-    assert any(slot == "browsers.current_name" and webspace_id == "desktop" for slot, webspace_id, _value in published)
-    assert not any(slot == "browsers.current_name" and webspace_id == "default" for slot, webspace_id, _value in published)
+    assert any(slot == "browsers.summary" and webspace_id == "desktop" for slot, webspace_id, _value in published)
+    assert not any(slot == "browsers.summary" and webspace_id == "default" for slot, webspace_id, _value in published)
+    assert not any(slot == "browsers.current_name" for slot, _webspace_id, _value in published)
 
 
 def test_browsers_skill_projection_refresh_skips_unchanged_yjs_writes(monkeypatch) -> None:
@@ -132,7 +136,7 @@ def test_browsers_skill_projection_refresh_skips_unchanged_yjs_writes(monkeypatc
     first_write_count = len(writes)
     asyncio.run(mod._publish_snapshot("desktop"))
 
-    assert first_write_count == 5
+    assert first_write_count == 1
     assert len(writes) == first_write_count
 
 
@@ -195,8 +199,8 @@ def test_browsers_skill_explicit_refresh_recomputes_without_rewriting_identical_
     assert mod.refresh_snapshot("desktop")["delivery"] == "projection"
     assert mod.refresh_snapshot("desktop")["delivery"] == "projection"
 
-    assert len(writes) == 5
-    assert mod._PROJECTION_RUNTIME.diagnostics_snapshot()["skipped_unchanged_total"] == 5
+    assert len(writes) == 1
+    assert mod._PROJECTION_RUNTIME.diagnostics_snapshot()["skipped_unchanged_total"] == 1
 
 
 def test_browsers_skill_projection_refresh_does_not_eager_publish_streams(monkeypatch) -> None:
@@ -236,6 +240,50 @@ def test_browsers_skill_projection_refresh_does_not_eager_publish_streams(monkey
     mod._publish_stream_snapshot("browsers.devices", "desktop")
 
     assert [item[0] for item in streams] == ["browsers.devices"]
+    assert streams[0][2] == {"webspace_id": "desktop"}
+
+
+def test_browsers_skill_projection_refresh_updates_active_streams(monkeypatch) -> None:
+    mod = _load_browsers_skill_module()
+    mod._SELECTED_BROWSER_BY_WS.clear()
+    mod._PROJECTION_RUNTIME.reset()
+    mod._STREAM_RUNTIME.reset()
+
+    browser_entry = {
+        "id": "browser-1",
+        "display_name": "Main browser",
+        "hostname": "main-browser",
+        "access_class": "device",
+        "lifetime_mode": "permanent",
+        "last_webspace_id": "desktop",
+        "last_seen_at": 1715000000.0,
+        "online": True,
+    }
+    streams: list[tuple[str, object, dict[str, object] | None]] = []
+
+    async def _fake_set_async(slot, value, *, webspace_id=None):
+        return None
+
+    monkeypatch.setattr(mod.ctx_subnet, "set_async", _fake_set_async)
+    monkeypatch.setattr(
+        mod,
+        "stream_publish",
+        lambda receiver, data, _meta=None, **_kwargs: streams.append((receiver, data, _meta)) or {"ok": True},
+    )
+    monkeypatch.setattr(mod.workspace_index, "list_workspaces", lambda: [])
+    monkeypatch.setattr(mod.sdk_access_links, "list_browser_links", lambda: [dict(browser_entry)])
+    monkeypatch.setattr(
+        mod.sdk_access_links,
+        "get_browser_link",
+        lambda device_id: dict(browser_entry) if str(device_id or "").strip() == "browser-1" else None,
+    )
+    monkeypatch.setattr(mod.sdk_access_links, "lifetime_label", lambda _entry: "Permanent")
+
+    mod._STREAM_RUNTIME.remember_receiver("browsers.devices", webspace_id="desktop")
+    asyncio.run(mod._publish_snapshot("desktop"))
+
+    assert [item[0] for item in streams] == ["browsers.devices"]
+    assert streams[0][1][0]["id"] == "browser-1"
     assert streams[0][2] == {"webspace_id": "desktop"}
 
 

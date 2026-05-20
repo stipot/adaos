@@ -651,6 +651,9 @@ Before publishing:
 - verify stream receivers have bounded modes and snapshot-on-subscribe behavior
 - verify stream receivers have `initialState`, freshness metadata, and a
   recovery path after resubscribe
+- verify load tests activate the relevant skill surface and stream receivers;
+  an idle subscribed-model skill with no active receiver is not proof of low
+  pressure
 - verify no handler rewrites broad Yjs roots
 - verify hot events have debounce/budget tests
 - verify SDK projection diagnostics show the expected `by_event` pressure
@@ -664,6 +667,9 @@ Before publishing:
 - verify no action returns a large payload when a projection/stream is the
   real data path
 - verify Yjs and stream guard errors are visible to the UI
+- record soak evidence with active receivers visible in SDK diagnostics,
+  `adaos node reliability-metrics --webspace <id> --receiver <receiver>`, and
+  browser runtime-debug stream subscribe/snapshot-request records
 
 ## Anti-patterns
 
@@ -692,9 +698,9 @@ Treat these as defects in LLM-generated skills:
 The current workspace audit suggests this priority order:
 
 1. migrate `voice_chat_skill` to declared projection/stream contracts
-2. make `browsers_skill` projection refreshes idempotent, avoid all-webspace
-   fanout for routine events, and keep streams to snapshot-on-subscribe or
-   genuinely high-churn data
+2. finish `browsers_skill`: its browser lists and selected-browser details now
+   use snapshot-on-subscribe streams with Yjs limited to compact summary; next
+   steps are hot-event status cards and churn diagnostics
 3. split `infrastate_skill` into minimal summary plus details/streams
 4. split `infrascope_skill` into demanded projection families
 5. decide whether `mediaserver` and `prompt_engineer_skill` should remain
