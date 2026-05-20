@@ -47,6 +47,7 @@ from adaos.services.reliability import (
 )
 from adaos.services.projection_demand import (
     delete_client_subscription_record,
+    demanded_projection_keys,
     projection_demand_snapshot,
     write_client_subscription_record,
 )
@@ -64,7 +65,10 @@ from adaos.services.status_card_registry import (
     status_card_registry_snapshot,
     sweep_status_card_registry,
 )
-from adaos.services.infrascope_status_cards import publish_infrascope_status_cards
+from adaos.services.infrascope_status_cards import (
+    normalize_infrascope_status_card_ids,
+    publish_infrascope_status_cards,
+)
 from adaos.services.infrastate_status_cards import publish_infrastate_status_cards
 from adaos.services.runtime_status_cards import publish_runtime_status_card
 from adaos.services.operations import submit_install_operation
@@ -156,7 +160,24 @@ async def _refresh_infrascope_status_cards(
     webspace_id: str,
     snapshot: Mapping[str, Any] | None = None,
     source: str = "data/infrascope",
+    card_ids: list[str] | None = None,
+    demanded_only: bool = False,
 ) -> dict[str, Any]:
+    requested_card_ids = normalize_infrascope_status_card_ids(card_ids)
+    if demanded_only and requested_card_ids is None:
+        requested_card_ids = normalize_infrascope_status_card_ids(
+            demanded_projection_keys(webspace_id=webspace_id)
+        )
+    if demanded_only and not requested_card_ids:
+        return {
+            "source": "projection-demand",
+            "card_total": 0,
+            "cards": [],
+            "skipped": True,
+            "reason": "infrascope_demand_not_found",
+            "demanded_only": True,
+            "requested_card_ids": [],
+        }
     effective_snapshot = _coerce_mapping_dict(snapshot)
     effective_source = source
     if not effective_snapshot:
@@ -169,17 +190,22 @@ async def _refresh_infrascope_status_cards(
             "cards": [],
             "skipped": True,
             "reason": "infrascope_snapshot_not_found",
+            "demanded_only": bool(demanded_only),
+            "requested_card_ids": requested_card_ids,
         }
     cards = publish_infrascope_status_cards(
         effective_snapshot,
         webspace_id=webspace_id,
         updated_at=time.time(),
+        card_ids=requested_card_ids,
     )
     return {
         "source": effective_source,
         "card_total": len(cards),
         "cards": [card.to_dict() for card in cards],
         "skipped": False,
+        "demanded_only": bool(demanded_only),
+        "requested_card_ids": requested_card_ids,
     }
 
 
@@ -189,6 +215,10 @@ def _compact_status_card_refresh(refresh: Mapping[str, Any]) -> dict[str, Any]:
         "cardTotal": int(refresh.get("card_total") or 0),
         "skipped": bool(refresh.get("skipped")),
     }
+    requested_card_ids = _coerce_list(refresh.get("requested_card_ids"))
+    if bool(refresh.get("demanded_only")) or requested_card_ids:
+        compact["demandedOnly"] = bool(refresh.get("demanded_only"))
+        compact["requestedCardIds"] = requested_card_ids
     reason = str(refresh.get("reason") or "").strip()
     if reason:
         compact["reason"] = reason
@@ -1494,6 +1524,8 @@ class StatusCardPublishRequest(BaseModel):
 class InfrascopeStatusCardsRefreshRequest(BaseModel):
     webspace_id: str | None = None
     snapshot: dict[str, Any] | None = None
+    card_ids: list[str] | None = None
+    demanded_only: bool = False
 
 
 def _raise_400(detail: str) -> None:
@@ -1622,13 +1654,17 @@ async def node_reliability_summary(
     mode: str | None = None,
     since_version: int | None = None,
     include_infrascope: bool = False,
+    infrascope_demanded_only: bool = False,
     if_none_match: str | None = Header(default=None, alias="If-None-Match"),
 ) -> Any:
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     if str(mode or "").strip().lower() == "thin":
         refreshes: dict[str, dict[str, Any]] = {}
         if include_infrascope:
-            refresh = await _refresh_infrascope_status_cards(webspace_id=target_webspace_id)
+            refresh = await _refresh_infrascope_status_cards(
+                webspace_id=target_webspace_id,
+                demanded_only=infrascope_demanded_only,
+            )
             refreshes["infrascope"] = _compact_status_card_refresh(refresh)
         payload = _thin_reliability_summary(
             webspace_id=target_webspace_id,
@@ -2206,6 +2242,7 @@ async def node_status_cards_snapshot(
     webspace_id: str | None = None,
     include_runtime: bool = True,
     include_infrascope: bool = False,
+    infrascope_demanded_only: bool = False,
 ) -> dict[str, Any]:
     ensure_status_card_dispatcher_handler()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
@@ -2217,7 +2254,10 @@ async def node_status_cards_snapshot(
             lifecycle=runtime_lifecycle_snapshot(),
         )
     if include_infrascope:
-        refreshes["infrascope"] = await _refresh_infrascope_status_cards(webspace_id=target_webspace_id)
+        refreshes["infrascope"] = await _refresh_infrascope_status_cards(
+            webspace_id=target_webspace_id,
+            demanded_only=infrascope_demanded_only,
+        )
     snapshot = status_card_registry_snapshot(webspace_id=target_webspace_id)
     if refreshes:
         snapshot["refreshes"] = refreshes
@@ -2300,15 +2340,19 @@ async def node_status_cards_refresh_infrascope(
         webspace_id=target_webspace_id,
         snapshot=request_payload.snapshot,
         source="request",
+        card_ids=request_payload.card_ids,
+        demanded_only=request_payload.demanded_only,
     )
     if refresh["skipped"]:
-        raise HTTPException(status_code=404, detail="infrascope_snapshot_not_found")
+        raise HTTPException(status_code=404, detail=str(refresh.get("reason") or "infrascope_snapshot_not_found"))
     return {
         "ok": True,
         "accepted": True,
         "source": refresh["source"],
         "webspace_id": target_webspace_id,
         "card_total": refresh["card_total"],
+        "demanded_only": refresh.get("demanded_only"),
+        "requested_card_ids": refresh.get("requested_card_ids"),
         "cards": refresh["cards"],
         "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
     }

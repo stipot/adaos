@@ -4,6 +4,7 @@ import pytest
 
 from adaos.services.infrascope_status_cards import (
     build_infrascope_status_card_specs,
+    normalize_infrascope_status_card_ids,
     publish_infrascope_status_cards,
 )
 from adaos.services.status_card_registry import clear_status_card_registry, status_card_registry_snapshot
@@ -118,6 +119,35 @@ def test_publish_infrascope_status_cards_uses_shared_registry_and_owner() -> Non
     assert by_id["infrascope-browsers"]["details_ref"]["receiver"] == "infrascope.inventory.browsers"
     assert by_id["infrascope-runtimes"]["status"] == "warning"
     assert by_id["infrascope-registry"]["scope"]["skill_total"] == 1
+
+
+def test_publish_infrascope_status_cards_can_filter_requested_projection_keys() -> None:
+    assert normalize_infrascope_status_card_ids(
+        [
+            "status-card:infrascope-overview",
+            "infrascope-registry",
+            "status-card:unknown",
+        ]
+    ) == ["infrascope-overview", "infrascope-registry"]
+
+    cards = publish_infrascope_status_cards(
+        _snapshot(),
+        webspace_id="desktop",
+        updated_at=10.0,
+        card_ids=[
+            "status-card:infrascope-overview",
+            "infrascope-registry",
+            "status-card:unknown",
+        ],
+    )
+    snapshot = status_card_registry_snapshot(webspace_id="desktop", now=11.0)
+
+    assert [card.id for card in cards] == ["infrascope-overview", "infrascope-registry"]
+    assert snapshot["card_total"] == 2
+    assert {card["id"] for card in snapshot["cards"]} == {
+        "infrascope-overview",
+        "infrascope-registry",
+    }
 
 
 def test_publish_infrascope_status_cards_dedupes_unchanged_snapshot() -> None:

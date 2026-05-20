@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from adaos.domain import StatusCard
 from adaos.sdk import status as status_sdk
 
 
 INFRASCOPE_STATUS_OWNER = "skill:infrascope_skill"
+INFRASCOPE_STATUS_CARD_IDS = (
+    "infrascope-overview",
+    "infrascope-incidents",
+    "infrascope-inventory",
+    "infrascope-operations",
+    "infrascope-browsers",
+    "infrascope-runtimes",
+    "infrascope-registry",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +41,26 @@ def _items(value: Any) -> list[Any]:
 
 def _compact(value: Mapping[str, Any]) -> dict[str, Any]:
     return {str(key): item for key, item in value.items() if item is not None}
+
+
+def infrascope_card_id_from_projection_key(value: Any) -> str:
+    token = str(value or "").strip()
+    if token.startswith("status-card:"):
+        token = token.removeprefix("status-card:")
+    return token if token in INFRASCOPE_STATUS_CARD_IDS else ""
+
+
+def normalize_infrascope_status_card_ids(values: Iterable[Any] | None) -> list[str] | None:
+    if values is None:
+        return None
+    card_ids: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        card_id = infrascope_card_id_from_projection_key(value)
+        if card_id and card_id not in seen:
+            card_ids.append(card_id)
+            seen.add(card_id)
+    return card_ids
 
 
 def _status_token(value: Any) -> str:
@@ -236,12 +265,13 @@ def build_infrascope_status_card_specs(
     snapshot: Mapping[str, Any],
     *,
     webspace_id: str,
+    card_ids: Iterable[Any] | None = None,
 ) -> list[InfrascopeStatusCardSpec]:
     target_webspace = str(webspace_id or "").strip()
     if not target_webspace:
         raise ValueError("webspace_id is required")
     data = _mapping(snapshot)
-    return [
+    specs = [
         _overview_spec(data, webspace_id=target_webspace),
         _incidents_spec(data, webspace_id=target_webspace),
         _inventory_spec(data, webspace_id=target_webspace),
@@ -250,6 +280,11 @@ def build_infrascope_status_card_specs(
         _runtime_spec(data, webspace_id=target_webspace),
         _registry_spec(data, webspace_id=target_webspace),
     ]
+    requested = normalize_infrascope_status_card_ids(card_ids)
+    if requested is None:
+        return specs
+    allowed = set(requested)
+    return [spec for spec in specs if spec.id in allowed]
 
 
 def publish_infrascope_status_cards(
@@ -258,9 +293,14 @@ def publish_infrascope_status_cards(
     webspace_id: str,
     owner: str = INFRASCOPE_STATUS_OWNER,
     updated_at: float | None = None,
+    card_ids: Iterable[Any] | None = None,
 ) -> list[StatusCard]:
     cards: list[StatusCard] = []
-    for spec in build_infrascope_status_card_specs(snapshot, webspace_id=webspace_id):
+    for spec in build_infrascope_status_card_specs(
+        snapshot,
+        webspace_id=webspace_id,
+        card_ids=card_ids,
+    ):
         details = dict(spec.details_ref or {})
         if details.get("kind") == "stream":
             cards.append(
@@ -301,8 +341,11 @@ def publish_infrascope_status_cards(
 
 
 __all__ = [
+    "INFRASCOPE_STATUS_CARD_IDS",
     "INFRASCOPE_STATUS_OWNER",
     "InfrascopeStatusCardSpec",
     "build_infrascope_status_card_specs",
+    "infrascope_card_id_from_projection_key",
+    "normalize_infrascope_status_card_ids",
     "publish_infrascope_status_cards",
 ]

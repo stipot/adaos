@@ -183,6 +183,50 @@ def test_status_card_api_refreshes_infrascope_cards_from_request() -> None:
     assert projection["data"]["summary"] == "Infrascope | nominal | operator view"
 
 
+def test_status_card_api_refreshes_only_demanded_infrascope_cards_from_request() -> None:
+    client = _make_client()
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:infrascope-overview",
+                    consumer_id="widget:infrascope",
+                    consumer_kind="widget",
+                ),
+                make_projection_subscription(
+                    projection_key="status-card:infrascope-registry",
+                    consumer_id="panel:registry",
+                    consumer_kind="panel",
+                ),
+            ],
+        )
+    )
+
+    resp = client.post(
+        "/api/node/status-cards/infrascope/refresh",
+        json={
+            "webspace_id": "desktop",
+            "snapshot": _sample_infrascope_snapshot(),
+            "demanded_only": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["card_total"] == 2
+    assert payload["requested_card_ids"] == ["infrascope-overview", "infrascope-registry"]
+    assert {card["id"] for card in payload["cards"]} == {
+        "infrascope-overview",
+        "infrascope-registry",
+    }
+    assert payload["snapshot"]["card_total"] == 2
+
+
 def test_status_card_api_refreshes_infrascope_cards_from_yjs_snapshot(monkeypatch) -> None:
     client = _make_client()
 
