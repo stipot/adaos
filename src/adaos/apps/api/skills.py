@@ -665,6 +665,7 @@ async def update_skill(body: UpdateReq, ctx: AgentContext = Depends(get_ctx)):
         raise HTTPException(status_code=500, detail=str(exc) or "skill update failed") from exc
     webspace_id = body.webspace_id or default_webspace_id()
     runtime_refresh: dict[str, Any] = {}
+    handler_reload: dict[str, Any] = {}
     webspace_rebuild: dict[str, Any] = {
         "scheduled": False,
         "mode": "deferred" if bool(body.defer_webspace_rebuild) else "not_requested",
@@ -696,6 +697,7 @@ async def update_skill(body: UpdateReq, ctx: AgentContext = Depends(get_ctx)):
         except Exception as exc:
             log.exception("runtime refresh failed after skill update: %s", body.name)
             raise HTTPException(status_code=409, detail=f"runtime refresh failed after skill update: {exc}") from exc
+        handler_reload = await _reload_live_skill_handlers(ctx, body.name)
         bus = getattr(ctx, "bus", None)
         if bus is not None:
             bus_emit(
@@ -731,5 +733,6 @@ async def update_skill(body: UpdateReq, ctx: AgentContext = Depends(get_ctx)):
         "updated": result.updated,
         "version": result.version,
         "runtime_refresh": runtime_refresh,
+        "handler_reload": handler_reload,
         "webspace_rebuild": webspace_rebuild,
     }

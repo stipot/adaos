@@ -108,7 +108,9 @@ Use `skill.yaml` to declare:
   recovery, budget, and guard visibility.
 - `tools` with stable input and output schema.
 - `exports.tools` for callable public tools.
-- `events.subscribe` for command or domain events.
+- `events.subscribe` for every `@subscribe(...)` handler, including
+  `webio.stream.snapshot.requested` and
+  `webio.stream.subscription.changed` when the skill serves stream receivers.
 - `data_projections` only for browser-visible Yjs branches the skill owns.
 - `webui.receivers` in `webui.json` for live stream variables.
 - optional lifecycle hooks such as `healthcheck`, `drain`, `dispose`, and
@@ -648,6 +650,8 @@ Before publishing:
 - verify `data_routes` exists for browser-facing Yjs, stream, details, or
   diagnostic surfaces
 - verify `data_projections` exist for Yjs state
+- verify every `@subscribe(...)` handler is declared in `events.subscribe` so
+  packaged/runtime skill metadata stays reloadable after migration
 - verify stream receivers have bounded modes and snapshot-on-subscribe behavior
 - verify stream receivers have `initialState`, freshness metadata, and a
   recovery path after resubscribe

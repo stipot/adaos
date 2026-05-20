@@ -373,9 +373,16 @@ def test_skill_update_refreshes_runtime_when_source_version_changed(monkeypatch)
     async def _rebuild(*args, **kwargs):
         return None
 
+    reloads: list[str] = []
+
+    async def _reload(ctx, skill_name: str):
+        reloads.append(skill_name)
+        return {"ok": True, "skill": skill_name, "handlers": ["handlers/main.py"]}
+
     monkeypatch.setattr(skills, "SkillUpdateService", _Service)
     monkeypatch.setattr(skills, "_get_manager", lambda ctx: skill_mgr)
     monkeypatch.setattr(skills, "rebuild_webspace_projection", _rebuild)
+    monkeypatch.setattr(skills, "_reload_live_skill_handlers", _reload)
 
     resp = client.post("/api/skills/update", json={"name": "demo", "webspace_id": "default"})
     assert resp.status_code == 200
@@ -391,6 +398,8 @@ def test_skill_update_refreshes_runtime_when_source_version_changed(monkeypatch)
     assert refresh["activated_slot"] == "B"
     assert refresh["failed_stage"] == ""
     assert refresh["failure_reason"] == ""
+    assert payload["handler_reload"]["ok"] is True
+    assert reloads == ["demo"]
     assert [stage["stage"] for stage in refresh["lifecycle_stages"]] == [
         "runtime_update",
         "prepare",

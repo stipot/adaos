@@ -2491,7 +2491,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 28%.
+Progress: 34%.
 
 Dependency:
 
@@ -2529,6 +2529,13 @@ Actions:
 - [x] Publish refreshed values only to active stream receivers, so browser lists
   are load-tested by opening the Browsers modal rather than by idle runtime
   refreshes.
+- [x] Declare browser stream-control and refresh subscriptions in
+  `browsers_skill/skill.yaml` so runtime metadata, validation, and
+  `@subscribe` handlers stay aligned after packaging.
+- [x] Reload live skill handlers after hub-side `/api/skills/update` runtime
+  refresh. Without this, `adaos skill migrate` could switch the runtime slot
+  while the running process still served old handlers, leaving stream modals
+  subscribed but empty until a manual `skill activate` or restart.
 - [ ] Apply shared `HotEventBudget` to browser session churn before publishing
   operator status or stream variables.
 - [ ] Identify status cards: browser runtime, session/auth, access-link
@@ -2560,6 +2567,16 @@ Validation notes:
 - `.40`: skill migration and validation succeeded, but `desktop` reported
   `yjs_runtime=not_applicable` / `webspaces=0`; use it only as an idle-memory
   check until a browser activates the webspace.
+- 2026-05-20 empty Browsers modal regression on `.30`: stream-control counters
+  for `browsers.devices` increased, but `stream_guard total=0`, proving the
+  modal was using the intended stream route while `browsers_skill` did not
+  answer. Pushed `browsers_skill` revision
+  `d8b1395fd5260a0d5e6178c702fee095f0ce034e` (`0.15.3`) with explicit event
+  subscriptions, then confirmed after live activation that a synthetic
+  `/ws` subscribe/snapshot produced `owner=skill:browsers_skill attempted=2
+  published=2` for `browsers.devices`. Core follow-up: `/api/skills/update`
+  now performs live handler reload after runtime refresh so future
+  `adaos skill migrate` runs do not need a separate manual activation.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
