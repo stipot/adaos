@@ -240,7 +240,12 @@ def test_browsers_skill_projection_refresh_does_not_eager_publish_streams(monkey
     mod._publish_stream_snapshot("browsers.devices", "desktop")
 
     assert [item[0] for item in streams] == ["browsers.devices"]
-    assert streams[0][2] == {"webspace_id": "desktop"}
+    assert streams[0][2] == {
+        "webspace_id": "desktop",
+        "owner": "skill:browsers_skill",
+        "skill_id": "browsers_skill",
+        "skill_name": "browsers_skill",
+    }
 
 
 def test_browsers_skill_projection_refresh_updates_active_streams(monkeypatch) -> None:
@@ -284,7 +289,12 @@ def test_browsers_skill_projection_refresh_updates_active_streams(monkeypatch) -
 
     assert [item[0] for item in streams] == ["browsers.devices"]
     assert streams[0][1][0]["id"] == "browser-1"
-    assert streams[0][2] == {"webspace_id": "desktop"}
+    assert streams[0][2] == {
+        "webspace_id": "desktop",
+        "owner": "skill:browsers_skill",
+        "skill_id": "browsers_skill",
+        "skill_name": "browsers_skill",
+    }
 
 
 def test_browsers_skill_refresh_event_handler_does_not_wait_for_projection(monkeypatch) -> None:

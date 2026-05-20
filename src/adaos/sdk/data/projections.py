@@ -1013,6 +1013,13 @@ class StreamRuntime:
             publisher = self._stream_publish or _default_stream_publish()
             effective_meta = dict(meta or {})
             effective_meta.setdefault("webspace_id", ws_id)
+            owner = self.skill_id if self.skill_id.startswith("skill:") else f"skill:{self.skill_id}"
+            effective_meta.setdefault("owner", owner)
+            effective_meta.setdefault("skill_id", self.skill_id)
+            effective_meta.setdefault(
+                "skill_name",
+                self.skill_id.removeprefix("skill:"),
+            )
             publish_result = publisher(receiver_name, data, ts=ts, _meta=effective_meta)
             if isinstance(publish_result, Mapping) and publish_result.get("ok") is False:
                 raise RuntimeError("stream publish returned ok=false")

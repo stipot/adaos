@@ -271,8 +271,26 @@ def test_stream_runtime_tracks_receivers_dedupes_and_rate_limits() -> None:
     assert limited.rate_limited is True
     assert changed.published is True
     assert calls == [
-        ("infrastate.logs.recent", {"lines": [1]}, {"webspace_id": "desktop"}),
-        ("infrastate.logs.recent", {"lines": [2]}, {"webspace_id": "desktop"}),
+        (
+            "infrastate.logs.recent",
+            {"lines": [1]},
+            {
+                "webspace_id": "desktop",
+                "owner": "skill:infrastate_skill",
+                "skill_id": "infrastate_skill",
+                "skill_name": "infrastate_skill",
+            },
+        ),
+        (
+            "infrastate.logs.recent",
+            {"lines": [2]},
+            {
+                "webspace_id": "desktop",
+                "owner": "skill:infrastate_skill",
+                "skill_id": "infrastate_skill",
+                "skill_name": "infrastate_skill",
+            },
+        ),
     ]
     assert runtime.active_receivers_snapshot() == [
         {"webspace_id": "desktop", "receiver": "infrastate.logs.recent"}
@@ -317,7 +335,12 @@ def test_stream_runtime_handles_snapshot_requested_event() -> None:
         (
             "browsers.devices",
             {"receiver": "browsers.devices", "webspace": "desktop", "reason": "snapshot_requested"},
-            {"webspace_id": "desktop"},
+            {
+                "webspace_id": "desktop",
+                "owner": "skill:browsers_skill",
+                "skill_id": "browsers_skill",
+                "skill_name": "browsers_skill",
+            },
         )
     ]
 

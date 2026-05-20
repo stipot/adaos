@@ -2491,7 +2491,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 38%.
+Progress: 45%.
 
 Dependency:
 
@@ -2541,6 +2541,10 @@ Actions:
   skill handlers listening to the same receiver. This preserves all intended
   stream-control subscribers while still collapsing stale duplicate requests
   inside each subscriber.
+- [x] Make `StreamRuntime` attach default owner metadata to every stream
+  publish. Stream guard admission no longer depends on receiver metadata being
+  hot in cache; active refreshes from `browser.session.changed` are attributed
+  to `skill:<skill_id>` before pressure/budget checks.
 - [ ] Apply shared `HotEventBudget` to browser session churn before publishing
   operator status or stream variables.
 - [ ] Identify status cards: browser runtime, session/auth, access-link
@@ -2611,6 +2615,12 @@ Validation notes:
   received `webio.event`. Client fix: `WebIoStreamService` now reissues snapshot
   requests for all active stream receivers after control WS reopen and runtime
   lifecycle events, so opened modals recover without a second browser.
+- Follow-up after closing Chrome on Windows showed the close signal did reach
+  the hub and `browsers_skill` attempted to refresh active receivers, but the
+  stream payload guard could drop the active publish as `owner=unknown` under
+  payload pressure. Core fix: `StreamRuntime` now stamps `owner`, `skill_id`,
+  and `skill_name` into stream `_meta` by default, so active Browsers updates
+  have the same attribution as direct snapshot-on-subscribe recovery.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 

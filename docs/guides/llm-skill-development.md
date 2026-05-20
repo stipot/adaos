@@ -273,19 +273,26 @@ stream_variable_publish(
     {"state": "ready", "peer_count": 1},
     var_id="status",
     ttl_ms=30000,
-    _meta={"webspace_id": webspace_id},
+    _meta={"webspace_id": webspace_id, "owner": "skill:voice_chat_skill"},
 )
 
 stream_publish(
     "voice_chat.messages",
     {"items": [message]},
-    _meta={"webspace_id": webspace_id, "target_node_id": target_node_id},
+    _meta={
+        "webspace_id": webspace_id,
+        "target_node_id": target_node_id,
+        "owner": "skill:voice_chat_skill",
+    },
 )
 ```
 
 Stream rules:
 
 - keep payloads bounded
+- keep owner attribution explicit when using low-level publish helpers; the
+  higher-level `StreamRuntime` adds `owner=skill:<skill_id>` automatically, but
+  direct `stream_publish()` calls should still carry `owner` in `_meta`
 - dedupe events with stable ids
 - provide snapshot-on-subscribe for widgets that should not open empty
 - coalesce repeated snapshot requests per receiver/webspace/node
