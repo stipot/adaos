@@ -3177,6 +3177,10 @@ Human verification:
   process clears or the stand is externally recovered; verify the next
   docs/code-only update does not spawn `pip install` and the manifest records
   `venv_prepare.mode=reused_existing_slot_venv`.
+- 2026-05-20 checkpoint: `.40` reached `222b0ff` and root now exposes
+  `_existing_slot_venv_reuse_plan`; that bootstrap rollout still used the old
+  fresh-venv prepare path, as expected. Run one follow-up docs-only update to
+  prove the new root path records `venv_prepare.mode=reused_existing_slot_venv`.
 - [ ] Roll out the code-only prepare path to `.30` after SSH/root-route access
   recovers; confirm attached browsers do not lose YWS solely because slot
   preparation saturated disk/memory.
