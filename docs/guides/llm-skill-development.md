@@ -427,6 +427,9 @@ Recommended rules:
 - use the shared `HotEventBudget` helper when turning hot raw events into
   status cards or stream variables; keep the raw event trail in diagnostics
   and publish only coalesced operator state
+- if a suppressed event changes current-state UI, schedule a trailing refresh
+  after `retry_after_ms` so the final stable state is delivered without
+  rebuilding on every raw event
 
 ```python
 from adaos.services.status import HotEventBudget
@@ -437,6 +440,7 @@ decision = budget.admit(
     key=f"{webspace_id}:{device_id}",
 )
 if not decision.admitted:
+    schedule_trailing_refresh(delay_ms=decision.retry_after_ms)
     return
 ```
 

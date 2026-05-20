@@ -2491,7 +2491,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 45%.
+Progress: 50%.
 
 Dependency:
 
@@ -2545,8 +2545,11 @@ Actions:
   publish. Stream guard admission no longer depends on receiver metadata being
   hot in cache; active refreshes from `browser.session.changed` are attributed
   to `skill:<skill_id>` before pressure/budget checks.
-- [ ] Apply shared `HotEventBudget` to browser session churn before publishing
-  operator status or stream variables.
+- [x] Apply shared `HotEventBudget` to browser session churn before publishing
+  operator status or stream variables. The skill admits the first refresh in a
+  burst immediately and schedules one trailing refresh after `retry_after_ms`,
+  so the final browser online/offline state is delivered without rebuilding the
+  Browsers streams for every raw `browser.session.changed`.
 - [ ] Identify status cards: browser runtime, session/auth, access-link
   registry, device registry, and guard pressure.
 - [ ] Keep raw session churn in diagnostics streams/logs and publish only
@@ -2628,6 +2631,13 @@ Validation notes:
   until the surface opens/subscribes again. This is not evidence of a broken
   stream route; if the modal was visibly open at that time, investigate the
   client component lifecycle that released the receiver.
+- Skill optimization pass: pushed `browsers_skill` revision
+  `501313ccb2ca19f06c7161556b6dd519402d25c9`. The skill now applies
+  `HotEventBudget` to `browser.session.changed` refreshes and keeps a trailing
+  refresh timer per webspace. This preserves the raw event trail in
+  gateway/browser diagnostics, keeps Yjs to the compact `browsers.summary`,
+  and reduces stream snapshot rebuild pressure while a browser modal is
+  subscribed.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 

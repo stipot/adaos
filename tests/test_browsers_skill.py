@@ -346,6 +346,39 @@ def test_browsers_skill_refresh_event_handler_does_not_wait_for_projection(monke
     assert "desktop" in mod._PENDING_REFRESH_BY_WS
 
 
+def test_browsers_skill_browser_session_refresh_is_budgeted_with_trailing_refresh(monkeypatch) -> None:
+    mod = _load_browsers_skill_module()
+    refreshes: list[tuple[str | None, bool, bool]] = []
+    delayed: list[tuple[str | None, bool, bool, int]] = []
+
+    monkeypatch.setattr(
+        mod,
+        "_BROWSER_SESSION_REFRESH_BUDGET",
+        mod.HotEventBudget(debounce_ms=1000, window_ms=5000, max_events=2),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_refresh_snapshot_sync",
+        lambda target_ws=None, *, fanout=False, force=False: refreshes.append((target_ws, fanout, force)) or {},
+    )
+    monkeypatch.setattr(
+        mod,
+        "_schedule_delayed_refresh",
+        lambda target_ws=None, *, fanout=False, force=False, delay_ms=1000: delayed.append(
+            (target_ws, fanout, force, delay_ms)
+        ),
+    )
+
+    evt = SimpleNamespace(type="browser.session.changed", payload={"webspace_id": "desktop"})
+    mod._on_refresh(evt)
+    mod._on_refresh(evt)
+
+    assert refreshes == [("desktop", False, False)]
+    assert len(delayed) == 1
+    assert delayed[0][0:3] == ("desktop", False, False)
+    assert delayed[0][3] > 0
+
+
 def test_browsers_skill_get_link_settings_uses_sdk_device_access(monkeypatch) -> None:
     mod = _load_browsers_skill_module()
     expected = {
