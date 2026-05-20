@@ -2577,6 +2577,12 @@ Validation notes:
   published=2` for `browsers.devices`. Core follow-up: `/api/skills/update`
   now performs live handler reload after runtime refresh so future
   `adaos skill migrate` runs do not need a separate manual activation.
+- `.30` validation after core update `eed06cf`: active slot `B` runs the
+  handler-reload fix. A forced `adaos skill migrate browsers_skill --force`
+  logged `reloaded skill handler skill=browsers_skill`, and a direct stream
+  probe against the live runtime (`8778`) produced
+  `owner=skill:browsers_skill attempted=2 published=2` for
+  `browsers.devices`.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
