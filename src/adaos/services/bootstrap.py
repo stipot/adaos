@@ -5604,7 +5604,7 @@ class BootstrapService:
                                         direction="to_browser",
                                         payload=payload,
                                     )
-                                elif t0 in ("http_resp", "close"):
+                                elif t0 in ("http_resp", "close", "open_ack"):
                                     _route_observe_flow(
                                         "control",
                                         f"browser_{t0}",
@@ -5645,7 +5645,7 @@ class BootstrapService:
                                             )
                                     except Exception:
                                         pass
-                                if _route_force_flush and t in ("http_resp", "close"):
+                                if _route_force_flush and t in ("http_resp", "close", "open_ack"):
                                     # Fast-drain pending bytes without relying on NATS PING/PONG.
                                     # This avoids `flush()` (which can time out when PONGs are flaky behind WS proxies).
                                     try:
@@ -5739,7 +5739,7 @@ class BootstrapService:
                                         payload=payload,
                                         error=str(e),
                                     )
-                                elif t0 in ("http_resp", "close"):
+                                elif t0 in ("http_resp", "close", "open_ack"):
                                     _route_observe_flow(
                                         "control",
                                         f"{t0}_publish_fail",

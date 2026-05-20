@@ -86,6 +86,15 @@ the browser `client_yws_attempt_id` so a red/green indicator can be attributed
 to either real channel loss, duplicate providers, or skill pressure instead of
 being inferred from fallback HTTP snapshots.
 
+Root-routed YWS also has a separate control-plane handshake. `open_ack` is not
+skill data and must not wait behind heavy Yjs frames, fallback snapshots, or
+stream payloads. The hub route treats `open_ack`, `close`, and `http_resp` as
+control replies, fast-drains them through the NATS/WS bridge, and the root
+proxy uses a bounded retry window before closing the browser. This preserves
+the YWS channel contract: pressure may delay or drop data frames according to
+policy, but it should not make the status/control handshake flap red when the
+local room is otherwise healthy.
+
 ## Core Concepts
 
 ### Projection Slot
@@ -341,6 +350,12 @@ wait-timeout counters. Reliability exposes this under the selected webspace and
 `state-sync.bootstrap`; a red realtime indicator can therefore be traced to a
 specific websocket attempt and room-bootstrap path without treating HTTP
 snapshots as an alternate data route.
+
+Root-route diagnostics must keep the handshake visible as well: `open_ack`
+publish/flush failures, slow control flushes, and browser close reasons such as
+`hub_open_ack_timeout` are status-plane evidence, not Yjs document evidence.
+They are checked together with `yroom-*` bootstrap state before declaring the
+core ready for skill optimization.
 
 ## Reference Skills
 

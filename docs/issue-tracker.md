@@ -3225,6 +3225,28 @@ Human verification:
   `browser_session_events.suppressed_total` or `coalesced_total` explains any
   session churn, eventbus backlog stays near zero, and the visible YJS signal
   does not sustain red/green flicker solely from same-device reconnects.
+- 2026-05-20 follow-up after the gateway budget rollout: `.30` memory stayed
+  inside the normal/tripwire envelope and `browser.session.changed` coalescing
+  produced `suppressed_total`/`coalesced_total` evidence, but YJS still flickered
+  for the Android/TV browser. Browser runtime-debug tied the visible red event
+  to `yjs.provider.connection_close code=1011 reason=hub_open_ack_timeout`;
+  server logs showed `hub-route` `publish_slow`/`flush_slow` around the same
+  reconnect burst while YRoom materialization later reached ready. This reopens
+  the core-readiness gate as a root-route control-plane handshake issue, not a
+  request to optimize `infrastate_skill` yet.
+- [x] Treat root-routed YWS `open_ack` as a critical control reply: route
+  diagnostics now count it as control-plane traffic, publish failures are
+  attributed as control failures, and hub-side fast-drain covers `open_ack`
+  alongside `close` and `http_resp`.
+- [x] Increase the root proxy default `ROUTE_WS_OPEN_ACK_WAIT_MS` to `5000`
+  and expose the ack wait/max-attempt knobs in the infra compose for both
+  backend slots, so short route pressure does not immediately turn a healthy
+  local YRoom into browser-side red/green flapping.
+- [ ] Roll out the root-route `open_ack` fast-drain/wait-budget patch, then
+  repeat the `.30` Dev Browser + Android/TV/Mobile + Opera/macOS check. The
+  pass condition is: no sustained `hub_open_ack_timeout`, no `open_ack`
+  publish failure, `hub-route` slow flushes remain observable but do not close
+  the channel, and YWS runtime-debug stays green after initial provider sync.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show
