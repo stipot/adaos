@@ -2484,7 +2484,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 70%.
+Progress: 85%.
 
 Current useful pattern:
 
@@ -2524,7 +2524,7 @@ Actions:
 - [x] Ensure inspector data stays lazy and is not embedded in status cards.
 - [x] Add tests proving overview/inventory stream snapshots can publish without
   building a full Infrascope snapshot.
-- [ ] Add byte-size instrumentation for compact overview sections and direct
+- [x] Add byte-size instrumentation for compact overview sections and direct
   receiver builders.
 
 Human verification:
@@ -2557,6 +2557,12 @@ Validation notes:
   `browser_runtime`, `registry`, `operations`) with `oversizedCardTotal=0` and
   max observed card size about 715 bytes. Repeated refreshes dedupe through the
   registry once the live snapshot stabilizes.
+- `get_projection_diagnostics` now exposes Infrascope stream publish/direct
+  builder byte counters, while compact Yjs meta carries stable
+  `overview_section_bytes`; this gives size evidence without turning status
+  cards into payload containers. The diagnostics tool is exposed in the skill
+  manifest and pushed as `infrascope_skill` revision
+  `2ea93b562c62c2d4c82d1ed160c68b49201ae566` (`0.28.7`).
 
 #### STATUS-005B: Convert `browsers_skill` after core guard observability
 

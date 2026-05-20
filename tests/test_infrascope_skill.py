@@ -320,6 +320,7 @@ def test_infrascope_skill_projects_snapshot_only_when_payload_changes(monkeypatc
     assert full_snapshot["inventory"]["browsers"][0]["object_id"] == "browser:dev-1"
     assert snapshot["inspectors"]["local"]["object_id"] == "hub:local"
     assert "subnet_planning" not in snapshot["inspectors"]["local"]
+    assert full_snapshot["meta"]["overview_section_bytes"]["health_strip"] > 0
     assert full_snapshot["inspectors"]["local"]["subnet_planning"] == {"summary": {"node_total": 1}}
     browser_stream_payload = mod._stream_payload_for_receiver(full_snapshot, "infrascope.inspector.browser:dev-1")
     assert browser_stream_payload["object"]["kind"] == "browser_session"
@@ -656,6 +657,11 @@ def test_infrascope_overview_stream_snapshot_uses_compact_direct_builder(monkeyp
     assert published[0][0] == "infrascope.overview.health_strip"
     assert "details" not in published[0][1][0]
     assert published[0][1][0]["details_receiver"] == "infrascope.inspector.member-1"
+    diagnostics = mod.get_projection_diagnostics()
+    stream_diag = diagnostics["stream_payloads"]
+    assert stream_diag["direct_last_receiver"] == "infrascope.overview.health_strip"
+    assert stream_diag["direct_last_bytes"] > 0
+    assert stream_diag["overview_section_bytes"]["health_strip"] > 0
 
 
 def test_infrascope_status_cards_are_compact_route_refs(monkeypatch):
