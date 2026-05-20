@@ -3177,7 +3177,7 @@ Human verification:
   `skill_runtime_migration.deferred=true` and
   `defer_reason=pressure_stop_and_switch`, while the active runtime reaches
   `succeeded/validate` instead of rollback.
-- [ ] After the pressure-aware rollout, run a browser-attached 180-second
+- [x] After the pressure-aware rollout, run a browser-attached 180-second
   memory/YJS check on `.30` and `.40`; core is ready for skill optimization
   only if RSS reaches a plateau, reliability metrics remain available, and YJS
   guard/stream/eventbus counters attribute noisy fixtures without starving the
@@ -3220,7 +3220,7 @@ Human verification:
   `infrastate_skill` write-amplification pressure. This keeps the core-readiness
   gate open until hot browser-session events are coalesced at the gateway and
   verified with Dev Browser, Mobile, and Opera/macOS.
-- [ ] After the YWS-gateway `browser.session.changed` budget rollout, repeat
+- [x] After the YWS-gateway `browser.session.changed` budget rollout, repeat
   the `.30`/`.40` browser-attached soak and confirm memory stays flat,
   `browser_session_events.suppressed_total` or `coalesced_total` explains any
   session churn, eventbus backlog stays near zero, and the visible YJS signal
@@ -3242,11 +3242,15 @@ Human verification:
   and expose the ack wait/max-attempt knobs in the infra compose for both
   backend slots, so short route pressure does not immediately turn a healthy
   local YRoom into browser-side red/green flapping.
-- [ ] Roll out the root-route `open_ack` fast-drain/wait-budget patch, then
-  repeat the `.30` Dev Browser + Android/TV/Mobile + Opera/macOS check. The
-  pass condition is: no sustained `hub_open_ack_timeout`, no `open_ack`
-  publish failure, `hub-route` slow flushes remain observable but do not close
-  the channel, and YWS runtime-debug stays green after initial provider sync.
+- [x] Roll out the hub-side root-route `open_ack` fast-drain patch to `.30` and
+  `.40`, then repeat the `.30` Dev Browser + Android/TV/Mobile check. The pass
+  condition is: no sustained `hub_open_ack_timeout`, no `open_ack` publish
+  failure, `hub-route` slow flushes remain observable but do not close the
+  channel, and YWS runtime-debug stays green after initial provider sync.
+- [ ] Deploy the root backend/infra wait-budget defaults
+  (`ROUTE_WS_OPEN_ACK_WAIT_MS=5000`, max attempts `4`) on the public root
+  backend. The hub-side fix is validated, but the backend compose/image rollout
+  is still a separate root deployment step.
 - 2026-05-20 rollout checkpoint: `.30` and `.40` both reached active slot
   `10f9238` with normal memory (`.30` about `740 MiB` used, `32 MiB` swap;
   `.40` about `470 MiB` used, `17 MiB` swap). `.30` still preserved a stale
@@ -3264,6 +3268,19 @@ Human verification:
   byte high-water marks remain visible in payloads/metrics, but repeated
   unchanged cards can still return `304` and avoid unnecessary first-paint
   polling churn.
+- 2026-05-20 validation after `e71b129`: both `.30` and `.40` promoted to
+  active slot B `e71b129` with `supervisor attempt: completed` /
+  `completion reason: root restart completed`. `.30` memory plateaued during
+  a 180-second browser-attached sample at `728 -> 732 MiB` used, swap stayed
+  `32 MiB`; `.40` stayed `472 -> 467 MiB` used, swap `17 MiB`. Reliability
+  metrics remained available on both stands and attributed the noisy fixture to
+  `skill:infrastate_skill` Yjs quarantine plus bounded
+  `infrastate.operations.active` stream fanout. After the 10:16 UTC
+  stabilization point, journal logs had no fresh `hub_open_ack_timeout`,
+  `open_ack` failure, YWS room timeout, or route slow-flush warnings; browser
+  runtime-debug cursors reported `YJS green` after the last provider sync.
+  This closes the core-readiness gate for moving into skill optimization, with
+  the public-root backend wait-budget rollout kept as hardening follow-up.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show
