@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import traceback
+import tracemalloc as _tracemalloc
 from http import HTTPStatus
 from pathlib import Path
 from string import Formatter
@@ -61,6 +62,7 @@ from adaos.services.root.client import RootHttpClient
 from adaos.services.root.core_update_sync import build_core_update_report
 _SKIP_PENDING_UPDATE_ENV = "ADAOS_SKIP_PENDING_CORE_UPDATE"
 _LOG = logging.getLogger("adaos.autostart")
+tracemalloc = _tracemalloc
 
 
 def _parse_args() -> argparse.Namespace:
@@ -100,6 +102,15 @@ def _runtime_profile_session_id() -> str | None:
 def _runtime_profile_trigger() -> str | None:
     token = str(os.getenv("ADAOS_SUPERVISOR_PROFILE_TRIGGER") or "").strip()
     return token or None
+
+
+class _RuntimeMemoryProfileSession(RuntimeMemoryProfileSession):
+    def __init__(self) -> None:
+        super().__init__(
+            profile_mode=_runtime_profile_mode(),
+            session_id=_runtime_profile_session_id(),
+            profile_trigger=_runtime_profile_trigger(),
+        )
 
 
 def _install_runtime_profile_signal_handlers(
@@ -525,6 +536,98 @@ def _run_prepared_restart_skill_migration(slot: str, manifest: dict[str, Any]) -
     safe_for_core_update = bool(payload.get("safe_for_core_update"))
     if not bool(payload.get("ok")) and not safe_for_core_update:
         raise RuntimeError(f"deferred skill runtime migration failed: {json.dumps(payload, ensure_ascii=False)}")
+    updated_manifest = dict(manifest)
+    updated_manifest["skill_runtime_migration"] = payload
+    write_slot_manifest(slot_name, updated_manifest)
+    return payload, updated_manifest
+
+
+def _defer_prepared_restart_skill_migration_on_pressure() -> bool:
+    raw = (
+        str(os.getenv("ADAOS_CORE_UPDATE_DEFER_SKILL_MIGRATION_ON_PRESSURE") or "1")
+        .strip()
+        .lower()
+    )
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _prepared_restart_skill_migration_defer_reason(
+    *,
+    plan: dict[str, Any],
+    status: dict[str, Any] | None,
+    manifest: dict[str, Any],
+) -> str | None:
+    if not _defer_prepared_restart_skill_migration_on_pressure():
+        return None
+    current_migration = (
+        manifest.get("skill_runtime_migration")
+        if isinstance(manifest.get("skill_runtime_migration"), dict)
+        else {}
+    )
+    if current_migration and not bool(current_migration.get("deferred")):
+        return None
+
+    status_payload = status if isinstance(status, dict) else {}
+    candidate_state = str(
+        plan.get("candidate_prewarm_state")
+        or status_payload.get("candidate_prewarm_state")
+        or ""
+    ).strip().lower()
+    pressure_text = " ".join(
+        str(item or "")
+        for item in [
+            plan.get("candidate_prewarm_message"),
+            plan.get("warm_switch_reason"),
+            status_payload.get("candidate_prewarm_message"),
+            status_payload.get("warm_switch_reason"),
+        ]
+    ).lower()
+    if candidate_state == "skipped" and "insufficient memory" in pressure_text:
+        return "pressure_stop_and_switch"
+    return None
+
+
+def _defer_prepared_restart_skill_migration(
+    slot: str,
+    manifest: dict[str, Any],
+    *,
+    plan: dict[str, Any],
+    status: dict[str, Any] | None,
+    reason: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    slot_name = str(slot or "").strip().upper()
+    if not slot_name:
+        raise RuntimeError("prepared restart is missing target slot")
+    status_payload = status if isinstance(status, dict) else {}
+    payload: dict[str, Any] = {
+        "ok": True,
+        "deferred": True,
+        "safe_for_core_update": True,
+        "reason": reason,
+        "defer_reason": reason,
+        "phase": "prepared_restart.launch",
+        "message": (
+            "skill runtime migration deferred so the prepared runtime can restore "
+            "the control plane under pressure"
+        ),
+        "target_slot": slot_name,
+        "candidate_prewarm_state": str(
+            plan.get("candidate_prewarm_state")
+            or status_payload.get("candidate_prewarm_state")
+            or ""
+        ).strip() or None,
+        "candidate_prewarm_message": str(
+            plan.get("candidate_prewarm_message")
+            or status_payload.get("candidate_prewarm_message")
+            or ""
+        ).strip() or None,
+        "deferred_at": time.time(),
+        "total": 0,
+        "failed_total": 0,
+        "rollback_total": 0,
+        "deactivated_total": 0,
+        "skills": [],
+    }
     updated_manifest = dict(manifest)
     updated_manifest["skill_runtime_migration"] = payload
     write_slot_manifest(slot_name, updated_manifest)
@@ -979,7 +1082,21 @@ def main() -> None:
                 manifest = active_slot_manifest()
                 manifest = dict(manifest) if isinstance(manifest, dict) else {}
                 try:
-                    skill_runtime_migration, manifest = _run_prepared_restart_skill_migration(target_slot, manifest)
+                    migration_defer_reason = _prepared_restart_skill_migration_defer_reason(
+                        plan=plan,
+                        status=current_status,
+                        manifest=manifest,
+                    )
+                    if migration_defer_reason:
+                        skill_runtime_migration, manifest = _defer_prepared_restart_skill_migration(
+                            target_slot,
+                            manifest,
+                            plan=plan,
+                            status=current_status,
+                            reason=migration_defer_reason,
+                        )
+                    else:
+                        skill_runtime_migration, manifest = _run_prepared_restart_skill_migration(target_slot, manifest)
                 except Exception as exc:
                     clear_plan()
                     restored = rollback_to_previous_slot()

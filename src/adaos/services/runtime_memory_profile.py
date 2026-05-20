@@ -208,7 +208,9 @@ class RuntimeMemoryProfileSession:
 
     def finish(self) -> None:
         with self._lock:
-            if self._finished or not self.started or not self.session_id or not tracemalloc.is_tracing():
+            if self._finished:
+                return
+            if not self.started or not self.session_id or not tracemalloc.is_tracing():
                 _LOG.warning(
                     "runtime memory profile finish skipped session_id=%s started=%s finished=%s tracing=%s",
                     self.session_id,

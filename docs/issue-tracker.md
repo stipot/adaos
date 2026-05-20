@@ -801,6 +801,14 @@ Observed behavior:
   slot B. A temporary `.env` override now applies the same
   `browser.session.changed` bounded/supersede policy on `.30`, but `.30` still
   needs a clean patched-slot validation after the I/O pressure clears.
+- Follow-up core patch makes prepared restart pressure-aware: when warm
+  prewarm is skipped because of insufficient memory, the prepared runtime
+  records `skill_runtime_migration.deferred=true` with
+  `defer_reason=pressure_stop_and_switch` and restores the API/control plane
+  before running heavy skill runtime/pip work. This does not optimize the noisy
+  skills and does not hide the migration debt; it keeps the update/YJS recovery
+  path observable instead of timing out while the hub is already under memory
+  or disk pressure.
 
 Working hypothesis:
 
@@ -984,11 +992,13 @@ Actions:
   profile and record a local incident when the runtime does not leave a
   finalize marker, so policy profiles cannot silently end with only a start
   snapshot.
-- [ ] Make core update pressure-aware during memory incidents: when the
+- [x] Make core update pressure-aware during memory incidents: when the
   supervisor chooses stop-and-switch because warm prewarm is unsafe, defer
   heavy skill runtime migration/pip work or extend/annotate the launch timeout
   so rollback is not triggered by expected disk wait without a clear recovery
-  path.
+  path. The first implementation defers the migration only on the explicit
+  `insufficient memory for warm switch` stop-and-switch path and writes the
+  reason into both status and slot manifest.
 
 #### HMG-006: Fix skill-level amplifiers in snapshot and webio hot paths
 
@@ -3055,6 +3065,15 @@ Actions:
   been removed during slot lifecycle cleanup. This caused ASGI
   `FileNotFoundError` responses and could mask YJS diagnostics. The path helper
   now resolves default realtime diagnostics under stable `ADAOS_BASE_DIR`.
+- The next memory/update checkpoint reopened the core-readiness gate before
+  skill optimization: `.30` rolled back from `8d4e7cd` because the prepared
+  runtime ran deferred skill runtime migration before exposing the API. Under
+  memory pressure that subprocess entered pip/disk wait, the supervisor launch
+  timeout fired, and the control/YJS plane could not recover in time. The core
+  update path now defers that migration under the explicit
+  `pressure_stop_and_switch` condition, records the reason in status/manifest,
+  and prioritizes restoring the control plane. Skill runtime migration remains
+  visible follow-up work, not an optimization of the noisy pressure fixtures.
 
 Human verification:
 
@@ -3099,6 +3118,16 @@ Human verification:
   healthy, even if `state-sync` status metadata is stale.
 - [ ] Verify `.40` reliability summary no longer throws `FileNotFoundError`
   from `realtime_sidecar_diag_path()` after the next rollout.
+- [ ] Verify pressure-aware prepared restart on `.30`: if warm switch is
+  skipped due insufficient memory, the slot manifest/status should show
+  `skill_runtime_migration.deferred=true` and
+  `defer_reason=pressure_stop_and_switch`, while the active runtime reaches
+  `succeeded/validate` instead of rollback.
+- [ ] After the pressure-aware rollout, run a browser-attached 180-second
+  memory/YJS check on `.30` and `.40`; core is ready for skill optimization
+  only if RSS reaches a plateau, reliability metrics remain available, and YJS
+  guard/stream/eventbus counters attribute noisy fixtures without starving the
+  status/control plane.
 - [ ] Run a focused `infrastate` two-browser soak after conversion and capture
   Yjs owner pressure, stream pressure, route pressure, and quarantine counters.
 - [ ] Record payload size reduction and polling reduction in this tracker.

@@ -544,7 +544,12 @@ def test_autostart_runner_prepared_restart_preserves_plan_until_validation(monke
     monkeypatch.setattr(
         autostart_runner,
         "read_plan",
-        lambda: {"state": "prepared_restart", "action": "update", "target_slot": "B", "prepared_at": 10.0},
+        lambda: {
+            "state": "prepared_restart",
+            "action": "update",
+            "target_slot": "B",
+            "prepared_at": 10.0,
+        },
     )
     monkeypatch.setattr(autostart_runner, "load_config", lambda: None)
     monkeypatch.setattr(
@@ -586,6 +591,111 @@ def test_autostart_runner_prepared_restart_preserves_plan_until_validation(monke
     assert payload["phase"] == "launch"
     assert payload["target_slot"] == "B"
     assert payload["skill_runtime_migration"]["ok"] is True
+
+
+def test_autostart_runner_prepared_restart_defers_skill_migration_under_memory_pressure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[object] = []
+    manifests: list[tuple[str, dict]] = []
+
+    monkeypatch.setattr(
+        autostart_runner,
+        "_parse_args",
+        lambda: type("Args", (), {"host": "127.0.0.1", "port": 8777, "token": None})(),
+    )
+    monkeypatch.setattr(autostart_runner, "init_ctx", lambda: None)
+    monkeypatch.setattr(
+        autostart_runner,
+        "read_plan",
+        lambda: {
+            "state": "prepared_restart",
+            "action": "update",
+            "target_slot": "B",
+            "prepared_at": 10.0,
+        },
+    )
+    monkeypatch.setattr(
+        autostart_runner,
+        "read_status",
+        lambda: {
+            "state": "restarting",
+            "phase": "shutdown",
+            "target_slot": "B",
+            "candidate_prewarm_state": "skipped",
+            "candidate_prewarm_message": "insufficient memory for warm switch; using stop-and-switch",
+        },
+    )
+    monkeypatch.setattr(autostart_runner, "load_config", lambda: None)
+    monkeypatch.setattr(
+        autostart_runner,
+        "active_slot_manifest",
+        lambda: {
+            "slot": "B",
+            "env": {},
+            "cwd": str(tmp_path),
+            "skill_runtime_migration": {"deferred": True},
+        },
+    )
+    monkeypatch.setattr(
+        autostart_runner,
+        "_run_prepared_restart_skill_migration",
+        lambda slot, manifest: (_ for _ in ()).throw(
+            AssertionError("migration should be deferred under memory pressure")
+        ),
+    )
+    monkeypatch.setattr(
+        autostart_runner,
+        "write_slot_manifest",
+        lambda slot, manifest: manifests.append((slot, dict(manifest))),
+    )
+    monkeypatch.setattr(autostart_runner, "clear_plan", lambda: calls.append("clear_plan"))
+    monkeypatch.setattr(
+        autostart_runner,
+        "write_status",
+        lambda payload: calls.append(("write_status", dict(payload))),
+    )
+    monkeypatch.setattr(autostart_runner, "_resolve_bind", lambda conf, host, port: (host, port))
+    monkeypatch.setattr(
+        autostart_runner,
+        "_advertise_base",
+        lambda host, port: f"http://{host}:{port}",
+    )
+    monkeypatch.setattr(autostart_runner, "_stop_previous_server", lambda host, port: None)
+    monkeypatch.setattr(autostart_runner, "_pidfile_path", lambda host, port: tmp_path / "serve.json")
+    monkeypatch.setattr(
+        autostart_runner,
+        "_write_pidfile",
+        lambda path, **kwargs: path.write_text("{}", encoding="utf-8"),
+    )
+    monkeypatch.setattr(
+        autostart_runner,
+        "_launch_active_slot_if_needed",
+        lambda *args, **kwargs: (_ for _ in ()).throw(SystemExit(0)),
+    )
+
+    try:
+        autostart_runner.main()
+    except SystemExit:
+        pass
+
+    assert "clear_plan" not in calls
+    assert manifests
+    assert manifests[0][0] == "B"
+    status_calls = [
+        item for item in calls if isinstance(item, tuple) and item[0] == "write_status"
+    ]
+    assert status_calls
+    payload = status_calls[0][1]
+    migration = payload["skill_runtime_migration"]
+    assert migration["ok"] is True
+    assert migration["deferred"] is True
+    assert migration["defer_reason"] == "pressure_stop_and_switch"
+    assert migration["safe_for_core_update"] is True
+    assert manifests[0][1]["skill_runtime_migration"]["defer_reason"] == (
+        "pressure_stop_and_switch"
+    )
 
 
 def test_launch_active_slot_marks_child_to_skip_pending_update(monkeypatch) -> None:
