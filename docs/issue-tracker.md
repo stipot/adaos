@@ -1031,7 +1031,11 @@ repeated full publishes. Wave 8 hotfix extends the same policy for
 `infrastate_skill`: noncritical streams are no longer eager-published on every
 snapshot refresh, active pressure skips heavy detail snapshot construction, and
 pressure-mode snapshot cache TTL expands to keep the hub responsive during a
-burst. This is not the primary safety mechanism: the deliberately heavy
+burst. Current skill-optimization pass also budgets
+`device.registered` / `browser.session.changed` /
+`webrtc.peer.state.changed` before `infrastate_skill` writes background-refresh
+pending markers into Yjs, with one trailing refresh to deliver the final
+current state. This is not the primary safety mechanism: the deliberately heavy
 `infrastate` path remains a useful crash-test for kernel-level containment, and
 the owner-quarantine work is tracked under HMG-007.
 
@@ -1061,6 +1065,9 @@ Actions:
   instead of hiding the dropped work.
 - [x] Increase `infrastate` snapshot cache TTL under active primary-doc pressure
   so repeated browser refreshes and member snapshot flaps reuse bounded work.
+- [x] Budget `infrastate_skill` browser/device runtime events before the
+  background-refresh pending Yjs write; expose suppression/trailing counters in
+  `projection_diag`.
 - [ ] Fix the `browsers_skill` `current_device_id` bug and ensure background
   snapshot tasks fail noisily but safely, without leaving orphan churn behind.
 - [ ] Review all skills subscribed to `subnet.member.snapshot.changed` and

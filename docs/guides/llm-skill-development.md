@@ -424,6 +424,9 @@ Recommended rules:
   quarantined, explicit user disconnect, or admin shutdown
 - never trigger a full skill snapshot rebuild for each raw hot event
 - do not write raw hot-event churn into Yjs
+- apply the budget before writing `pending`, `running`, or `last_changed`
+  markers into Yjs; otherwise the coalescer still turns every raw event into a
+  primary-doc write
 - use the shared `HotEventBudget` helper when turning hot raw events into
   status cards or stream variables; keep the raw event trail in diagnostics
   and publish only coalesced operator state

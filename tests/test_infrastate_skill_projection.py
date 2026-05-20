@@ -2034,6 +2034,42 @@ def test_infrastate_webspace_reload_invalidates_projection_and_stream_state(monk
     assert scheduled == [{"webspace_id": "desktop", "reason": "desktop.webspace.reloaded"}]
 
 
+def test_infrastate_browser_runtime_refresh_is_budgeted_with_trailing_refresh(monkeypatch):
+    mod = _load_infrastate_module()
+    scheduled: list[tuple[str | None, str]] = []
+    delayed: list[tuple[str | None, str, int]] = []
+
+    monkeypatch.setattr(
+        mod,
+        "_BROWSER_RUNTIME_REFRESH_BUDGET",
+        mod.HotEventBudget(debounce_ms=1000, window_ms=5000, max_events=2),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_schedule_snapshot_refresh",
+        lambda *, webspace_id=None, reason="runtime.event": scheduled.append((webspace_id, reason)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_schedule_delayed_browser_runtime_refresh",
+        lambda *, webspace_id=None, reason="runtime.event", delay_ms=1000: delayed.append(
+            (webspace_id, reason, delay_ms)
+        ),
+    )
+
+    evt = SimpleNamespace(type="device.registered", payload={"webspace_id": "desktop"})
+    mod.on_browser_runtime_changed(evt)
+    mod.on_browser_runtime_changed(evt)
+
+    assert scheduled == [("desktop", "device.registered")]
+    assert len(delayed) == 1
+    assert delayed[0][0:2] == ("desktop", "device.registered")
+    assert delayed[0][2] > 0
+    diag = mod._projection_diag_snapshot()
+    assert diag["browser_runtime_refresh_suppressed_total"] >= 1
+    assert diag["last_browser_runtime_refresh_suppressed_event"] == "device.registered"
+
+
 def test_infrastate_stream_snapshot_request_publishes_requested_receiver(monkeypatch):
     mod = _load_infrastate_module()
     published: list[tuple[str, object, str | None]] = []
