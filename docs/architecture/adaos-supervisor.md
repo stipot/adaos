@@ -163,7 +163,7 @@ Admission should be driven by a simple local resource gate such as:
 - estimated candidate runtime footprint
 - configured reserve that must remain free after candidate start
 
-The important rule is that low-memory devices must fail safe into stop-and-switch instead of trying to start two full runtimes and getting stuck mid-transition.
+The important rule is that low-memory devices must fail safe into stop-and-switch instead of trying to start two full runtimes and getting stuck mid-transition. Warm-switch admission therefore reserves both an absolute memory floor and a percentage of total RAM after the estimated candidate runtime. The percentage reserve matters on small 4 GiB stands where slot preparation, the supervisor process, filesystem cache pressure, and the passive candidate can freeze the node even when the simple candidate-RSS estimate appears to fit.
 
 ## Runtime instance identity
 

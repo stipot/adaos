@@ -816,6 +816,14 @@ Observed behavior:
   now keeps a bounded two-attempt overlap per browser identity, replaces only
   duplicate sockets from the same `client_yws_attempt_id`, trims the oldest
   excess attempt, and exposes client attempt ids in transport diagnostics.
+- Rollout of the YWS overlap patch validated on `.40`, but `.30` exposed a
+  separate readiness blocker: under active browser/Yjs pressure, warm-switch
+  admitted a dual-runtime handoff on a 4 GiB VM, then old runtime + passive
+  candidate + supervisor/process I/O drove the node into an SSH/root-route
+  timeout window. Warm-switch admission now keeps a dynamic RAM reserve based
+  on total memory (`ADAOS_SUPERVISOR_WARM_SWITCH_MIN_AVAILABLE_PERCENT`,
+  default 30%) in addition to the candidate RSS estimate, causing constrained
+  stands to prefer stop-and-switch instead of risking a dual-runtime freeze.
 
 Working hypothesis:
 
@@ -1009,6 +1017,10 @@ Actions:
   path. The first implementation defers the migration only on the explicit
   `insufficient memory for warm switch` stop-and-switch path and writes the
   reason into both status and slot manifest.
+- [x] Tighten warm-switch admission for constrained nodes: reserve a percentage
+  of total RAM after the estimated candidate runtime, so 4 GiB stands with
+  already-large active runtimes downgrade to stop-and-switch before candidate
+  prewarm can freeze the node.
 
 #### HMG-006: Fix skill-level amplifiers in snapshot and webio hot paths
 
@@ -3148,6 +3160,10 @@ Human verification:
   same-device provider attempts; reliability diagnostics should show
   `max_active_per_client=2` and active rows with `client_attempt_ids` when a
   browser is reconnecting.
+- [ ] After the warm-switch memory-reserve rollout, re-run `.30` update under
+  attached-browser pressure and confirm either: warm-switch is skipped with an
+  explicit insufficient-memory reason, or the node validates without SSH/root
+  route timeouts.
 - [ ] Run a focused `infrastate` two-browser soak after conversion and capture
   Yjs owner pressure, stream pressure, route pressure, and quarantine counters.
 - [ ] Record payload size reduction and polling reduction in this tracker.

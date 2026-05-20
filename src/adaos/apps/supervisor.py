@@ -440,6 +440,13 @@ def _warm_switch_min_available_bytes() -> int:
         return 256 * 1024 * 1024
 
 
+def _warm_switch_min_available_percent() -> float:
+    try:
+        return max(0.0, float(str(os.getenv("ADAOS_SUPERVISOR_WARM_SWITCH_MIN_AVAILABLE_PERCENT") or "30").strip()))
+    except Exception:
+        return 30.0
+
+
 def _warm_switch_min_candidate_bytes() -> int:
     try:
         return max(0, int(float(str(os.getenv("ADAOS_SUPERVISOR_WARM_SWITCH_MIN_CANDIDATE_MB") or "192").strip()) * 1024 * 1024))
@@ -3821,8 +3828,10 @@ class SupervisorManager:
         allowed = False
         reason = "warm switch is disabled"
         available_bytes = None
+        total_bytes = None
         estimated_candidate_bytes = None
         reserve_bytes = _warm_switch_min_available_bytes()
+        reserve_percent = _warm_switch_min_available_percent()
         current_rss_bytes = None
         current_family_rss_bytes = None
         if not candidate_slot:
@@ -3837,8 +3846,15 @@ class SupervisorManager:
             try:
                 vm = psutil.virtual_memory()
                 available_bytes = int(getattr(vm, "available", 0) or 0)
+                total_bytes = int(getattr(vm, "total", 0) or 0)
             except Exception:
                 available_bytes = None
+                total_bytes = None
+            if total_bytes and reserve_percent > 0:
+                reserve_bytes = max(
+                    reserve_bytes,
+                    int(float(total_bytes) * (float(reserve_percent) / 100.0)),
+                )
             if managed_pid:
                 current_rss_bytes, current_family_rss_bytes = _process_family_rss_bytes(managed_pid)
             estimated_candidate_bytes = max(
@@ -3867,11 +3883,13 @@ class SupervisorManager:
             "warm_switch_reason": reason if candidate_slot else None,
             "warm_switch_memory": {
                 "available_bytes": available_bytes,
+                "total_bytes": total_bytes,
                 "current_rss_bytes": current_family_rss_bytes or current_rss_bytes,
                 "current_process_rss_bytes": current_rss_bytes,
                 "current_family_rss_bytes": current_family_rss_bytes,
                 "estimated_candidate_bytes": estimated_candidate_bytes,
                 "reserve_bytes": reserve_bytes,
+                "reserve_percent": reserve_percent,
             },
             "slot_ports": slot_ports,
             "slot_urls": self.slot_runtime_urls(),
