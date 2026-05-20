@@ -1074,6 +1074,25 @@ Actions:
   `webio.stream.snapshot.requested` for duplicate work, full-state publish, and
   missing debounce.
 
+Validation notes:
+
+- 2026-05-20: pushed `infrastate_skill` revision
+  `81198cb72820a025b915d9560f2c908f546d3e2c` (`0.75.13`) and migrated `.30`
+  and `.40`. Local regression coverage proves duplicate
+  `device.registered` / `browser.session.changed` events admit one immediate
+  refresh and schedule one trailing refresh.
+- `.30`: after cancelling a separate failed core-update target
+  `443349dd95af51e187f9c47b3c502cb7b1291035` and restarting autostart,
+  `infrastate_skill` stayed on `0.75.13`. A six-event
+  `browser.session.changed` WS probe produced acks for all raw events while
+  `skill:infrastate_skill` Yjs guard moved only from `attempted=14` to
+  `attempted=15`, with `blocked=0`, `throttled=0`, and no active quarantine.
+  This matches the intended “raw evidence remains, operator projection
+  coalesces” behavior.
+- `.40`: `infrastate_skill` is also on `0.75.13`; there was no active
+  infrastate projection traffic for `desktop` during the probe, so use `.40`
+  as an idle/member validation point until an active browser opens the surface.
+
 #### HMG-007: Keep guardrails observability-first
 
 Status: in progress. Wave 1, Wave 2, Wave 5, Wave 6, and Wave 7 guardrails were
