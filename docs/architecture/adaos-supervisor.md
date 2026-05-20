@@ -436,6 +436,12 @@ control-plane isolation defect: it does not mean the active runtime slot is
 wrong, but it means the next supervisor/watchdog restart is still coupled to a
 mutable runtime slot.
 
+Operator update status must remain available while a slot is being prepared or
+launched. CLI status probes should use short HTTP timeouts and fall back to the
+local `state/core_update/status.json` and `state/supervisor/update_attempt.json`
+files, because those files can still show `preparing`, `countdown`, or
+`launch` even when the runtime/supervisor API is temporarily busy.
+
 ## Skill runtime migration lifecycle
 
 Installed skills are not automatically valid just because the core slot booted.

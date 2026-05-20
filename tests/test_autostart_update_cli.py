@@ -760,6 +760,42 @@ def test_autostart_update_status_falls_back_to_local_runner_state(monkeypatch) -
     assert "active slot: B | 0.1.1+43.8e2f6e75 | 8e2f6e75 | rev2026" in result.output
 
 
+def test_autostart_update_get_uses_bounded_status_timeouts_and_local_fallback(monkeypatch) -> None:
+    calls: list[tuple[str, str, float | None]] = []
+
+    def _supervisor_get(path, *, token=None, timeout=None):
+        calls.append(("supervisor", path, timeout))
+        raise RuntimeError("supervisor busy")
+
+    def _admin_get(path, *, token=None, timeout=None):
+        calls.append(("admin", path, timeout))
+        raise RuntimeError("runtime busy")
+
+    monkeypatch.setenv("ADAOS_AUTOSTART_UPDATE_STATUS_HTTP_TIMEOUT_S", "1.25")
+    monkeypatch.setattr(setup_cmd, "_autostart_supervisor_get", _supervisor_get)
+    monkeypatch.setattr(setup_cmd, "_autostart_admin_get", _admin_get)
+    monkeypatch.setattr(
+        setup_cmd,
+        "_local_autostart_update_payload",
+        lambda: {
+            "ok": True,
+            "status": {"state": "preparing", "phase": "prepare"},
+            "attempt": {"state": "active"},
+            "_local_fallback": True,
+        },
+    )
+
+    payload = setup_cmd._autostart_update_get(token="token")
+
+    assert payload["_local_fallback"] is True
+    assert payload["status"]["state"] == "preparing"
+    assert calls == [
+        ("supervisor", "/api/supervisor/update/status", 1.25),
+        ("supervisor", "/api/supervisor/public/update-status", 1.25),
+        ("admin", "/api/admin/update/status", 1.25),
+    ]
+
+
 def test_autostart_inspect_renders_hot_children_and_services(monkeypatch) -> None:
     runner = CliRunner()
     monkeypatch.setattr(

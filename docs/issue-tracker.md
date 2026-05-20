@@ -3173,7 +3173,7 @@ Human verification:
   unchanged and the inactive slot already has a valid venv, preserve `venv`,
   replace only `repo`, validate through the runtime `repo/src` overlay, and
   record `venv_prepare.mode=reused_existing_slot_venv`.
-- [ ] Roll out the code-only prepare path to `.40` after the stuck prepare
+- [x] Roll out the code-only prepare path to `.40` after the stuck prepare
   process clears or the stand is externally recovered; verify the next
   docs/code-only update does not spawn `pip install` and the manifest records
   `venv_prepare.mode=reused_existing_slot_venv`.
@@ -3181,6 +3181,14 @@ Human verification:
   `_existing_slot_venv_reuse_plan`; that bootstrap rollout still used the old
   fresh-venv prepare path, as expected. Run one follow-up docs-only update to
   prove the new root path records `venv_prepare.mode=reused_existing_slot_venv`.
+- 2026-05-20 checkpoint: `.40` reached `692b8d63`; the follow-up docs-only
+  update did not spawn `pip install`, preserved the inactive slot venv, and
+  wrote `venv_prepare.mode=reused_existing_slot_venv` plus
+  `import_validation.basis=repo_overlay`.
+- [x] Make `adaos autostart update-status` less likely to disappear during
+  prepare/launch stalls: update-status HTTP probes now use a bounded status
+  timeout and fall back to local `core_update/status.json` plus
+  `supervisor/update_attempt.json`.
 - [ ] Roll out the code-only prepare path to `.30` after SSH/root-route access
   recovers; confirm attached browsers do not lose YWS solely because slot
   preparation saturated disk/memory.

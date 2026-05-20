@@ -604,12 +604,12 @@ def _autostart_supervisor_unavailable_message(base_url: str) -> str:
     )
 
 
-def _autostart_supervisor_get(path: str, *, token: Optional[str] = None) -> dict:
+def _autostart_supervisor_get(path: str, *, token: Optional[str] = None, timeout: float = 15.0) -> dict:
     base_url = _autostart_supervisor_base_url()
     if not base_url:
         raise RuntimeError("local AdaOS supervisor API is unavailable; no supervisor base URL is configured")
     try:
-        response = requests.get(base_url + path, headers=_autostart_admin_headers(token), timeout=15)
+        response = requests.get(base_url + path, headers=_autostart_admin_headers(token), timeout=timeout)
         response.raise_for_status()
         payload = response.json()
         return payload if isinstance(payload, dict) else {"ok": True, "response": payload}
@@ -646,10 +646,10 @@ def _autostart_supervisor_post(path: str, *, body: dict | None = None, token: Op
         raise RuntimeError(_autostart_supervisor_unavailable_message(base_url)) from exc
 
 
-def _autostart_admin_get(path: str, *, token: Optional[str] = None) -> dict:
+def _autostart_admin_get(path: str, *, token: Optional[str] = None, timeout: float = 15.0) -> dict:
     try:
         base_url = _autostart_admin_base_url(token=token)
-        response = requests.get(base_url + path, headers=_autostart_admin_headers(token, base_url=base_url), timeout=15)
+        response = requests.get(base_url + path, headers=_autostart_admin_headers(token, base_url=base_url), timeout=timeout)
         response.raise_for_status()
         payload = response.json()
         return payload if isinstance(payload, dict) else {"ok": True, "response": payload}
@@ -742,18 +742,70 @@ def _local_autostart_update_payload() -> dict | None:
     }
 
 
-def _autostart_update_get(*, token: Optional[str] = None) -> dict:
+def _autostart_update_status_http_timeout_s() -> float:
+    raw = str(os.getenv("ADAOS_AUTOSTART_UPDATE_STATUS_HTTP_TIMEOUT_S", "2.0") or "2.0").strip()
     try:
-        payload = _autostart_supervisor_get("/api/supervisor/update/status", token=token)
+        value = float(raw)
+    except Exception:
+        value = 2.0
+    return max(0.2, min(15.0, value))
+
+
+def _call_autostart_get_with_timeout(func, path: str, *, token: Optional[str], timeout: float) -> dict:
+    try:
+        return func(path, token=token, timeout=timeout)
+    except TypeError as exc:
+        # Several tests and older plugin shims monkeypatch these helpers with the
+        # previous signature. Keep those shims working while real calls use the
+        # bounded timeout.
+        if "timeout" not in str(exc):
+            raise
+        return func(path, token=token)
+
+
+def _autostart_update_get(*, token: Optional[str] = None) -> dict:
+    timeout_s = _autostart_update_status_http_timeout_s()
+    try:
+        payload = _call_autostart_get_with_timeout(
+            _autostart_supervisor_get,
+            "/api/supervisor/update/status",
+            token=token,
+            timeout=timeout_s,
+        )
         with contextlib.suppress(RuntimeError):
-            memory_payload = _autostart_supervisor_get("/api/supervisor/public/memory-status", token=token)
+            memory_payload = _call_autostart_get_with_timeout(
+                _autostart_supervisor_get,
+                "/api/supervisor/public/memory-status",
+                token=token,
+                timeout=timeout_s,
+            )
             if isinstance(memory_payload, dict) and isinstance(memory_payload.get("memory"), dict):
                 payload["memory"] = dict(memory_payload.get("memory"))
         return payload
-    except RuntimeError:
-        with contextlib.suppress(RuntimeError):
-            return _autostart_supervisor_get("/api/supervisor/public/update-status", token=token)
-        return _autostart_admin_get("/api/admin/update/status", token=token)
+    except RuntimeError as exc:
+        last_error = exc
+        try:
+            return _call_autostart_get_with_timeout(
+                _autostart_supervisor_get,
+                "/api/supervisor/public/update-status",
+                token=token,
+                timeout=timeout_s,
+            )
+        except RuntimeError as public_exc:
+            last_error = public_exc
+        try:
+            return _call_autostart_get_with_timeout(
+                _autostart_admin_get,
+                "/api/admin/update/status",
+                token=token,
+                timeout=timeout_s,
+            )
+        except RuntimeError as admin_exc:
+            last_error = admin_exc
+        local_payload = _local_autostart_update_payload()
+        if local_payload is not None:
+            return local_payload
+        raise last_error
 
 
 def _autostart_update_post(path: str, *, body: dict | None = None, token: Optional[str] = None) -> dict:
