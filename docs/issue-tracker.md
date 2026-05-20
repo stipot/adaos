@@ -2430,7 +2430,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 38%.
+Progress: 42%.
 
 Current useful pattern:
 
@@ -2593,6 +2593,16 @@ Validation notes:
   receiver globally before handler-specific coalescing, so later handlers could
   remove `browsers_skill` work from the queue. Fixed locally with regression
   coverage; deploy next core update and re-run the modal probe on `.30`.
+- `.30` validation after core update `fdedab34`: active slot `B` runs the
+  per-handler EventBus coalescing fix. Direct `/ws` probes against live runtime
+  `8778` subscribed/requested all Browsers modal receivers:
+  `browsers.devices`, `browsers.clients`, `browsers.current_summary`, and
+  `browsers.current_name`. `reliability-metrics` now attributes each receiver
+  to `skill:browsers_skill` with `published>0`, and Dev Browser
+  `ui.runtime_debug` export contains `webio.event` records for
+  `browsers.devices` / `browsers.clients`. If a modal instance stayed open
+  across the broken runtime, close/open it or reload the client to force a fresh
+  stream subscription.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
