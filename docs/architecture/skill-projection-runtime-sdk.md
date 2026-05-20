@@ -248,6 +248,10 @@ must not.
 - Subscription flaps must not cause unbounded Yjs writes.
 - Projection lifecycle and pressure decisions must be observable.
 - Skill-local thread pools and event-loop bridges are transition shims.
+- A completed core slot transition must leave one managed active runtime
+  listener plus the root supervisor. Inactive slot runtimes that survive a
+  warm switch or root-promotion restart are pressure leaks, not standby
+  capacity, and the supervisor must stop them with explicit logs.
 
 ## Control-Plane HTTP Fallbacks
 
@@ -515,6 +519,10 @@ diagnostic surface from becoming a primary Yjs pressure source.
 - [x] `update.active_slot_target_recovery`: self-heal a failed mismatch attempt
   after the active slot manifest catches up to the terminal target status, so
   public update status does not preserve stale failure evidence
+- [x] `update.orphan_slot_runtime_cleanup`: after a terminal or idle update
+  state, scan slot listeners and stop untracked non-active AdaOS runtimes so
+  warm-switch/root-promotion leftovers cannot double memory, Yjs, or stream
+  load.
 - [x] `status.hot_event_budget`: add a shared debounce/window budget helper
   for hot event-to-status paths before skill-specific migrations
 - [x] `status.compact_boundary_diagnostics`: expose max card bytes, observed
@@ -573,4 +581,6 @@ The SDK is ready for broad rollout when:
 - stream requests build only the requested receiver payload by default
 - diagnostics attribute projection pressure to skill, webspace, slot, and
   reason
+- core updates leave a single active slot runtime after promotion, with orphan
+  cleanup and root-promotion status visible in operator diagnostics
 - stand soak shows no steady RSS growth from idle projection refreshes

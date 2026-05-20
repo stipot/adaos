@@ -3291,9 +3291,25 @@ Human verification:
   transition is in progress, scan slot ports, keep the active/managed runtime,
   and gracefully stop any non-active AdaOS runtime process that is listening but
   is no longer tracked as `candidate_proc`.
-- [ ] Roll out the orphan slot-runtime cleanup to `.30` and `.40`, then confirm
+- [x] Roll out the orphan slot-runtime cleanup to `.30` and `.40`, then confirm
   only supervisor plus one active slot runtime remain, RSS returns to the
   single-runtime plateau, and YWS stays green after cleanup.
+- 2026-05-20 validation after `58f83f48`: both `.30` and `.40` reached active
+  slot B with `supervisor attempt: completed` / `completion reason: root
+  restart completed`. Process checks showed only supervisor plus one active
+  runtime listener (`8778`) after promotion. A 180-second memory window stayed
+  bounded: `.30` warmed from about `701 MiB` to `712 MiB` used with swap fixed
+  at `32 MiB`; `.40` stayed flat at about `564 MiB` used with swap fixed at
+  `17 MiB`. Reliability metrics stayed available on both stands: Yjs pressure
+  was attributed to `skill:infrastate_skill` quarantine/write amplification,
+  stream fanout remained bounded through `infrastate.operations.active`, and
+  stream-control pending work returned to `0`. After the post-update warmup,
+  fresh journal windows on both stands had no `hub_open_ack_timeout`,
+  `open_ack` publish failure, YWS room timeout, route slow-flush warning, or
+  reconnect-storm evidence. This closes the server-side core protection and
+  observability gate for moving into skill optimization; the public-root
+  wait-budget rollout and human visual check of Dev Browser/Mobile/Opera stay
+  as acceptance follow-ups.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show
