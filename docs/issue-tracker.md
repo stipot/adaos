@@ -3310,6 +3310,18 @@ Human verification:
   observability gate for moving into skill optimization; the public-root
   wait-budget rollout and human visual check of Dev Browser/Mobile/Opera stay
   as acceptance follow-ups.
+- 2026-05-20 follow-up on docs-only rollout `1774fc63`: `.40` completed the
+  transition, but `.30` exposed a warm-switch edge case where the active runtime
+  entered shutdown while the passive candidate was still only `starting`.
+  `adaos autostart restart` recovered `.30` to one supervisor plus one active
+  slot-B listener. Add a core guard before closing the milestone: if a
+  prewarmed candidate is not API-ready by cutover, fail/defer before active
+  shutdown, clean the candidate, and preserve the current YWS/HTTP listener.
+- [x] Add the warm-switch prewarm-not-ready guard and regression test so a slow
+  passive candidate cannot take down the active runtime listener.
+- [ ] Roll out the warm-switch prewarm-not-ready guard to `.30` and `.40`,
+  repeat the docs-only update path, and confirm failed/deferred prewarm leaves
+  the active runtime listener alive while ready candidates still promote.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show

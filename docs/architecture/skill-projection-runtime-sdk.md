@@ -252,6 +252,10 @@ must not.
   listener plus the root supervisor. Inactive slot runtimes that survive a
   warm switch or root-promotion restart are pressure leaks, not standby
   capacity, and the supervisor must stop them with explicit logs.
+- Warm-switch cutover is allowed only after the passive candidate is API-ready.
+  If prewarm is still starting or failed at cutover time, the supervisor must
+  fail or defer before active-runtime shutdown and preserve the current YWS/HTTP
+  listener.
 
 ## Control-Plane HTTP Fallbacks
 
@@ -523,6 +527,9 @@ diagnostic surface from becoming a primary Yjs pressure source.
   state, scan slot listeners and stop untracked non-active AdaOS runtimes so
   warm-switch/root-promotion leftovers cannot double memory, Yjs, or stream
   load.
+- [x] `update.prewarm_not_ready_preserves_active`: fail/defer warm-switch before
+  active shutdown when the passive candidate never becomes API-ready, cleaning
+  only the candidate and keeping the current runtime listener alive.
 - [x] `status.hot_event_budget`: add a shared debounce/window budget helper
   for hot event-to-status paths before skill-specific migrations
 - [x] `status.compact_boundary_diagnostics`: expose max card bytes, observed

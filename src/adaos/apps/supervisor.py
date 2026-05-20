@@ -7377,6 +7377,80 @@ class SupervisorManager:
             )
             cancel_phase = "countdown"
             await asyncio.sleep(max(0.0, float(countdown_sec)))
+            if candidate_prewarm_state in {"starting", "failed"} and bool(candidate_prewarm.get("attempted")):
+                snapshot = self.status()
+                candidate_slot = str(snapshot.get("candidate_slot") or "").strip().upper()
+                candidate_ready = bool(candidate_slot == target_slot and snapshot.get("candidate_runtime_api_ready"))
+                if candidate_ready:
+                    candidate_prewarm_state = "ready"
+                    candidate_prewarm_message = (
+                        f"passive candidate runtime became ready on {snapshot.get('candidate_runtime_url')}"
+                    )
+                    candidate_prewarm_ready_at = time.time()
+                    status = write_core_update_status(
+                        {
+                            **dict(status),
+                            "candidate_prewarm_state": candidate_prewarm_state,
+                            "candidate_prewarm_message": candidate_prewarm_message,
+                            "candidate_prewarm_ready_at": candidate_prewarm_ready_at,
+                            "updated_at": time.time(),
+                            "message": f"slot {target_slot} prepared; passive candidate ready; countdown completed",
+                        }
+                    )
+                    _write_update_attempt(
+                        _build_attempt_payload(
+                            action=action,
+                            request={
+                                "action": action,
+                                "target_rev": target_rev,
+                                "target_version": target_version,
+                                "reason": reason,
+                                "countdown_sec": countdown_sec,
+                                "drain_timeout_sec": drain_timeout_sec,
+                                "signal_delay_sec": signal_delay_sec,
+                                "candidate_prewarm_state": candidate_prewarm_state,
+                                "candidate_prewarm_message": candidate_prewarm_message,
+                            },
+                            status=status,
+                            accepted=True,
+                        )
+                    )
+                else:
+                    await self._cleanup_candidate_runtime(
+                        reason="supervisor.candidate.prewarm_not_ready",
+                        slot=target_slot or None,
+                    )
+                    status = write_core_update_status(
+                        {
+                            "state": "failed",
+                            "phase": "prewarm",
+                            "action": action,
+                            "target_rev": target_rev,
+                            "target_version": target_version,
+                            "reason": reason,
+                            "target_slot": target_slot,
+                            "countdown_sec": countdown_sec,
+                            "drain_timeout_sec": drain_timeout_sec,
+                            "signal_delay_sec": signal_delay_sec,
+                            "prepared_at": float(prepare_result.get("finished_at") or time.time()),
+                            "candidate_prewarm_state": candidate_prewarm_state,
+                            "candidate_prewarm_message": candidate_prewarm_message or None,
+                            "candidate_prewarm_ready_at": candidate_prewarm_ready_at,
+                            "active_runtime_preserved": True,
+                            "message": (
+                                "candidate runtime did not become ready before cutover; "
+                                "active runtime left running"
+                            ),
+                            "manifest": manifest,
+                            "updated_at": time.time(),
+                        }
+                    )
+                    _complete_update_attempt(
+                        state="failed",
+                        status=status,
+                        reason="candidate prewarm not ready",
+                    )
+                    return
 
             plan = {
                 "state": "prepared_restart",
