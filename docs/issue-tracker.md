@@ -3181,6 +3181,10 @@ Human verification:
 - [x] Bound supervisor watchdog persisted state after the `.30` state-bloat
   incident; confirm supervisor recovery does not require reading unbounded
   watchdog history into memory.
+- [ ] Add a hard supervisor/control-plane memory tripwire for this class of
+  incident: supervisor/runtime RSS, swap growth, and oversized
+  `state/supervisor/*.json|*.jsonl` files should trigger visible local
+  protection or quarantine evidence before the stand enters swap exhaustion.
 - [ ] Re-run the `.30` 180-second browser-attached check after `7818eacf` and
   record both server-side YJS truth (`stateSync`, `yjsPressure`, eventbus
   backlog) and browser-side truth (`yjs.signal`, `client_yws_attempt_id`,
