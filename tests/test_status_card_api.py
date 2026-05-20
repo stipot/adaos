@@ -10,6 +10,7 @@ from adaos.apps.api.auth import require_token
 from adaos.domain import make_client_subscription_record, make_projection_subscription
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_dispatcher import clear_projection_dispatcher
+from adaos.services.projection_records import clear_projection_record_registry
 from adaos.services.status_card_registry import clear_status_card_registry
 
 
@@ -32,6 +33,7 @@ def _make_client() -> TestClient:
 
     clear_projection_demand_registry()
     clear_projection_dispatcher()
+    clear_projection_record_registry()
     clear_status_card_registry()
     app = FastAPI()
     app.include_router(node_api.router, prefix="/api/node")
@@ -117,6 +119,44 @@ def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     assert payload["card"]["id"] == "runtime"
     assert payload["card"]["owner"] == "core:runtime"
     assert payload["snapshot"]["projection_total"] == 1
+
+
+def test_status_card_api_materializes_status_cards_into_projection_records() -> None:
+    client = _make_client()
+    client.post("/api/node/status-cards/runtime/refresh", params={"webspace_id": "desktop"})
+
+    materialize_resp = client.post(
+        "/api/node/projection-records/status-cards/materialize",
+        json={"webspace_id": "desktop"},
+    )
+    records_resp = client.get("/api/node/projection-records", params={"webspace_id": "desktop"})
+
+    assert materialize_resp.status_code == 200
+    payload = materialize_resp.json()
+    assert payload["materialized_total"] == 1
+    assert payload["records"][0]["meta"]["projection_key"] == "status-card:runtime"
+    assert payload["projection_registry"]["record_total"] == 1
+    assert records_resp.status_code == 200
+    assert records_resp.json()["records"][0]["meta"]["projection_key"] == "status-card:runtime"
+
+
+def test_status_card_api_materializes_selected_status_cards_into_projection_records() -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/status-cards/infrascope/refresh",
+        json={"webspace_id": "desktop", "snapshot": _sample_infrascope_snapshot()},
+    )
+
+    materialize_resp = client.post(
+        "/api/node/projection-records/status-cards/materialize",
+        json={"webspace_id": "desktop", "card_ids": ["infrascope-registry"]},
+    )
+
+    assert materialize_resp.status_code == 200
+    payload = materialize_resp.json()
+    assert payload["materialized_total"] == 1
+    assert payload["requested_card_ids"] == ["infrascope-registry"]
+    assert payload["records"][0]["meta"]["projection_key"] == "status-card:infrascope-registry"
 
 
 def test_status_card_api_snapshot_can_include_infrascope_cards_from_yjs(monkeypatch) -> None:

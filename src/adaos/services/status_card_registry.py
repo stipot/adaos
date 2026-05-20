@@ -18,6 +18,7 @@ from adaos.services.projection_dispatcher import (
     register_projection_refresh_handler,
     unregister_projection_refresh_handler,
 )
+from adaos.services.projection_records import projection_record_registry_snapshot, write_projection_record
 
 
 STATUS_CARD_PROJECTION_PREFIX = "status-card:"
@@ -276,6 +277,39 @@ def status_card_registry_snapshot(*, webspace_id: str | None = None, now: float 
     }
 
 
+def materialize_status_card_projection_records(
+    *,
+    webspace_id: str | None = None,
+    card_ids: list[str] | tuple[str, ...] | set[str] | None = None,
+    now: float | None = None,
+    access: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    webspace_token = str(webspace_id or "").strip()
+    requested_ids = {str(item or "").strip() for item in card_ids or [] if str(item or "").strip()} or None
+    records: list[ProjectionRecord] = []
+    for card in list_status_cards(webspace_id=webspace_token or None):
+        if requested_ids is not None and card.id not in requested_ids:
+            continue
+        record = status_card_projection_record(
+            card_id=card.id,
+            webspace_id=str(card.webspace_id or ""),
+            access=access or {"visibility": "operator"},
+            now=now,
+        )
+        if record is not None:
+            records.append(write_projection_record(record))
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": webspace_token or None,
+        "requested_card_ids": sorted(requested_ids) if requested_ids is not None else None,
+        "materialized_total": len(records),
+        "records": [record.to_dict() for record in records],
+        "projection_registry": projection_record_registry_snapshot(webspace_id=webspace_token or None),
+        "updated_at": float(now if now is not None else time.time()),
+    }
+
+
 __all__ = [
     "STATUS_CARD_PROJECTION_PREFIX",
     "STATUS_CARD_WILDCARD_HANDLER",
@@ -283,6 +317,7 @@ __all__ = [
     "ensure_status_card_dispatcher_handler",
     "get_status_card",
     "list_status_cards",
+    "materialize_status_card_projection_records",
     "publish_status_card",
     "refresh_status_card_projection",
     "remove_status_card_dispatcher_handler",

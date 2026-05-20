@@ -7,9 +7,11 @@ from adaos.services.projection_dispatcher import (
     dispatch_demanded_projection_refresh,
     projection_dispatcher_snapshot,
 )
+from adaos.services.projection_records import clear_projection_record_registry, get_projection_record
 from adaos.services.status_card_registry import (
     clear_status_card_registry,
     ensure_status_card_dispatcher_handler,
+    materialize_status_card_projection_records,
     publish_status_card,
     status_card_projection_key,
     status_card_projection_record,
@@ -21,6 +23,7 @@ from adaos.services.status_card_registry import (
 def setup_function() -> None:
     clear_projection_demand_registry()
     clear_projection_dispatcher()
+    clear_projection_record_registry()
     clear_status_card_registry()
 
 
@@ -180,6 +183,73 @@ def test_status_card_registry_snapshot_exposes_projection_records() -> None:
     assert snapshot["stats"]["publish_total"] == 1
     assert snapshot["stats"]["changed_total"] == 1
     assert snapshot["records"][0]["meta"]["projection_key"] == "status-card:runtime"
+
+
+def test_status_card_projection_records_can_materialize_into_shared_registry() -> None:
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        updated_at=10.0,
+    )
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="dev",
+        status="failed",
+        summary="Runtime down",
+        updated_at=20.0,
+    )
+
+    result = materialize_status_card_projection_records(webspace_id="desktop", now=30.0)
+    record = get_projection_record(webspace_id="desktop", projection_key="status-card:runtime")
+    dev_record = get_projection_record(webspace_id="dev", projection_key="status-card:runtime")
+
+    assert result["materialized_total"] == 1
+    assert result["projection_registry"]["record_total"] == 1
+    assert record is not None
+    assert record.data["summary"] == "Runtime ready"
+    assert dev_record is None
+
+
+def test_status_card_projection_record_materialization_can_filter_card_ids() -> None:
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        updated_at=10.0,
+    )
+    publish_status_card(
+        id="infrastate-yjs",
+        owner="skill:infrastate_skill",
+        kind="yjs",
+        scope={"section": "yjs"},
+        webspace_id="desktop",
+        status="warning",
+        summary="Yjs pressure warn",
+        updated_at=20.0,
+    )
+
+    result = materialize_status_card_projection_records(
+        webspace_id="desktop",
+        card_ids=["infrastate-yjs"],
+        now=30.0,
+    )
+
+    assert result["materialized_total"] == 1
+    assert result["requested_card_ids"] == ["infrastate-yjs"]
+    assert result["records"][0]["meta"]["projection_key"] == "status-card:infrastate-yjs"
+    assert get_projection_record(webspace_id="desktop", projection_key="status-card:runtime") is None
 
 
 def test_status_card_registry_snapshot_counts_unchanged_and_stale_cards() -> None:

@@ -69,6 +69,7 @@ from adaos.services.projection_records import (
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
+    materialize_status_card_projection_records,
     publish_status_card,
     status_card_id_from_projection_key,
     status_card_projection_record,
@@ -1580,6 +1581,12 @@ class ProjectionRecordWriteRequest(BaseModel):
     error: dict[str, Any] | str | None = None
 
 
+class StatusCardProjectionRecordsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    card_ids: list[str] | None = None
+    now: float | None = None
+
+
 class StatusCardPublishRequest(BaseModel):
     id: str = Field(..., min_length=1)
     owner: str = Field(..., min_length=1)
@@ -2546,6 +2553,21 @@ async def node_projection_record_write(payload: ProjectionRecordWriteRequest) ->
         "record": record.to_dict(),
         "snapshot": projection_record_registry_snapshot(webspace_id=record.meta.webspace_id),
     }
+
+
+@router.post("/projection-records/status-cards/materialize", dependencies=[Depends(require_token)])
+async def node_projection_records_materialize_status_cards(
+    payload: StatusCardProjectionRecordsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or StatusCardProjectionRecordsMaterializeRequest()
+    target_webspace_id = _coerce_node_webspace_id(request_payload.webspace_id or webspace_id)
+    return materialize_status_card_projection_records(
+        webspace_id=target_webspace_id,
+        card_ids=request_payload.card_ids,
+        now=request_payload.now,
+        access={"visibility": "operator"},
+    )
 
 
 @router.get("/projection-dispatcher", dependencies=[Depends(require_token)])
