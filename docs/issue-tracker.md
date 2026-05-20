@@ -2430,7 +2430,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 42%.
+Progress: 45%.
 
 Current useful pattern:
 
@@ -2603,6 +2603,14 @@ Validation notes:
   `browsers.devices` / `browsers.clients`. If a modal instance stayed open
   across the broken runtime, close/open it or reload the client to force a fresh
   stream subscription.
+- Follow-up with Chrome on Android TV showed a reconnect/reload edge case: an
+  already-open Chrome on Windows Browsers modal could keep listening to stream
+  topics while the restarted skill runtime had lost its in-memory
+  `active_receivers`. Android TV opening the same modal sent a fresh stream
+  snapshot request, repopulated `active_receivers`, and Windows immediately
+  received `webio.event`. Client fix: `WebIoStreamService` now reissues snapshot
+  requests for all active stream receivers after control WS reopen and runtime
+  lifecycle events, so opened modals recover without a second browser.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
