@@ -95,6 +95,33 @@ def delete_client_subscription_record(
         return _RECORDS.pop(key, None) is not None
 
 
+def touch_client_subscription_record(
+    *,
+    client_id: str,
+    session_id: str,
+    webspace_id: str,
+    device_id: str | None = None,
+    role: str | None = None,
+    updated_at: float | None = None,
+) -> ClientSubscriptionRecord | None:
+    key = (str(webspace_id), str(client_id), str(session_id))
+    with _LOCK:
+        current = _RECORDS.get(key)
+        if current is None:
+            return None
+        next_record = make_client_subscription_record(
+            client_id=current.client_id,
+            device_id=current.device_id if device_id is None else str(device_id),
+            session_id=current.session_id,
+            webspace_id=current.webspace_id,
+            role=current.role if role is None else str(role),
+            subscriptions=current.subscriptions,
+            updated_at=updated_at,
+        )
+        _RECORDS[key] = next_record
+        return next_record
+
+
 def list_client_subscription_records(*, webspace_id: str | None = None) -> list[ClientSubscriptionRecord]:
     token = str(webspace_id or "").strip()
     with _LOCK:
@@ -270,5 +297,6 @@ __all__ = [
     "make_empty_client_subscription_record",
     "projection_demand_consumers",
     "projection_demand_snapshot",
+    "touch_client_subscription_record",
     "write_client_subscription_record",
 ]

@@ -49,6 +49,7 @@ from adaos.services.projection_demand import (
     delete_client_subscription_record,
     demanded_projection_keys,
     projection_demand_snapshot,
+    touch_client_subscription_record,
     write_client_subscription_record,
 )
 from adaos.services.projection_demand_mapper import build_browser_projection_demand_record
@@ -1538,6 +1539,12 @@ class ClientProjectionDemandRequest(BaseModel):
     updated_at: float | None = None
 
 
+class ClientProjectionDemandTouchRequest(BaseModel):
+    device_id: str | None = None
+    role: str | None = None
+    updated_at: float | None = None
+
+
 class BrowserProjectionDemandStateRequest(BaseModel):
     client_id: str = Field(..., min_length=1)
     device_id: str = ""
@@ -2222,6 +2229,36 @@ async def node_projection_demand_write(payload: ClientProjectionDemandRequest) -
         "record": record.to_dict(),
         "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
     }
+
+
+@router.post("/projection-demand/client/{client_id}/{session_id}/touch", dependencies=[Depends(require_token)])
+async def node_projection_demand_touch(
+    client_id: str,
+    session_id: str,
+    payload: ClientProjectionDemandTouchRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    body = payload or ClientProjectionDemandTouchRequest()
+    record = touch_client_subscription_record(
+        client_id=client_id,
+        session_id=session_id,
+        webspace_id=target_webspace_id,
+        device_id=body.device_id,
+        role=body.role,
+        updated_at=body.updated_at,
+    )
+    response = {
+        "ok": True,
+        "accepted": record is not None,
+        "webspace_id": target_webspace_id,
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+    }
+    if record is None:
+        response["reason"] = "client_subscription_not_found"
+    else:
+        response["record"] = record.to_dict()
+    return response
 
 
 @router.post("/projection-demand/browser-state", dependencies=[Depends(require_token)])

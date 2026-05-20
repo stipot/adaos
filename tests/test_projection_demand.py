@@ -7,6 +7,7 @@ from adaos.services.projection_demand import (
     demanded_projection_keys,
     projection_demand_consumers,
     projection_demand_snapshot,
+    touch_client_subscription_record,
     write_client_subscription_record,
 )
 
@@ -143,6 +144,42 @@ def test_stale_session_sanitation_marks_but_keeps_pinned_demand() -> None:
     assert snapshot["stale_client_total"] == 1
     assert snapshot["projection_total"] == 1
     assert snapshot["projections"][0]["stale_total"] == 1
+    assert snapshot["projections"][0]["pinned_total"] == 1
+
+
+def test_touch_client_subscription_record_extends_session_without_replacing_demand() -> None:
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            updated_at=10.0,
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="pinned:runtime",
+                    consumer_kind="pinned-panel",
+                    pinned=True,
+                )
+            ],
+        )
+    )
+
+    record = touch_client_subscription_record(
+        client_id="browser-1",
+        session_id="session-1",
+        webspace_id="desktop",
+        updated_at=19.0,
+    )
+    snapshot = projection_demand_snapshot(webspace_id="desktop", stale_after_s=5.0, now=20.0)
+
+    assert record is not None
+    assert record.updated_at == 19.0
+    assert record.subscriptions[0].consumer_id == "pinned:runtime"
+    assert snapshot["stale_client_total"] == 0
+    assert snapshot["projection_total"] == 1
     assert snapshot["projections"][0]["pinned_total"] == 1
 
 

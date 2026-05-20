@@ -101,6 +101,63 @@ def test_projection_demand_api_get_and_delete_snapshot() -> None:
     assert delete_resp.json()["snapshot"]["consumer_total"] == 0
 
 
+def test_projection_demand_api_touches_session_without_replacing_subscriptions() -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/projection-demand/client",
+        json={
+            "client_id": "browser-1",
+            "device_id": "desktop",
+            "session_id": "session-1",
+            "webspace_id": "desktop",
+            "role": "operator",
+            "updated_at": 10.0,
+            "subscriptions": [
+                {
+                    "projection_key": "status-card:runtime",
+                    "consumer_id": "pinned:runtime",
+                    "consumer_kind": "pinned-panel",
+                    "pinned": True,
+                }
+            ],
+        },
+    )
+
+    resp = client.post(
+        "/api/node/projection-demand/client/browser-1/session-1/touch",
+        params={"webspace_id": "desktop"},
+        json={"updated_at": 19.0},
+    )
+    snapshot_resp = client.get(
+        "/api/node/projection-demand",
+        params={"webspace_id": "desktop", "stale_after_s": 5.0},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["accepted"] is True
+    assert payload["record"]["updated_at"] == 19.0
+    assert payload["record"]["subscriptions"][0]["consumer_id"] == "pinned:runtime"
+    assert payload["snapshot"]["projection_total"] == 1
+    assert snapshot_resp.json()["records"][0]["updated_at"] == 19.0
+
+
+def test_projection_demand_api_touch_reports_missing_session() -> None:
+    client = _make_client()
+
+    resp = client.post(
+        "/api/node/projection-demand/client/browser-1/session-1/touch",
+        params={"webspace_id": "desktop"},
+        json={"updated_at": 19.0},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["accepted"] is False
+    assert payload["reason"] == "client_subscription_not_found"
+    assert payload["snapshot"]["consumer_total"] == 0
+
+
 def test_projection_demand_api_accepts_browser_state_mapping() -> None:
     client = _make_client()
 
