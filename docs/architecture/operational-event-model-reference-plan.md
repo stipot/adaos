@@ -98,6 +98,9 @@ Progress:
 
 - server-side demand registry, full-overwrite API, browser-state mapper, and
   stale-session marking are implemented
+- `/api/node/projection-demand/client/{client_id}/{session_id}/touch` can
+  refresh an existing browser session timestamp without replacing its current
+  subscriptions, so pinned demand survives heartbeat traffic
 - direct browser client hookup remains because the Angular client submodule is
   not present in this checkout
 
@@ -384,7 +387,7 @@ Use this checklist for every implementation slice touching the event model.
 | Projection record ABI | Canonical record shape | Helper code added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
-| Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper added; browser client hookup remains |
+| Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, and session touch added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, and Infrascope-specific demanded refresh handler added |
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` added; optional Infrascope demanded-card refresh is available |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
