@@ -2491,7 +2491,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 55%.
+Progress: 60%.
 
 Dependency:
 
@@ -2655,6 +2655,25 @@ Validation notes:
   same stream receivers and Settings workflow, but row payload is now
   `id/title/subtitle/online`; details and device operations are loaded through
   the selected-browser modal/actions.
+- `.30` validation after `32f9348`: using the real `/ws` subscribe protocol,
+  `browsers.devices` published two snapshots at about 14.9 KB each
+  (down from about 32 KB after the first payload pass), and
+  `browsers.clients` published two snapshots at about 0.6 KB. Stream guard
+  counters for both receivers were `attempted=2 published=2 throttled=0`
+  with fanout=6. The same check also showed `infrastate_skill` Yjs quarantine
+  on `event/device.registered`, so core attribution/quarantine is working and
+  the remaining pressure belongs to the next skill optimization pass rather
+  than `browsers_skill` stream payload.
+- `.30` stand caveat: after pushing main commit `908a0ea5`, managed core update
+  to that target failed validation with `active slot target mismatch`; the
+  runtime recovered on active core `07f27f1b` and the migrated
+  `browsers_skill` `0.15.6` was still testable. Track this as a core
+  update-path observation, not as a Browsers payload regression.
+- `.40` validation caveat: `browsers_skill` `0.15.6` migrated successfully, but
+  a synthetic `/ws` stream subscribe did not return fresh stream events while
+  stream-control counters stayed pending/coalesced. Re-test after the stand is
+  on the current core or after an active browser opens the modal; do not use
+  `.40` as the primary Browsers payload verdict for this pass.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
