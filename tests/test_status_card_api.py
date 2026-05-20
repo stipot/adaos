@@ -159,6 +159,47 @@ def test_status_card_api_materializes_selected_status_cards_into_projection_reco
     assert payload["records"][0]["meta"]["projection_key"] == "status-card:infrascope-registry"
 
 
+def test_status_card_api_materializes_demanded_status_cards_into_projection_records() -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/status-cards/infrascope/refresh",
+        json={"webspace_id": "desktop", "snapshot": _sample_infrascope_snapshot()},
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:infrascope-overview",
+                    consumer_id="widget:infrascope",
+                    consumer_kind="widget",
+                ),
+                make_projection_subscription(
+                    projection_key="projection:hub/overview",
+                    consumer_id="page:infrascope",
+                    consumer_kind="page",
+                ),
+            ],
+        )
+    )
+
+    materialize_resp = client.post(
+        "/api/node/projection-records/status-cards/materialize",
+        json={"webspace_id": "desktop", "demanded_only": True},
+    )
+
+    assert materialize_resp.status_code == 200
+    payload = materialize_resp.json()
+    assert payload["demanded_only"] is True
+    assert payload["materialized_total"] == 1
+    assert payload["requested_card_ids"] == ["infrascope-overview"]
+    assert payload["records"][0]["meta"]["projection_key"] == "status-card:infrascope-overview"
+
+
 def test_status_card_api_snapshot_can_include_infrascope_cards_from_yjs(monkeypatch) -> None:
     client = _make_client()
 

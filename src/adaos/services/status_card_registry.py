@@ -18,6 +18,7 @@ from adaos.services.projection_dispatcher import (
     register_projection_refresh_handler,
     unregister_projection_refresh_handler,
 )
+from adaos.services.projection_demand import demanded_projection_keys
 from adaos.services.projection_records import projection_record_registry_snapshot, write_projection_record
 
 
@@ -54,6 +55,13 @@ def status_card_id_from_projection_key(projection_key: str) -> str:
     if not card_id:
         raise ValueError("status-card id is required")
     return card_id
+
+
+def _status_card_id_token(value: Any) -> str:
+    token = str(value or "").strip()
+    if token.startswith(STATUS_CARD_PROJECTION_PREFIX):
+        token = token[len(STATUS_CARD_PROJECTION_PREFIX) :].strip()
+    return token
 
 
 def _registry_key(*, webspace_id: str, card_id: str) -> tuple[str, str]:
@@ -281,11 +289,29 @@ def materialize_status_card_projection_records(
     *,
     webspace_id: str | None = None,
     card_ids: list[str] | tuple[str, ...] | set[str] | None = None,
+    demanded_only: bool = False,
     now: float | None = None,
     access: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     webspace_token = str(webspace_id or "").strip()
-    requested_ids = {str(item or "").strip() for item in card_ids or [] if str(item or "").strip()} or None
+    requested_ids: set[str] | None = None
+    if card_ids:
+        requested_ids = {
+            card_id
+            for card_id in (_status_card_id_token(item) for item in card_ids)
+            if card_id
+        }
+    if demanded_only:
+        demanded_ids = {
+            card_id
+            for card_id in (
+                _status_card_id_token(token)
+                for token in demanded_projection_keys(webspace_id=webspace_token or None)
+                if str(token or "").strip().startswith(STATUS_CARD_PROJECTION_PREFIX)
+            )
+            if card_id
+        }
+        requested_ids = demanded_ids if requested_ids is None else requested_ids.intersection(demanded_ids)
     records: list[ProjectionRecord] = []
     for card in list_status_cards(webspace_id=webspace_token or None):
         if requested_ids is not None and card.id not in requested_ids:
@@ -302,6 +328,7 @@ def materialize_status_card_projection_records(
         "ok": True,
         "accepted": True,
         "webspace_id": webspace_token or None,
+        "demanded_only": bool(demanded_only),
         "requested_card_ids": sorted(requested_ids) if requested_ids is not None else None,
         "materialized_total": len(records),
         "records": [record.to_dict() for record in records],

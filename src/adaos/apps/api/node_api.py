@@ -1584,6 +1584,7 @@ class ProjectionRecordWriteRequest(BaseModel):
 class StatusCardProjectionRecordsMaterializeRequest(BaseModel):
     webspace_id: str | None = None
     card_ids: list[str] | None = None
+    demanded_only: bool = False
     now: float | None = None
 
 
@@ -2565,6 +2566,7 @@ async def node_projection_records_materialize_status_cards(
     return materialize_status_card_projection_records(
         webspace_id=target_webspace_id,
         card_ids=request_payload.card_ids,
+        demanded_only=request_payload.demanded_only,
         now=request_payload.now,
         access={"visibility": "operator"},
     )

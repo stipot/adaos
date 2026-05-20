@@ -252,6 +252,108 @@ def test_status_card_projection_record_materialization_can_filter_card_ids() -> 
     assert get_projection_record(webspace_id="desktop", projection_key="status-card:runtime") is None
 
 
+def test_status_card_projection_record_materialization_can_use_browser_demand() -> None:
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        updated_at=10.0,
+    )
+    publish_status_card(
+        id="infrastate-yjs",
+        owner="skill:infrastate_skill",
+        kind="yjs",
+        scope={"section": "yjs"},
+        webspace_id="desktop",
+        status="warning",
+        summary="Yjs pressure warn",
+        updated_at=20.0,
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:infrastate-yjs",
+                    consumer_id="widget:infra-state",
+                    consumer_kind="widget",
+                ),
+                make_projection_subscription(
+                    projection_key="projection:hub/overview",
+                    consumer_id="page:infrascope",
+                    consumer_kind="page",
+                ),
+            ],
+        )
+    )
+
+    result = materialize_status_card_projection_records(webspace_id="desktop", demanded_only=True, now=30.0)
+
+    assert result["demanded_only"] is True
+    assert result["materialized_total"] == 1
+    assert result["requested_card_ids"] == ["infrastate-yjs"]
+    assert result["records"][0]["meta"]["projection_key"] == "status-card:infrastate-yjs"
+    assert get_projection_record(webspace_id="desktop", projection_key="status-card:runtime") is None
+
+
+def test_status_card_projection_record_materialization_intersects_card_ids_with_browser_demand() -> None:
+    publish_status_card(
+        id="runtime",
+        owner="core:runtime",
+        kind="runtime",
+        scope={"node_id": "node-a"},
+        webspace_id="desktop",
+        status="running",
+        summary="Runtime ready",
+        updated_at=10.0,
+    )
+    publish_status_card(
+        id="infrastate-yjs",
+        owner="skill:infrastate_skill",
+        kind="yjs",
+        scope={"section": "yjs"},
+        webspace_id="desktop",
+        status="warning",
+        summary="Yjs pressure warn",
+        updated_at=20.0,
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    result = materialize_status_card_projection_records(
+        webspace_id="desktop",
+        card_ids=["status-card:infrastate-yjs", "runtime"],
+        demanded_only=True,
+        now=30.0,
+    )
+
+    assert result["materialized_total"] == 1
+    assert result["requested_card_ids"] == ["runtime"]
+    assert result["records"][0]["meta"]["projection_key"] == "status-card:runtime"
+
+
 def test_status_card_registry_snapshot_counts_unchanged_and_stale_cards() -> None:
     publish_status_card(
         id="runtime",
