@@ -39,6 +39,31 @@ def _make_client() -> TestClient:
     return TestClient(app)
 
 
+def _sample_infrascope_snapshot() -> dict:
+    return {
+        "summary": {
+            "label": "Infrascope",
+            "value": "nominal",
+            "subtitle": "diagnostics view",
+        },
+        "overview": {
+            "active_incidents": [],
+            "active_runtimes": [{"id": "runtime-a", "status": "online"}],
+        },
+        "inventory": {
+            "all": [
+                {"id": "browser-a", "kind": "browser", "status": "online"},
+                {"id": "skill-a", "kind": "skill", "status": "online"},
+            ],
+            "browsers": [{"id": "browser-a", "status": "online"}],
+            "runtimes": [{"id": "runtime-a", "status": "online"}],
+            "skills": [{"id": "skill-a", "status": "online"}],
+            "scenarios": [{"id": "desktop", "status": "online"}],
+        },
+        "operations": {"active": []},
+    }
+
+
 def test_projection_diagnostics_links_demand_handlers_and_status_cards() -> None:
     client = _make_client()
     client.post(
@@ -132,3 +157,63 @@ def test_projection_diagnostics_counts_missing_status_card_for_demand() -> None:
     projection = payload["active_projections"][0]
     assert projection["handler"]["key"] == "status-card:*"
     assert projection["status_card"] is None
+
+
+def test_projection_diagnostics_can_refresh_demanded_infrascope_cards(monkeypatch) -> None:
+    client = _make_client()
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:infrascope-overview",
+                    consumer_id="widget:infrascope",
+                    consumer_kind="widget",
+                )
+            ],
+            updated_at=10.0,
+        )
+    )
+
+    class FakeYDoc:
+        def get_map(self, name):
+            assert name == "data"
+            return {"infrascope": _sample_infrascope_snapshot()}
+
+    class FakeReadContext:
+        async def __aenter__(self):
+            return FakeYDoc()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "async_read_ydoc", lambda _webspace_id: FakeReadContext())
+
+    resp = client.get(
+        "/api/node/projection-diagnostics",
+        params={
+            "webspace_id": "desktop",
+            "include_runtime": "false",
+            "include_infrascope": "true",
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    projection = payload["active_projections"][0]
+    assert payload["refreshes"]["infrascope"]["card_total"] == 1
+    assert payload["refreshes"]["infrascope"]["requested_card_ids"] == ["infrascope-overview"]
+    assert projection["handler"] == {
+        "available": True,
+        "key": "status-card:infrascope-*",
+        "match": "wildcard",
+    }
+    assert projection["status_card"]["published"] is True
+    assert projection["status_card"]["summary"] == "Infrascope | nominal | diagnostics view"
+    assert projection["status_card"]["projection_status"] == "ready"

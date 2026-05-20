@@ -2274,22 +2274,32 @@ async def node_projection_demand_delete(
 async def node_projection_diagnostics(
     webspace_id: str | None = None,
     include_runtime: bool = True,
+    include_infrascope: bool = False,
     include_stale: bool = True,
     stale_after_s: float | None = None,
 ) -> dict[str, Any]:
     _ensure_status_card_projection_handlers()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    refreshes: dict[str, Any] = {}
     if include_runtime:
         publish_runtime_status_card(
             webspace_id=target_webspace_id,
             node_id=_local_node_id(),
             lifecycle=runtime_lifecycle_snapshot(),
         )
-    return projection_operator_diagnostics(
+    if include_infrascope:
+        refreshes["infrascope"] = await _refresh_infrascope_status_cards(
+            webspace_id=target_webspace_id,
+            demanded_only=True,
+        )
+    diagnostics = projection_operator_diagnostics(
         webspace_id=target_webspace_id,
         include_stale=include_stale,
         stale_after_s=stale_after_s,
     )
+    if refreshes:
+        diagnostics["refreshes"] = refreshes
+    return diagnostics
 
 
 @router.get("/status-cards", dependencies=[Depends(require_token)])
