@@ -18,7 +18,7 @@ import uuid
 from collections import deque
 from pathlib import Path
 from string import Formatter
-from typing import Any
+from typing import Any, Mapping
 
 try:
     import psutil  # type: ignore
@@ -331,13 +331,46 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
+JSONL_TAIL_CHUNK_BYTES = 64 * 1024
+JSONL_TAIL_MAX_BYTES = 4 * 1024 * 1024
+JSONL_TAIL_BYTES_PER_LINE = 4096
+WATCHDOG_TEXT_LIMIT = 500
+WATCHDOG_SEQUENCE_LIMIT = 10
+SUPERVISOR_RUNTIME_STATE_MAX_BYTES_DEFAULT = 2 * 1024 * 1024
+
+
 def _read_jsonl_tail(path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    normalized_limit = max(1, int(limit))
+    max_bytes = max(
+        JSONL_TAIL_CHUNK_BYTES,
+        min(JSONL_TAIL_MAX_BYTES, normalized_limit * JSONL_TAIL_BYTES_PER_LINE),
+    )
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            position = handle.tell()
+            chunks: list[bytes] = []
+            newline_count = 0
+            read_total = 0
+            while position > 0 and newline_count <= normalized_limit and read_total < max_bytes:
+                read_size = min(JSONL_TAIL_CHUNK_BYTES, position, max_bytes - read_total)
+                position -= read_size
+                handle.seek(position)
+                chunk = handle.read(read_size)
+                chunks.append(chunk)
+                newline_count += chunk.count(b"\n")
+                read_total += read_size
     except Exception:
         return []
+    data = b"".join(reversed(chunks))
+    if position > 0:
+        first_newline = data.find(b"\n")
+        if first_newline < 0:
+            return []
+        data = data[first_newline + 1 :]
+    lines = [line.decode("utf-8", errors="replace") for line in data.splitlines()[-normalized_limit:]]
     items: list[dict[str, Any]] = []
-    for line in lines[-max(1, int(limit)):]:
+    for line in lines:
         try:
             payload = json.loads(line)
         except Exception:
@@ -345,6 +378,333 @@ def _read_jsonl_tail(path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
         if isinstance(payload, dict):
             items.append(payload)
     return items
+
+
+def _compact_text(value: Any, *, limit: int = WATCHDOG_TEXT_LIMIT) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 12)] + "...<truncated>"
+
+
+def _compact_scalar_mapping(payload: Mapping[str, Any] | None, keys: tuple[str, ...]) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    compact: dict[str, Any] = {}
+    for key in keys:
+        value = source.get(key)
+        if isinstance(value, str):
+            compact[key] = _compact_text(value)
+        elif value is None or isinstance(value, (bool, int, float)):
+            compact[key] = value
+    return compact
+
+
+def _compact_sequence(values: Any, *, limit: int = WATCHDOG_SEQUENCE_LIMIT) -> list[Any]:
+    if not isinstance(values, list):
+        return []
+    compact: list[Any] = []
+    for item in values[: max(0, int(limit))]:
+        if isinstance(item, Mapping):
+            compact.append(_compact_scalar_mapping(item, tuple(str(key) for key in item.keys())))
+        elif item is None or isinstance(item, (bool, int, float)):
+            compact.append(item)
+        else:
+            compact.append(_compact_text(item))
+    return compact
+
+
+def _compact_watchdog_strategy(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    strategy = _compact_scalar_mapping(
+        payload,
+        (
+            "requested_transport",
+            "effective_transport",
+            "selected_server",
+            "url_override",
+            "current_ws_tag",
+            "last_event",
+            "last_error",
+            "last_summary",
+            "attempt_seq",
+            "last_attempt_at",
+            "last_connected_at",
+            "last_failure_at",
+            "updated_at",
+        ),
+    )
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    if isinstance(source.get("assessment"), Mapping):
+        strategy["assessment"] = _compact_scalar_mapping(
+            source.get("assessment"),
+            (
+                "state",
+                "reason",
+                "last_event",
+                "failures_5m",
+                "failures_15m",
+                "attempts_15m",
+                "connects_15m",
+                "transport_switches_15m",
+                "last_failure_at",
+                "last_connected_at",
+            ),
+        )
+    if isinstance(source.get("requested"), Mapping):
+        strategy["requested"] = _compact_scalar_mapping(source.get("requested"), ("transport", "url_override"))
+    return {key: value for key, value in strategy.items() if value is not None}
+
+
+def _compact_required_upstream_link(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    compact = _compact_scalar_mapping(
+        source,
+        (
+            "kind",
+            "role",
+            "owner",
+            "state",
+            "reason",
+            "ready",
+            "visible",
+            "desired_state",
+            "current_owner",
+            "planned_owner",
+            "future_owner",
+            "continuity_mode",
+            "sidecar_enabled",
+            "reconnect_total",
+            "cooldown_sec",
+            "verify_timeout_sec",
+            "served_by",
+            "handoff_state",
+            "handoff_ready",
+            "transport_state",
+            "transition_state",
+        ),
+    )
+    if isinstance(source.get("recovery_policy"), Mapping):
+        compact["recovery_policy"] = _compact_scalar_mapping(
+            source.get("recovery_policy"),
+            tuple(str(key) for key in source["recovery_policy"].keys()),
+        )
+    if isinstance(source.get("blockers"), list):
+        compact["blockers"] = _compact_sequence(source.get("blockers"))
+    if isinstance(source.get("watchdog"), Mapping):
+        compact["watchdog"] = _compact_watchdog_state(source.get("watchdog"), include_recent=False)
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _compact_watchdog_decision(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    compact = _compact_scalar_mapping(
+        source,
+        (
+            "reason",
+            "message",
+            "action",
+            "transport_owner",
+            "root_control_status",
+            "route_status",
+            "hub_root_status",
+            "hub_root_state",
+            "hub_root_browser_status",
+            "hub_root_browser_state",
+            "hub_member_status",
+            "member_state",
+            "assessment_state",
+            "assessment_reason",
+            "transition_state",
+            "transition_reason",
+            "last_error",
+            "last_close_reason",
+            "last_event",
+            "last_summary",
+            "continuity_mode",
+            "handoff_state",
+            "handoff_ready",
+        ),
+    )
+    if isinstance(source.get("channel_before"), Mapping):
+        compact["channel_before"] = _compact_scalar_mapping(
+            source.get("channel_before"),
+            tuple(str(key) for key in source["channel_before"].keys()),
+        )
+    if isinstance(source.get("required_upstream_link"), Mapping):
+        compact["required_upstream_link"] = _compact_required_upstream_link(source.get("required_upstream_link"))
+    if isinstance(source.get("recovery_policy"), Mapping):
+        compact["recovery_policy"] = _compact_scalar_mapping(
+            source.get("recovery_policy"),
+            tuple(str(key) for key in source["recovery_policy"].keys()),
+        )
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _compact_watchdog_result(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    compact = _compact_scalar_mapping(
+        source,
+        (
+            "ok",
+            "accepted",
+            "reason",
+            "error",
+            "state",
+            "message",
+            "timeout",
+            "forced_ws_close",
+            "attempted",
+        ),
+    )
+    for key in ("requested", "close", "route_reset", "restart", "reconnect"):
+        if isinstance(source.get(key), Mapping):
+            compact[key] = _compact_scalar_mapping(source.get(key), tuple(str(item) for item in source[key].keys()))
+    if isinstance(source.get("strategy"), Mapping):
+        compact["strategy"] = _compact_watchdog_strategy(source.get("strategy"))
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _compact_watchdog_verification(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    compact = _compact_scalar_mapping(source, ("ok", "state", "attempts", "timeout_sec"))
+    if isinstance(source.get("channel"), Mapping):
+        compact["channel"] = _compact_scalar_mapping(source.get("channel"), tuple(str(key) for key in source["channel"].keys()))
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _compact_watchdog_event(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    compact = _compact_scalar_mapping(source, ("ts", "runtime_url", "event", "action", "transport_owner"))
+    if isinstance(source.get("decision"), Mapping):
+        compact["decision"] = _compact_watchdog_decision(source.get("decision"))
+    if isinstance(source.get("result"), Mapping):
+        compact["result"] = _compact_watchdog_result(source.get("result"))
+    if isinstance(source.get("verification"), Mapping):
+        compact["verification"] = _compact_watchdog_verification(source.get("verification"))
+    for key in ("reason", "message", "state", "error"):
+        if key in source and key not in compact:
+            value = source.get(key)
+            compact[key] = _compact_text(value) if isinstance(value, str) else value
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _compact_watchdog_state(payload: Mapping[str, Any] | None, *, include_recent: bool = True) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    compact = _compact_scalar_mapping(
+        source,
+        (
+            "enabled",
+            "last_state",
+            "last_reason",
+            "last_reconnect_at",
+            "reconnect_total",
+            "cooldown_sec",
+            "reset_degraded_route",
+            "verify_timeout_sec",
+            "log_path",
+        ),
+    )
+    if include_recent and isinstance(source.get("recent_events"), list):
+        compact["recent_events"] = [
+            _compact_watchdog_event(item) for item in source.get("recent_events", []) if isinstance(item, Mapping)
+        ]
+    if isinstance(source.get("last_result"), Mapping):
+        compact["last_result"] = {
+            "requested_at": source["last_result"].get("requested_at"),
+            "action": source["last_result"].get("action"),
+            "decision": _compact_watchdog_decision(source["last_result"].get("decision")),
+            "result": _compact_watchdog_result(source["last_result"].get("result")),
+            "verification": _compact_watchdog_verification(source["last_result"].get("verification")),
+        }
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _supervisor_runtime_state_max_bytes() -> int:
+    try:
+        return max(
+            64 * 1024,
+            int(
+                str(
+                    os.getenv("ADAOS_SUPERVISOR_RUNTIME_STATE_MAX_BYTES")
+                    or str(SUPERVISOR_RUNTIME_STATE_MAX_BYTES_DEFAULT)
+                ).strip()
+            ),
+        )
+    except Exception:
+        return SUPERVISOR_RUNTIME_STATE_MAX_BYTES_DEFAULT
+
+
+def _json_size_bytes(payload: Mapping[str, Any]) -> int:
+    try:
+        return len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"))
+    except Exception:
+        return 0
+
+
+def _bounded_supervisor_runtime_state_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    source = dict(payload)
+    observed_size = _json_size_bytes(source)
+    max_bytes = _supervisor_runtime_state_max_bytes()
+    if observed_size <= max_bytes:
+        return source
+    keep_keys = (
+        "ok",
+        "supervisor_pid",
+        "supervisor_url",
+        "runtime_url",
+        "runtime_host",
+        "runtime_port",
+        "runtime_instance_id",
+        "transition_role",
+        "active_slot",
+        "previous_slot",
+        "desired_running",
+        "stopping",
+        "managed_pid",
+        "managed_alive",
+        "listener_running",
+        "runtime_api_ready",
+        "runtime_state",
+        "managed_start_reason",
+        "last_start_at",
+        "last_exit_at",
+        "last_stop_reason",
+        "last_error",
+        "hub_root_watchdog",
+        "member_hub_watchdog",
+        "required_upstream_link",
+        "warm_switch_enabled",
+        "warm_switch_allowed",
+        "warm_switch_reason",
+        "warm_switch_memory",
+        "candidate_slot",
+        "candidate_runtime_state",
+        "update_status",
+        "update_attempt",
+        "updated_at",
+    )
+    compact: dict[str, Any] = {}
+    for key in keep_keys:
+        if key not in source:
+            continue
+        value = source.get(key)
+        if key in {"hub_root_watchdog", "member_hub_watchdog"} and isinstance(value, Mapping):
+            compact[key] = _compact_watchdog_state(value, include_recent=False)
+        elif key == "required_upstream_link" and isinstance(value, Mapping):
+            compact[key] = _compact_required_upstream_link(value)
+        else:
+            compact[key] = value
+    compact["state_truncated"] = True
+    compact["state_observed_size_bytes"] = int(observed_size)
+    compact["state_max_bytes"] = int(max_bytes)
+    compact["state_omitted_keys"] = sorted(str(key) for key in source.keys() if key not in compact)
+    if _json_size_bytes(compact) > max_bytes:
+        compact.pop("hub_root_watchdog", None)
+        compact.pop("member_hub_watchdog", None)
+        compact.pop("required_upstream_link", None)
+        compact["state_guard_fallback"] = "minimal"
+    return compact
 
 
 def _local_update_payload() -> dict[str, Any]:
@@ -3176,7 +3536,7 @@ class SupervisorManager:
 
     def _hub_root_watchdog_state_payload(self) -> dict[str, Any]:
         log_path = _supervisor_hub_root_watchdog_log_path()
-        return {
+        payload = {
             "enabled": _hub_root_watchdog_enabled(),
             "last_state": self._hub_root_watchdog_last_state,
             "last_reason": self._hub_root_watchdog_last_reason,
@@ -3186,13 +3546,18 @@ class SupervisorManager:
             "reset_degraded_route": _hub_root_watchdog_reset_degraded_route_enabled(),
             "verify_timeout_sec": _hub_root_watchdog_verify_timeout_sec(),
             "log_path": str(log_path),
-            "recent_events": _read_jsonl_tail(log_path, limit=10),
+            "recent_events": [
+                _compact_watchdog_event(item)
+                for item in _read_jsonl_tail(log_path, limit=10)
+                if isinstance(item, Mapping)
+            ],
             "last_result": dict(self._hub_root_watchdog_last_result or {}),
         }
+        return _compact_watchdog_state(payload)
 
     def _member_hub_watchdog_state_payload(self) -> dict[str, Any]:
         log_path = _supervisor_member_hub_watchdog_log_path()
-        return {
+        payload = {
             "enabled": _member_hub_watchdog_enabled(),
             "last_state": self._member_hub_watchdog_last_state,
             "last_reason": self._member_hub_watchdog_last_reason,
@@ -3201,9 +3566,14 @@ class SupervisorManager:
             "cooldown_sec": _member_hub_watchdog_cooldown_sec(),
             "verify_timeout_sec": _member_hub_watchdog_verify_timeout_sec(),
             "log_path": str(log_path),
-            "recent_events": _read_jsonl_tail(log_path, limit=10),
+            "recent_events": [
+                _compact_watchdog_event(item)
+                for item in _read_jsonl_tail(log_path, limit=10)
+                if isinstance(item, Mapping)
+            ],
             "last_result": dict(self._member_hub_watchdog_last_result or {}),
         }
+        return _compact_watchdog_state(payload)
 
     @staticmethod
     def _required_upstream_link_kind_for_role(role: str | None) -> str:
@@ -3254,7 +3624,7 @@ class SupervisorManager:
             "cooldown_sec": float(payload.get("cooldown_sec") or 0.0),
             "verify_timeout_sec": float(payload.get("verify_timeout_sec") or 0.0),
             "served_by": "supervisor",
-            "watchdog": dict(payload),
+            "watchdog": _compact_watchdog_state(payload, include_recent=False),
             "blockers": [],
         }
 
@@ -3369,7 +3739,7 @@ class SupervisorManager:
             **payload,
         }
         try:
-            _append_jsonl(_supervisor_hub_root_watchdog_log_path(), event)
+            _append_jsonl(_supervisor_hub_root_watchdog_log_path(), _compact_watchdog_event(event))
         except Exception:
             _LOG.debug("failed to append hub-root watchdog event", exc_info=True)
 
@@ -3380,7 +3750,7 @@ class SupervisorManager:
             **payload,
         }
         try:
-            _append_jsonl(_supervisor_member_hub_watchdog_log_path(), event)
+            _append_jsonl(_supervisor_member_hub_watchdog_log_path(), _compact_watchdog_event(event))
         except Exception:
             _LOG.debug("failed to append member-hub watchdog event", exc_info=True)
 
@@ -4197,7 +4567,10 @@ class SupervisorManager:
 
     def _persist_runtime_state(self) -> None:
         with contextlib.suppress(Exception):
-            _write_json(_supervisor_runtime_state_path(), self._runtime_state_payload())
+            _write_json(
+                _supervisor_runtime_state_path(),
+                _bounded_supervisor_runtime_state_payload(self._runtime_state_payload()),
+            )
         with contextlib.suppress(Exception):
             write_memory_runtime_state(self._memory_runtime_state_payload())
 

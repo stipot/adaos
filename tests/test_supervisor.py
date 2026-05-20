@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -788,6 +790,124 @@ def test_hub_root_watchdog_restarts_sidecar_when_sidecar_owns_transport(monkeypa
     events = supervisor._read_jsonl_tail(supervisor._supervisor_hub_root_watchdog_log_path(), limit=5)
     assert events[-1]["action"] == "sidecar_restart"
     assert events[-1]["verification"]["ok"] is True
+
+
+def test_read_jsonl_tail_does_not_read_full_file(monkeypatch, tmp_path) -> None:
+    path = tmp_path / "watchdog.ndjson"
+    with path.open("w", encoding="utf-8") as handle:
+        for index in range(50):
+            handle.write(json.dumps({"index": index}) + "\n")
+
+    def _fail_read_text(self, *args, **kwargs):
+        raise AssertionError(f"unexpected full text read for {self}")
+
+    monkeypatch.setattr(Path, "read_text", _fail_read_text)
+
+    tail = supervisor._read_jsonl_tail(path, limit=3)
+
+    assert [item["index"] for item in tail] == [47, 48, 49]
+
+
+def test_watchdog_state_compacts_recursive_recent_events(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    nested_event = {
+        "event": "recovery_attempt",
+        "action": "runtime_reconnect",
+        "decision": {
+            "reason": "supervisor.hub_root.watchdog_reconnect",
+            "message": "x" * 2000,
+            "required_upstream_link": {
+                "kind": "hub_root",
+                "state": "down",
+                "watchdog": {
+                    "enabled": True,
+                    "recent_events": [{"blob": "y" * 5_000}],
+                    "last_result": {"result": {"error": "z" * 5_000}},
+                },
+            },
+        },
+        "result": {
+            "ok": False,
+            "strategy": {
+                "last_event": "down",
+                "recent_events": [{"blob": "r" * 5_000}],
+                "last_error": "e" * 2000,
+            },
+        },
+        "verification": {"ok": False, "state": "not_ready", "channel": {"last_summary": "s" * 2000}},
+    }
+    supervisor._append_jsonl(supervisor._supervisor_hub_root_watchdog_log_path(), nested_event)
+    manager._hub_root_watchdog_last_result = {
+        "requested_at": 123.0,
+        "action": "runtime_reconnect",
+        "decision": nested_event["decision"],
+        "result": nested_event["result"],
+        "verification": nested_event["verification"],
+    }
+
+    watchdog = manager._hub_root_watchdog_state_payload()
+    required = manager._required_upstream_link_state_payload(role="hub")
+
+    assert len(json.dumps(watchdog, ensure_ascii=False)) < 20_000
+    assert len(json.dumps(required, ensure_ascii=False)) < 10_000
+    assert "recent_events" not in required["watchdog"]
+    assert "recent_events" not in watchdog["last_result"]["decision"]["required_upstream_link"]["watchdog"]
+    assert watchdog["recent_events"][-1]["decision"]["message"].endswith("...<truncated>")
+
+
+def test_watchdog_event_append_writes_compact_payload(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+
+    manager._append_hub_root_watchdog_event(
+        {
+            "event": "recovery_attempt",
+            "action": "runtime_reconnect",
+            "decision": {
+                "required_upstream_link": {
+                    "kind": "hub_root",
+                    "watchdog": {"recent_events": [{"blob": "x" * 50_000}]},
+                },
+            },
+            "result": {"strategy": {"recent_events": [{"blob": "y" * 50_000}], "last_error": "e" * 2000}},
+        }
+    )
+
+    text = supervisor._supervisor_hub_root_watchdog_log_path().read_text(encoding="utf-8")
+    event = json.loads(text)
+
+    assert len(text) < 5_000
+    assert "recent_events" not in event["decision"]["required_upstream_link"]["watchdog"]
+    assert "recent_events" not in event["result"]["strategy"]
+
+
+def test_persist_runtime_state_bounds_oversized_payload(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_RUNTIME_STATE_MAX_BYTES", str(128 * 1024))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    monkeypatch.setattr(
+        manager,
+        "_runtime_state_payload",
+        lambda: {
+            "ok": True,
+            "runtime_state": "ready",
+            "active_slot": "A",
+            "hub_root_watchdog": {"recent_events": [{"blob": "x" * 300_000}]},
+            "required_upstream_link": {"kind": "hub_root", "watchdog": {"recent_events": [{"blob": "y" * 300_000}]}},
+        },
+    )
+    monkeypatch.setattr(manager, "_memory_runtime_state_payload", lambda: {"ok": True})
+    monkeypatch.setattr(supervisor, "write_memory_runtime_state", lambda payload: dict(payload))
+
+    manager._persist_runtime_state()
+
+    text = supervisor._supervisor_runtime_state_path().read_text(encoding="utf-8")
+    payload = json.loads(text)
+    assert len(text.encode("utf-8")) < 128 * 1024
+    assert payload["state_truncated"] is True
+    assert payload["state_observed_size_bytes"] > 128 * 1024
+    assert payload["runtime_state"] == "ready"
 
 
 def test_member_hub_watchdog_requests_reconnect_when_member_link_is_down(monkeypatch) -> None:
