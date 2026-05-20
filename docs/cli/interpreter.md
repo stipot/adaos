@@ -23,6 +23,8 @@ bridge falls back and the operator should run `adaos install` or the managed upd
 adaos interpreter status
 adaos interpreter sync-nlu
 adaos interpreter export-neural-training
+adaos interpreter neural-reindex --start --stop-after
+adaos interpreter neural-reindex --from-curated
 adaos interpreter train --engine rasa
 adaos interpreter parse "open modal nlu_teacher_modal"
 adaos interpreter intent list
@@ -41,6 +43,14 @@ Operator-approved examples can enter that bundle through the Teacher backend:
 `POST /api/nlu/teacher/{webspace_id}/example/save` emits
 `nlp.teacher.example.save` and writes the phrase to the selected
 skill/scenario/system-action target with audit metadata.
+
+`adaos interpreter neural-reindex --start --stop-after` reloads the active
+Neural service artifacts and rebuilds stale example indexes. `--purge-indexes`
+forces index cache removal before reload. `adaos interpreter neural-reindex
+--from-curated` performs a dry-run compatibility plan for the curated bundle.
+Use `--from-curated --apply` only after operator approval; it replaces active
+examples and triggers service reindex only when the curated labels are already
+present in the active Neural model labels.
 
 ## Runtime locations
 

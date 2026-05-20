@@ -238,6 +238,71 @@ def neural_diagnostics(
         raise typer.Exit(code=1)
 
 
+@app.command("neural-reindex")
+def neural_reindex(
+    start_service: bool = typer.Option(True, "--start/--no-start", help="Start the Neural service before reindex."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after reindex."),
+    purge_indexes: bool = typer.Option(False, "--purge-indexes", help="Remove cached indexes before service reload."),
+    from_curated: bool = typer.Option(False, "--from-curated", help="Plan or apply curated training bundle examples."),
+    apply: bool = typer.Option(False, "--apply", help="Apply the curated bundle before service reindex."),
+) -> None:
+    """
+    Reload the active Neural NLU provider and rebuild stale example indexes.
+    """
+    if from_curated:
+        ctx = get_ctx()
+        sync_from_scenarios_and_skills(ctx)
+        ws = _workspace()
+        plan = ws.plan_neural_curated_reindex(export=True)
+        if not apply:
+            typer.echo(
+                json.dumps(
+                    {"ok": True, "mode": "curated_plan", "plan": plan},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return
+        apply_result = ws.apply_neural_curated_reindex(plan=plan)
+        if not apply_result.get("ok"):
+            typer.echo(
+                json.dumps(
+                    {"ok": False, "mode": "curated_apply", "apply": apply_result},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            raise typer.Exit(code=1)
+        reindex_result = _run_blocking(
+            neural_service_bridge.reindex_active_model(
+                start_service=start_service,
+                stop_after=stop_after,
+                purge_indexes=purge_indexes,
+            )
+        )
+        result = {
+            "ok": bool(reindex_result.get("ok")),
+            "mode": "curated_apply",
+            "apply": apply_result,
+            "reindex": reindex_result,
+        }
+        typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+        if not result.get("ok"):
+            raise typer.Exit(code=1)
+        return
+
+    result = _run_blocking(
+        neural_service_bridge.reindex_active_model(
+            start_service=start_service,
+            stop_after=stop_after,
+            purge_indexes=purge_indexes,
+        )
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
 @app.command("status")
 def status(show_skills: bool = typer.Option(False, "--show-skills", help="Показать снимок установленных скиллов.")) -> None:
     """Показывает актуальность обучения и количество данных."""

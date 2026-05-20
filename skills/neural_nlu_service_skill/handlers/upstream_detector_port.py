@@ -1116,6 +1116,52 @@ class Detector:
             return neural
         return self._abstain(text=text, model_text=model_text, entity_resolution=entity_payload)
 
+    def _purge_example_indexes(self) -> list[str]:
+        root = self._artifacts_root()
+        removed: list[str] = []
+        for path in (
+            self._example_index_path(root),
+            self._example_index_path(root, role="negative"),
+            self._faiss_index_path(root),
+            self._faiss_index_path(root, role="negative"),
+            self._faiss_index_meta_path(root),
+            self._faiss_index_meta_path(root, role="negative"),
+        ):
+            try:
+                if path.exists():
+                    path.unlink()
+                    removed.append(str(path))
+            except Exception:
+                continue
+        return removed
+
+    def reindex(self, *, purge_indexes: bool = False) -> dict[str, Any]:
+        before = self.health()
+        removed_indexes = self._purge_example_indexes() if purge_indexes else []
+        self._cfg = self._load_ranker_config()
+        self._adapter = self._load_adapter()
+        self._engine = self._load_neural_engine()
+        after = self.health()
+        return {
+            "ok": bool(after.get("model_loaded")),
+            "purged_indexes": removed_indexes,
+            "before": {
+                "model_loaded": before.get("model_loaded"),
+                "model_id": before.get("model_id"),
+                "examples_total": before.get("examples_total"),
+                "example_index_backend": before.get("example_index_backend"),
+                "negative_example_index_backend": before.get("negative_example_index_backend"),
+            },
+            "after": {
+                "model_loaded": after.get("model_loaded"),
+                "model_id": after.get("model_id"),
+                "examples_total": after.get("examples_total"),
+                "example_index_backend": after.get("example_index_backend"),
+                "negative_example_index_backend": after.get("negative_example_index_backend"),
+            },
+            "health": after,
+        }
+
     def _normalize_adapter_result(self, out: dict[str, Any], *, model_text: str, entity_resolution: dict[str, Any]) -> dict[str, Any]:
         result = dict(out)
         result.setdefault("top_intent", result.get("intent") or "")
@@ -1164,7 +1210,7 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.8",
+            "version": "0.2.9",
             "torch_available": torch is not None,
             "faiss_available": faiss is not None,
             "model_loaded": bool(engine),

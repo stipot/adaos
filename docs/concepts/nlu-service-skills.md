@@ -131,6 +131,10 @@ index backend, service discovery, live `/health`, and model load status.
 `adaos interpreter neural-diagnostics --start --stop-after` wraps that
 readiness snapshot together with node-local usage aggregates from
 `state/nlu/neural_usage.json`.
+`adaos interpreter neural-reindex --start --stop-after` calls service
+`POST /reindex` so the Neural detector reloads the active artifacts and
+rebuilds stale positive/negative example indexes. Add `--purge-indexes` when an
+operator wants to discard existing index caches before reload.
 
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class
@@ -228,6 +232,14 @@ Operator-approved examples saved through
 `POST /api/nlu/teacher/{webspace_id}/example/save` are written to their owning
 skill/scenario artifacts or to the system-action feedback overlay before this
 export step, so Rasa and Neural consume the same curated source.
+`adaos interpreter neural-reindex --from-curated` compares that bundle with the
+active Neural artifacts and reports whether the examples can be applied without
+changing the current model labels. `--from-curated --apply` is allowed only when
+every curated label already exists in active `labels.json`; otherwise the
+operator must rebuild/retrain and promote a new `model.pt` before reindexing.
+On apply, AdaOS backs up the previous active `examples_manifest.jsonl`, copies
+the curated examples, removes stale index caches, and asks the service to
+reload.
 
 The parse and train bridges do not install or prepare Rasa. If the service-skill is missing, they return fallback
 reasons such as `rasa_base_url_unresolved` and let the operator run the install/update path intentionally.

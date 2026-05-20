@@ -75,6 +75,10 @@ Implemented now:
 - Operator-facing Neural NLU diagnostics that combine readiness with
   node-local usage aggregates:
   - `adaos interpreter neural-diagnostics --start --stop-after`
+- Active Neural service reindex:
+  - `adaos interpreter neural-reindex --start --stop-after`
+  - calls service `POST /reindex` to reload artifacts and rebuild stale
+    positive/negative example indexes.
 - Notebook artifact preparation script for Neural NLU:
   `skills/neural_nlu_service_skill/scripts/prepare_artifacts.py`.
 - Rasa NLU service-skill isolation from the hub Python environment.
@@ -94,6 +98,9 @@ Implemented now:
     `state/interpreter/neural_training/examples_manifest.jsonl`
   - strips Rasa entity annotations into plain text while preserving
     `raw_example` and owner metadata.
+  - `adaos interpreter neural-reindex --from-curated` dry-runs an operator
+    compatibility plan, and `--from-curated --apply` replaces active examples
+    only when all curated labels already exist in the active Neural model.
 - Operator-approved example save backend:
   - `POST /api/nlu/teacher/{webspace_id}/example/save`
   - event: `nlp.teacher.example.save`

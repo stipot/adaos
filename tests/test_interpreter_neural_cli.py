@@ -81,3 +81,51 @@ def test_export_neural_training_cli(monkeypatch):
 
     assert result.exit_code == 0
     assert json.loads(result.output) == {"ok": True, "examples_total": 3, "intents_total": 2}
+
+
+def test_neural_reindex_cli(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    seen = {}
+
+    async def _fake_reindex(**kwargs):
+        seen.update(kwargs)
+        return {"ok": True, "checks": {"model_loaded": True}}
+
+    monkeypatch.setattr(interpreter.neural_service_bridge, "reindex_active_model", _fake_reindex)
+
+    result = CliRunner().invoke(
+        interpreter.app,
+        ["neural-reindex", "--start", "--stop-after", "--purge-indexes"],
+    )
+
+    assert result.exit_code == 0
+    assert seen == {"start_service": True, "stop_after": True, "purge_indexes": True}
+    assert json.loads(result.output)["checks"]["model_loaded"] is True
+
+
+def test_neural_reindex_from_curated_plan_cli(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 1, "scenario_intents": 0, "system_action_intents": 0},
+    )
+
+    class FakeWorkspace:
+        def plan_neural_curated_reindex(self, *, export=True):
+            return {
+                "ok": True,
+                "apply_allowed": False,
+                "warnings": ["curated_labels_not_in_active_model"],
+            }
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(interpreter.app, ["neural-reindex", "--from-curated"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["mode"] == "curated_plan"
+    assert payload["plan"]["apply_allowed"] is False

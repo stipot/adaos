@@ -1,5 +1,5 @@
 name: neural_nlu_service_skill
-version: 0.2.8
+version: 0.2.9
 description: Local neural intent detector service for AdaOS NLU pipeline
 runtime:
   kind: service

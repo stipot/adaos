@@ -153,12 +153,47 @@ def test_detector_health_exposes_faiss_and_index_backend(monkeypatch, tmp_path):
 
     health = detector.health()
 
-    assert health["version"] == "0.2.8"
+    assert health["version"] == "0.2.9"
     assert "faiss_available" in health
     assert health["example_index"] == "faiss_disk"
     assert health["example_index_backend"] == "faiss"
     assert health["negative_example_index"] == "negative_faiss_disk"
     assert health["negative_example_index_backend"] == "faiss"
+
+
+def test_detector_reindex_reloads_engine(monkeypatch, tmp_path):
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    module = _load_detector_module()
+    detector = object.__new__(module.Detector)
+    detector._cfg = module.Config()
+    detector._adapter = None
+    detector._engine = {
+        "model_id": "old-model",
+        "examples": [],
+        "intent_map": {},
+    }
+
+    monkeypatch.setattr(detector, "_load_ranker_config", lambda: module.Config())
+    monkeypatch.setattr(detector, "_load_adapter", lambda: None)
+    monkeypatch.setattr(
+        detector,
+        "_load_neural_engine",
+        lambda: {
+            "model_id": "new-model",
+            "examples": [module.ExampleEntry(skill="weather.get", text="weather", masked="weather")],
+            "intent_map": {},
+            "example_index_backend": "torch_tensor",
+            "negative_example_index_backend": "torch_tensor",
+        },
+    )
+
+    result = detector.reindex()
+
+    assert result["ok"] is True
+    assert result["before"]["model_id"] == "old-model"
+    assert result["after"]["model_id"] == "new-model"
+    assert result["after"]["examples_total"] == 1
+    assert result["health"]["model_loaded"] is True
 
 
 def test_detector_auto_backend_migrates_valid_torch_cache_to_faiss(monkeypatch, tmp_path):

@@ -382,6 +382,80 @@ async def diagnose_readiness(*, start_service: bool = False, stop_after: bool = 
     }
 
 
+async def reindex_active_model(
+    *,
+    start_service: bool = True,
+    stop_after: bool = False,
+    purge_indexes: bool = False,
+) -> Dict[str, Any]:
+    """Ask the Neural service skill to reload artifacts and rebuild stale indexes."""
+    artifact_root = _neural_artifact_root()
+    artifacts_before = _artifact_readiness(artifact_root)
+    supervisor = get_service_supervisor()
+    service: dict[str, Any] = {
+        "name": "neural_nlu_service_skill",
+        "installed": False,
+        "base_url": None,
+        "started": False,
+    }
+    warnings = list(artifacts_before.get("warnings") or [])
+    result: dict[str, Any] | None = None
+    try:
+        await supervisor.refresh_discovered(force=True)
+        base_url = supervisor.resolve_base_url("neural_nlu_service_skill")
+    except Exception as exc:
+        base_url = None
+        warnings.append(f"service_discovery_failed:{type(exc).__name__}")
+
+    if base_url:
+        service["installed"] = True
+        service["base_url"] = base_url
+        if start_service:
+            try:
+                await supervisor.start("neural_nlu_service_skill")
+                service["started"] = True
+                service["base_url"] = supervisor.resolve_base_url("neural_nlu_service_skill") or base_url
+            except Exception as exc:
+                warnings.append(f"service_start_failed:{type(exc).__name__}")
+        try:
+            async with _SEMAPHORE:
+                future = asyncio.to_thread(
+                    _http_post_json,
+                    f"{service['base_url']}/reindex",
+                    {"purge_indexes": bool(purge_indexes)},
+                    timeout_ms=120_000,
+                )
+                result = await asyncio.wait_for(future, timeout=120.0)
+        except Exception as exc:
+            warnings.append(f"service_reindex_failed:{type(exc).__name__}")
+    else:
+        warnings.append("service_base_url_unresolved")
+
+    if stop_after and start_service:
+        try:
+            await supervisor.stop("neural_nlu_service_skill")
+        except Exception as exc:
+            warnings.append(f"service_stop_failed:{type(exc).__name__}")
+
+    artifacts_after = _artifact_readiness(artifact_root)
+    health = result.get("health") if isinstance(result, Mapping) else {}
+    health = health if isinstance(health, Mapping) else {}
+    ok = bool(service.get("installed")) and bool(result and result.get("ok")) and bool(health.get("model_loaded"))
+    return {
+        "ok": ok,
+        "artifacts_before": artifacts_before,
+        "artifacts_after": artifacts_after,
+        "service": service,
+        "reindex": result,
+        "checks": {
+            "service_installed": bool(service.get("installed")),
+            "service_reindex_ok": bool(result and result.get("ok")),
+            "model_loaded": bool(health.get("model_loaded")),
+        },
+        "warnings": warnings,
+    }
+
+
 async def parse_text(
     text: str,
     *,

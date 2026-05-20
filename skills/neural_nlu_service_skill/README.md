@@ -165,3 +165,28 @@ This writes `state/interpreter/neural_training/examples_manifest.jsonl`,
 `labels.json`, `intents_manifest.json`, and `summary.json`. Future rebuild or
 reindex commands can consume that bundle explicitly; the active
 `state/nlu/neural` layout is not changed by the export.
+
+To reload the active service model and rebuild stale positive/negative example
+indexes:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-reindex --start --stop-after
+```
+
+Use `--purge-indexes` to force index cache removal before the service reload.
+The curated bundle can be inspected without changing active artifacts:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-reindex --from-curated
+```
+
+Applying curated examples is deliberately guarded:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-reindex --from-curated --apply --start --stop-after
+```
+
+The apply path only replaces `state/nlu/neural/examples_manifest.jsonl` when all
+curated labels already exist in the active model `labels.json`. New labels still
+require a full model rebuild/retrain before promotion, because the current
+`model.pt` classifier head cannot score labels it was not trained with.

@@ -285,6 +285,62 @@ async def test_neural_diagnose_readiness_reports_artifacts_and_health(monkeypatc
 
 
 @pytest.mark.anyio
+async def test_neural_reindex_active_model_posts_reindex(monkeypatch, tmp_path):
+    from adaos.services.nlu import neural_service_bridge as bridge
+
+    root = tmp_path / "state" / "nlu" / "neural"
+    root.mkdir(parents=True)
+    for name in (
+        "model.pt",
+        "labels.json",
+        "vocab.json",
+        "examples_manifest.jsonl",
+        "ranker_config.json",
+        "metrics.json",
+    ):
+        (root / name).write_text("x", encoding="utf-8")
+
+    calls = []
+    posted = {}
+
+    class Supervisor:
+        async def refresh_discovered(self, force=False):
+            calls.append(("refresh", force))
+
+        async def start(self, name):
+            calls.append(("start", name))
+
+        async def stop(self, name):
+            calls.append(("stop", name))
+
+        def resolve_base_url(self, name):
+            calls.append(("resolve", name))
+            return "http://127.0.0.1:18091"
+
+    def fake_post(url, payload, *, timeout_ms):
+        posted["url"] = url
+        posted["payload"] = payload
+        posted["timeout_ms"] = timeout_ms
+        return {
+            "ok": True,
+            "health": {"ok": True, "model_loaded": True, "model_id": "unit-model"},
+        }
+
+    monkeypatch.setattr(bridge, "get_ctx", lambda: SimpleNamespace(paths=SimpleNamespace(state_dir=lambda: tmp_path / "state")))
+    monkeypatch.setattr(bridge, "get_service_supervisor", lambda: Supervisor())
+    monkeypatch.setattr(bridge, "_http_post_json", fake_post)
+
+    result = await bridge.reindex_active_model(start_service=True, stop_after=True, purge_indexes=True)
+
+    assert result["ok"] is True
+    assert posted["url"] == "http://127.0.0.1:18091/reindex"
+    assert posted["payload"] == {"purge_indexes": True}
+    assert result["checks"]["model_loaded"] is True
+    assert ("start", "neural_nlu_service_skill") in calls
+    assert ("stop", "neural_nlu_service_skill") in calls
+
+
+@pytest.mark.anyio
 async def test_neural_diagnose_readiness_fails_when_required_artifact_missing(monkeypatch, tmp_path):
     from adaos.services.nlu import neural_service_bridge as bridge
 

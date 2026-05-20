@@ -37,10 +37,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json(404, {"ok": False, "error": "not_found"})
 
-    def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/parse":
-            self._json(404, {"ok": False, "error": "not_found"})
-            return
+    def _read_payload(self) -> dict[str, Any]:
         try:
             length = int(self.headers.get("Content-Length") or "0")
         except Exception:
@@ -50,6 +47,19 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw.decode("utf-8", errors="ignore"))
         except Exception:
             payload = {}
+        return payload if isinstance(payload, dict) else {}
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/reindex":
+            payload = self._read_payload()
+            result = _DETECTOR.reindex(purge_indexes=bool(payload.get("purge_indexes")))
+            self._json(200, result)
+            return
+        if self.path != "/parse":
+            self._json(404, {"ok": False, "error": "not_found"})
+            return
+
+        payload = self._read_payload()
 
         text = payload.get("text") if isinstance(payload, dict) else None
         if not isinstance(text, str) or not text.strip():

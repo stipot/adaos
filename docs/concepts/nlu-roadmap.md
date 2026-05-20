@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **85%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **86%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -205,15 +205,17 @@ but the productionization checklist remains mostly open.
 - [ ] Export named-entity classes as masks, not as local alias training data.
 - [x] Let Teacher-approved corrections update regex, Neural, and Rasa datasets
   through the owning artifact.
-- [ ] Rebuild/reindex the neural provider from curated examples after
-  approved changes.
+- [x] Add governed Neural reindex planning/apply flow for curated examples
+  that are compatible with the active model labels.
+- [ ] Rebuild/retrain the neural provider for curated examples that introduce
+  new model labels.
 
 ## Immediate Next Steps
 
 1. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-2. Wire the exported Neural training bundle into governed rebuild/reindex
-   tooling after operator approval.
+2. Add full Neural retrain/rebuild/promotion when curated examples introduce
+   labels that are not present in the active model head.
 3. Add full model promotion gates using macro-F1, abstain rate, and latency.
 4. Route named-entity corrections to the governed named-entity write path.
 5. Add runtime-backed host actions for move/hide/pin before exporting them as
@@ -242,4 +244,7 @@ but the productionization checklist remains mostly open.
   examples under `state/interpreter/neural_training` without mutating active provider artifacts.
 - `nlp.teacher.example.save` and `POST /api/nlu/teacher/{webspace_id}/example/save` now save operator-approved examples
   into scenario/skill artifacts or a system-action feedback overlay with audit metadata.
+- `adaos interpreter neural-reindex` now reloads active Neural artifacts through service `/reindex`; `--from-curated`
+  dry-runs the curated bundle and `--from-curated --apply` is guarded so active examples are replaced only when all
+  curated labels already exist in the active model.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.
