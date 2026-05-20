@@ -2547,6 +2547,20 @@ Human verification:
   --receiver browsers.devices` (and `browsers.clients` when active). Idle
   periods without an open modal are not valid load evidence for these streams.
 
+Validation notes:
+
+- 2026-05-20: pushed `browsers_skill` revision
+  `4b51315bd75244988182a43764470a9a5d4f9557`, migrated `.30` and `.40` to
+  version `0.15.2`, and validated the manifest on both stands.
+- `.30`: synthetic browser stream subscription through `/ws` produced
+  `webio.stream.subscription.changed` and `webio.stream.snapshot.requested`;
+  `reliability-metrics --receiver browsers.devices` attributed publications to
+  `skill:browsers_skill` with bounded stream guard counters and no broad Yjs
+  devices/current-browser projection.
+- `.40`: skill migration and validation succeeded, but `desktop` reported
+  `yjs_runtime=not_applicable` / `webspaces=0`; use it only as an idle-memory
+  check until a browser activates the webspace.
+
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
 Status: in progress.
