@@ -2491,7 +2491,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 34%.
+Progress: 38%.
 
 Dependency:
 
@@ -2536,6 +2536,11 @@ Actions:
   refresh. Without this, `adaos skill migrate` could switch the runtime slot
   while the running process still served old handlers, leaving stream modals
   subscribed but empty until a manual `skill activate` or restart.
+- [x] Fix EventBus bounded coalescing for `webio.stream.*` control events so
+  duplicate work is superseded per handler, not globally across different
+  skill handlers listening to the same receiver. This preserves all intended
+  stream-control subscribers while still collapsing stale duplicate requests
+  inside each subscriber.
 - [ ] Apply shared `HotEventBudget` to browser session churn before publishing
   operator status or stream variables.
 - [ ] Identify status cards: browser runtime, session/auth, access-link
@@ -2583,6 +2588,11 @@ Validation notes:
   probe against the live runtime (`8778`) produced
   `owner=skill:browsers_skill attempted=2 published=2` for
   `browsers.devices`.
+- Follow-up cold-boot validation on active slot `239cb427` found a deeper
+  stream-control ordering bug: the EventBus bounded queue coalesced by
+  receiver globally before handler-specific coalescing, so later handlers could
+  remove `browsers_skill` work from the queue. Fixed locally with regression
+  coverage; deploy next core update and re-run the modal probe on `.30`.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 

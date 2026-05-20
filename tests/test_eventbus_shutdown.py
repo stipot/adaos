@@ -142,3 +142,45 @@ async def test_local_event_bus_reports_webio_stream_control_pressure():
     ok = await bus.wait_for_idle(timeout=1.0)
     assert ok is True
     assert seen == ["infrastate.realtime"]
+
+
+@pytest.mark.asyncio
+async def test_webio_stream_control_supersedes_per_handler_not_across_handlers():
+    bus = LocalEventBus()
+    release = asyncio.Event()
+    seen: list[tuple[str, int]] = []
+
+    async def handler_a(event: Event):
+        seen.append(("a", int(event.payload.get("seq") or 0)))
+        await release.wait()
+
+    async def handler_b(event: Event):
+        seen.append(("b", int(event.payload.get("seq") or 0)))
+        await release.wait()
+
+    bus.subscribe("webio.stream.snapshot.requested", handler_a)
+    bus.subscribe("webio.stream.snapshot.requested", handler_b)
+    for seq in range(3):
+        bus.publish(
+            Event(
+                type="webio.stream.snapshot.requested",
+                payload={
+                    "webspace_id": "desktop",
+                    "target_node_id": "node-1",
+                    "receiver": "browsers.devices",
+                    "source": "events_ws",
+                    "seq": seq,
+                },
+                source="test",
+                ts=0.0,
+            )
+        )
+
+    snapshot = bus.backlog_snapshot()
+    assert snapshot["bounded_queue_total"] <= 2
+
+    release.set()
+    ok = await bus.wait_for_idle(timeout=1.0)
+
+    assert ok is True
+    assert sorted(seen) == [("a", 2), ("b", 2)]

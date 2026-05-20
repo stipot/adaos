@@ -640,9 +640,10 @@ class LocalEventBus(EventBus):
                             supersede_key = self._bounded_supersede_key(event_type, event)
                             with self._lock:
                                 queue = self._bounded_queues[topic_key]
-                                superseded_coro = self._bounded_remove_superseded_locked(topic_key, supersede_key)
-                                if superseded_coro is not None:
-                                    superseded_coros.append(superseded_coro)
+                                if not self._bounded_supersede_by_handler_enabled(event_type):
+                                    superseded_coro = self._bounded_remove_superseded_locked(topic_key, supersede_key)
+                                    if superseded_coro is not None:
+                                        superseded_coros.append(superseded_coro)
                                 superseded_coros.extend(
                                     self._bounded_remove_handler_superseded_locked(
                                         topic_key,
