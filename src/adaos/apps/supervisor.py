@@ -783,6 +783,68 @@ def _bounded_supervisor_runtime_state_payload(payload: Mapping[str, Any]) -> dic
     return compact
 
 
+def _compact_control_plane_tripwire_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    source = dict(payload or {}) if isinstance(payload, Mapping) else {}
+    last_sample = source.get("last_sample") if isinstance(source.get("last_sample"), Mapping) else {}
+    state_files = last_sample.get("state_files") if isinstance(last_sample.get("state_files"), Mapping) else {}
+    offenders = state_files.get("offenders") if isinstance(state_files.get("offenders"), list) else []
+    last_action = source.get("last_action") if isinstance(source.get("last_action"), Mapping) else {}
+    containment = last_action.get("containment") if isinstance(last_action.get("containment"), Mapping) else {}
+    return {
+        "state": str(source.get("state") or "normal"),
+        "reason": str(source.get("reason") or "").strip() or None,
+        "since": source.get("since"),
+        "duration_sec": source.get("duration_sec"),
+        "cooldown_sec": source.get("cooldown_sec"),
+        "last_action_at": source.get("last_action_at"),
+        "last_action": (
+            {
+                "action": str(last_action.get("action") or "").strip() or None,
+                "critical_reason": str(last_action.get("critical_reason") or "").strip() or None,
+                "message": _compact_text(last_action.get("message"), limit=240),
+                "critical_for_sec": last_action.get("critical_for_sec"),
+                "containment": (
+                    {
+                        "archive_dir": str(containment.get("archive_dir") or "").strip() or None,
+                        "archived_total": containment.get("archived_total"),
+                    }
+                    if containment
+                    else None
+                ),
+            }
+            if last_action
+            else None
+        ),
+        "last_sample": {
+            "sampled_at": last_sample.get("sampled_at"),
+            "supervisor_pid": last_sample.get("supervisor_pid"),
+            "supervisor_rss_bytes": last_sample.get("supervisor_rss_bytes"),
+            "supervisor_rss_threshold_bytes": last_sample.get("supervisor_rss_threshold_bytes"),
+            "runtime_pid": last_sample.get("runtime_pid"),
+            "runtime_family_rss_bytes": last_sample.get("runtime_family_rss_bytes"),
+            "runtime_family_rss_threshold_bytes": last_sample.get("runtime_family_rss_threshold_bytes"),
+            "swap_used_bytes": last_sample.get("swap_used_bytes"),
+            "swap_used_threshold_bytes": last_sample.get("swap_used_threshold_bytes"),
+            "available_memory_bytes": last_sample.get("available_memory_bytes"),
+            "available_memory_percent": last_sample.get("available_memory_percent"),
+            "state_files": {
+                "max_file_bytes": state_files.get("max_file_bytes"),
+                "threshold_bytes": state_files.get("threshold_bytes"),
+                "runtime_threshold_bytes": state_files.get("runtime_threshold_bytes"),
+                "offenders": [
+                    {
+                        "name": str(item.get("name") or "").strip() or None,
+                        "size_bytes": item.get("size_bytes"),
+                        "threshold_bytes": item.get("threshold_bytes"),
+                    }
+                    for item in offenders
+                    if isinstance(item, Mapping)
+                ],
+            },
+        },
+    }
+
+
 def _local_update_payload() -> dict[str, Any]:
     return {
         "ok": True,
@@ -6432,6 +6494,11 @@ class SupervisorManager:
                 "critical_reason": str(runtime.get("critical_reason") or "").strip() or None,
                 "critical_since": runtime.get("critical_since"),
                 "critical_restart_last_at": runtime.get("critical_restart_last_at"),
+                "control_plane_tripwire": _compact_control_plane_tripwire_payload(
+                    runtime.get("control_plane_tripwire")
+                    if isinstance(runtime.get("control_plane_tripwire"), Mapping)
+                    else {}
+                ),
                 "selected_profiler_adapter": str(runtime.get("selected_profiler_adapter") or DEFAULT_PROFILER_ADAPTER),
                 "sessions_total": int(runtime.get("sessions_total") or 0),
                 "last_session": compact_session,

@@ -3974,6 +3974,8 @@ def test_public_memory_status_uses_compact_last_session(monkeypatch, tmp_path) -
     assert payload["memory"]["last_session"]["session_id"] == session_id
     assert payload["memory"]["last_session"]["publish_state"] == "published"
     assert payload["memory"]["auto_profile_min_uptime_sec"] == 300.0
+    assert payload["memory"]["control_plane_tripwire"]["state"] == "normal"
+    assert "last_sample" in payload["memory"]["control_plane_tripwire"]
 
 
 def test_memory_policy_auto_profile_waits_for_min_uptime(monkeypatch, tmp_path) -> None:

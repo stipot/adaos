@@ -3190,8 +3190,9 @@ Human verification:
   sizes. Oversized state files are archived/truncated immediately under
   `state/incidents/control-plane-state-tripwire-*`; sustained runtime-family
   pressure requests `restart_runtime`; sustained supervisor RSS pressure
-  requests an autostart supervisor self-restart when available. The sample and
-  last action are exposed in `memory.control_plane_tripwire`.
+  requests an autostart supervisor self-restart when available. The compact
+  sample and last action are exposed in public memory status as
+  `memory.control_plane_tripwire`.
 - [ ] Roll out the control-plane tripwire to `.30`/`.40`; verify
   `/api/supervisor/public/memory-status` exposes `control_plane_tripwire`,
   and run a short browser-attached soak showing no oversized supervisor state,
