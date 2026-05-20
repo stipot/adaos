@@ -420,6 +420,9 @@ Recommended rules:
   churn
 - publish the latest stable state, plus counters such as `flap_count`,
   `last_raw_state`, and `last_raw_at` when useful
+- keep budget diagnostics in Yjs stable: counters and last reason are fine, but
+  do not put a live `updated_at` diagnostic snapshot into a projected object
+  because it defeats fingerprint-based dedupe
 - let hard states bypass smoothing: revoked, denied, auth required, guard
   quarantined, explicit user disconnect, or admin shutdown
 - never trigger a full skill snapshot rebuild for each raw hot event

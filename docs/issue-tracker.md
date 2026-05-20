@@ -1035,7 +1035,10 @@ burst. Current skill-optimization pass also budgets
 `device.registered` / `browser.session.changed` /
 `webrtc.peer.state.changed` before `infrastate_skill` writes background-refresh
 pending markers into Yjs, with one trailing refresh to deliver the final
-current state. This is not the primary safety mechanism: the deliberately heavy
+current state. `infrascope_skill` now applies the same shared budget/trailing
+pattern to browser-runtime events and to member snapshot/meta bursts before
+they can schedule repeated overview/inventory refreshes. This is not the
+primary safety mechanism: the deliberately heavy
 `infrastate` path remains a useful crash-test for kernel-level containment, and
 the owner-quarantine work is tracked under HMG-007.
 
@@ -1068,11 +1071,16 @@ Actions:
 - [x] Budget `infrastate_skill` browser/device runtime events before the
   background-refresh pending Yjs write; expose suppression/trailing counters in
   `projection_diag`.
-- [ ] Fix the `browsers_skill` `current_device_id` bug and ensure background
+- [x] Budget `infrascope_skill` browser-runtime and
+  `subnet.member.snapshot.*` / `subnet.member.meta.changed` refresh triggers
+  before scheduling background overview/inventory rebuilds.
+- [x] Fix the `browsers_skill` `current_device_id` bug and ensure background
   snapshot tasks fail noisily but safely, without leaving orphan churn behind.
-- [ ] Review all skills subscribed to `subnet.member.snapshot.changed` and
+- [x] Review all skills subscribed to `subnet.member.snapshot.changed` and
   `webio.stream.snapshot.requested` for duplicate work, full-state publish, and
-  missing debounce.
+  missing debounce. Current hot-path owners are
+  `infrastate_skill`, `infrascope_skill`, and `browsers_skill`; the remaining
+  `demo_metrics_skill` stream snapshot handler only emits one small demo event.
 
 Validation notes:
 
@@ -2461,7 +2469,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 46%.
+Progress: 58%.
 
 Current useful pattern:
 
@@ -2491,6 +2499,9 @@ Actions:
 - [x] Fix the core control-plane object cache so slow builds are cached from
   completion time and concurrent same-webspace requests coalesce behind one
   builder.
+- [x] Apply shared `HotEventBudget` to `infrascope_skill` browser-runtime and
+  member-snapshot/meta refresh triggers; suppressed bursts keep one trailing
+  refresh and only stable counters enter Yjs metadata.
 - [ ] Identify `infrascope` status cards: overview, active incidents,
   inventory, browser/runtime state, registry, and operations.
 - [ ] Publish cards through the shared SDK helpers.

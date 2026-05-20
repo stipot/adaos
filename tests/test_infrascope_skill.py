@@ -357,6 +357,78 @@ def test_infrascope_webspace_event_invalidates_projection_state(monkeypatch):
     assert scheduled == [{"webspace_id": "desktop", "reason": "desktop.webspace.reloaded"}]
 
 
+def test_infrascope_browser_runtime_refresh_is_budgeted_with_trailing_refresh(monkeypatch):
+    mod = _load_infrascope_module()
+    scheduled: list[tuple[str | None, str]] = []
+    delayed: list[tuple[str, str | None, str, int]] = []
+
+    monkeypatch.setattr(
+        mod,
+        "_HOT_REFRESH_BUDGET",
+        mod.HotEventBudget(debounce_ms=1000, window_ms=5000, max_events=2),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_schedule_snapshot_refresh",
+        lambda *, webspace_id=None, reason="runtime.event": scheduled.append((webspace_id, reason)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_schedule_trailing_hot_refresh",
+        lambda *, topic, webspace_id=None, reason="runtime.event", delay_ms=1000: delayed.append(
+            (topic, webspace_id, reason, delay_ms)
+        ),
+    )
+
+    evt = SimpleNamespace(type="browser.session.changed", payload={"webspace_id": "desktop"})
+    mod.on_browser_runtime_changed(evt)
+    mod.on_browser_runtime_changed(evt)
+
+    assert scheduled == [("desktop", "browser.session.changed")]
+    assert len(delayed) == 1
+    assert delayed[0][0:3] == ("infrascope.browser_runtime.changed", "desktop", "browser.session.changed")
+    assert delayed[0][3] > 0
+    assert mod._hot_refresh_diag["suppressed_total"] >= 1
+
+
+def test_infrascope_member_snapshot_refresh_is_budgeted_with_trailing_refresh(monkeypatch):
+    mod = _load_infrascope_module()
+    scheduled: list[tuple[str | None, str]] = []
+    delayed: list[tuple[str, str | None, str, int]] = []
+
+    monkeypatch.setattr(
+        mod,
+        "_HOT_REFRESH_BUDGET",
+        mod.HotEventBudget(debounce_ms=1000, window_ms=5000, max_events=2),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_schedule_snapshot_refresh",
+        lambda *, webspace_id=None, reason="runtime.event": scheduled.append((webspace_id, reason)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_schedule_trailing_hot_refresh",
+        lambda *, topic, webspace_id=None, reason="runtime.event", delay_ms=1000: delayed.append(
+            (topic, webspace_id, reason, delay_ms)
+        ),
+    )
+
+    evt = SimpleNamespace(type="subnet.member.snapshot.changed", payload={"webspace_id": "desktop"})
+    mod.on_runtime_event(evt)
+    mod.on_runtime_event(evt)
+
+    assert scheduled == [("desktop", "subnet.member.snapshot.changed")]
+    assert len(delayed) == 1
+    assert delayed[0][0:3] == (
+        "infrascope.member_snapshot.changed",
+        "desktop",
+        "subnet.member.snapshot.changed",
+    )
+    assert delayed[0][3] > 0
+    assert mod._hot_refresh_diag["last_event"] == "subnet.member.snapshot.changed"
+
+
 def test_infrascope_scenario_declares_inventory_drilldown_and_inspector_flow():
     root = Path(__file__).resolve().parents[1]
     scenario_path = root / ".adaos" / "workspace" / "scenarios" / "infrascope" / "scenario.json"
