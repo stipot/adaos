@@ -10,7 +10,7 @@ from adaos.apps.api.auth import require_token
 from adaos.domain import make_client_subscription_record, make_projection_subscription
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_dispatcher import clear_projection_dispatcher
-from adaos.services.status_card_registry import clear_status_card_registry
+from adaos.services.status_card_registry import clear_status_card_registry, status_card_registry_snapshot
 
 
 def _make_client() -> TestClient:
@@ -62,6 +62,16 @@ def _sample_infrascope_snapshot() -> dict:
         },
         "operations": {"active": []},
     }
+
+
+def _sample_infrascope_snapshot_for(webspace_id: str) -> dict:
+    snapshot = _sample_infrascope_snapshot()
+    snapshot["summary"] = {
+        "label": "Infrascope",
+        "value": "nominal",
+        "subtitle": f"{webspace_id} operator view",
+    }
+    return snapshot
 
 
 def test_projection_dispatcher_snapshot_endpoint_is_empty_by_default() -> None:
@@ -169,3 +179,69 @@ def test_projection_dispatcher_refreshes_demanded_infrascope_card_from_yjs(monke
     assert refreshed["record"]["data"]["summary"] == "Infrascope | nominal | operator view"
     assert refreshed["record"]["meta"]["projection_key"] == "status-card:infrascope-overview"
     assert payload["dispatcher"]["lifecycle"][0]["status"] == "ready"
+
+
+def test_projection_dispatcher_infrascope_refresh_does_not_churn_unrelated_webspaces(monkeypatch) -> None:
+    client = _make_client()
+    for webspace_id in ("desktop", "dev"):
+        write_client_subscription_record(
+            make_client_subscription_record(
+                client_id=f"browser-{webspace_id}",
+                device_id=webspace_id,
+                session_id=f"session-{webspace_id}",
+                webspace_id=webspace_id,
+                role="operator",
+                subscriptions=[
+                    make_projection_subscription(
+                        projection_key="status-card:infrascope-overview",
+                        consumer_id="widget:infrascope",
+                        consumer_kind="widget",
+                    )
+                ],
+            )
+        )
+
+    read_webspaces: list[str] = []
+
+    class FakeYDoc:
+        def __init__(self, webspace_id: str):
+            self.webspace_id = webspace_id
+
+        def get_map(self, name):
+            assert name == "data"
+            return {"infrascope": _sample_infrascope_snapshot_for(self.webspace_id)}
+
+    class FakeReadContext:
+        def __init__(self, webspace_id: str):
+            self.webspace_id = webspace_id
+
+        async def __aenter__(self):
+            read_webspaces.append(self.webspace_id)
+            return FakeYDoc(self.webspace_id)
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "async_read_ydoc", lambda webspace_id: FakeReadContext(webspace_id))
+
+    resp = client.post(
+        "/api/node/projection-dispatcher/dispatch",
+        json={
+            "type": "infrascope.snapshot.changed",
+            "payload": {"webspace_id": "desktop"},
+            "source": "test",
+        },
+    )
+    desktop_snapshot = status_card_registry_snapshot(webspace_id="desktop")
+    dev_snapshot = status_card_registry_snapshot(webspace_id="dev")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert [item["webspace_id"] for item in payload["report"]["selected"]] == ["desktop"]
+    assert [item["webspace_id"] for item in payload["report"]["refreshed"]] == ["desktop"]
+    assert read_webspaces == ["desktop"]
+    assert desktop_snapshot["card_total"] == 1
+    assert desktop_snapshot["cards"][0]["summary"] == "Infrascope | nominal | desktop operator view"
+    assert dev_snapshot["card_total"] == 0
