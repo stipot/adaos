@@ -318,6 +318,7 @@
 [services/nlu/candidates_runtime.py](services/nlu/candidates_runtime.py)
 [funcs: sync_from_scenarios_and_skills](services/nlu/data_registry.py)
 [services/nlu/dispatcher.py](services/nlu/dispatcher.py)
+[funcs: save_feedback_example, collect_system_action_feedback_examples](services/nlu/feedback_examples.py)
 [services/nlu/llm_teacher_runtime.py](services/nlu/llm_teacher_runtime.py)
 [funcs: invalidate_dynamic_regex_cache, describe_builtin_regex_rules](services/nlu/pipeline.py)
 [services/nlu/rasa_service_bridge.py](services/nlu/rasa_service_bridge.py)

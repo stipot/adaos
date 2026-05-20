@@ -94,6 +94,12 @@ Implemented now:
     `state/interpreter/neural_training/examples_manifest.jsonl`
   - strips Rasa entity annotations into plain text while preserving
     `raw_example` and owner metadata.
+- Operator-approved example save backend:
+  - `POST /api/nlu/teacher/{webspace_id}/example/save`
+  - event: `nlp.teacher.example.save`
+  - targets: `skill`, `scenario`, or `system_action`
+  - writes audit metadata into `data.nlu_teacher.dataset[]` and the owning
+    training artifact.
 - Stage trace persistence in `data.nlu_trace.items[]`.
 - Schema-driven NLU Teacher modal that shows missed requests, candidates, raw event payloads, and Apply actions.
 
@@ -257,7 +263,9 @@ NLU Teacher should write accepted corrections back to the owning artifact:
 
 - skill examples/rules for skill actions;
 - scenario examples/rules for scenario flows;
-- system action examples/templates for core/client commands;
+- system action examples/templates for core/client commands, currently as an
+  audited overlay at `state/interpreter/system_action_feedback.jsonl` that is
+  consumed by Rasa and Neural export;
 - named-entity aliases through the governed named-entity write path.
 
 ## Rasa as a service-skill
@@ -328,6 +336,9 @@ In the default web desktop scenario the current NLU Teacher UI is a schema-drive
     - for `regex_rule` candidates: persists the rule into a workspace owner (preferably a skill), then mirrors into
       `data.nlu.regex_rules` as a runtime cache so the next request matches immediately (`via="regex.dynamic"`)
     - for `skill`/`scenario` candidates: creates a development plan item
+  - `nlp.teacher.example.save`: persists an operator-approved positive
+    example into a selected skill, scenario, or system-action feedback target
+    with audit metadata
   - a successful apply emits `ui.notify` with the owner (skill/scenario) where the rule was installed
 
 Required UI expansion:

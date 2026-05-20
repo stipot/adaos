@@ -209,6 +209,16 @@ _SYSTEM_ACTIONS: tuple[dict[str, Any], ...] = (
         "slots": {},
         "nlu_intents": [],
     },
+    {
+        "id": "host.nlp.teacher.example.save",
+        "kind": "host_action",
+        "status": "active",
+        "action": "nlp.teacher.example.save",
+        "description": "Save an operator-approved NLU example into a selected skill/scenario/system-action target.",
+        "params": {"text": "string", "intent": "string", "target": "{type,id}", "slots": "object"},
+        "slots": {},
+        "nlu_intents": [],
+    },
 )
 
 

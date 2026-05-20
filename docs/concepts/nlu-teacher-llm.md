@@ -52,7 +52,9 @@ The NLU Teacher modal should become the operator-facing workbench for testing an
 Current UI status:
 
 - Implemented: User requests tab, Candidates tab, raw JSON event inspection, revision Apply, and candidate Apply.
-- Implemented in backend/API: dry-run phrase probe and dynamic lookup inspection.
+- Implemented in backend/API: dry-run phrase probe, dynamic lookup inspection,
+  and operator-approved example save with skill/scenario/system-action target
+  selection.
 - Missing in UI: Check phrase, trace/ranking/entities/action preview, Correct/Fix/Save example, template inventory, and patch preview.
 
 Target controls:
@@ -291,6 +293,13 @@ Apply can be triggered from UI or programmatically:
 - apply a teacher candidate:
   - `nlp.teacher.candidate.apply { candidate_id, target? }`
   - for `regex_rule` candidates the runtime delegates to `nlp.teacher.regex_rule.apply { intent, pattern, target? }`
+- save an operator-approved positive example:
+  - `nlp.teacher.example.save { text, intent, target, slots?, request_id? }`
+  - `POST /api/nlu/teacher/{webspace_id}/example/save`
+  - `target.type` is `skill`, `scenario`, or `system_action`
+  - system-action examples are saved to
+    `state/interpreter/system_action_feedback.jsonl` and included in later
+    Rasa/Neural exports
 
 ## Where regex rules are stored
 

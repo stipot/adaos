@@ -14,6 +14,7 @@ from adaos.services.nlu.baseline_content import (
     default_desktop_nlu,
     merge_default_desktop_nlu,
 )
+from adaos.services.nlu.feedback_examples import collect_system_action_feedback_examples
 
 _log = logging.getLogger("adaos.nlu.registry")
 
@@ -51,11 +52,21 @@ def _sync_skill_nlu_metadata(ctx: AgentContext) -> int:
 
         nlu_section = payload.get("nlu") or {}
         intents_raw = nlu_section.get("intents") or []
-        if not isinstance(intents_raw, list) or not intents_raw:
+        if isinstance(intents_raw, Mapping):
+            intent_entries = [
+                {"intent": intent_id, **dict(spec)}
+                for intent_id, spec in intents_raw.items()
+                if isinstance(intent_id, str) and isinstance(spec, Mapping)
+            ]
+        elif isinstance(intents_raw, list):
+            intent_entries = intents_raw
+        else:
+            intent_entries = []
+        if not intent_entries:
             continue
 
         intents_doc: List[Dict[str, Any]] = []
-        for entry in intents_raw:
+        for entry in intent_entries:
             if not isinstance(entry, dict):
                 continue
             name = entry.get("name") or entry.get("intent")
@@ -157,6 +168,24 @@ def sync_from_scenarios_and_skills(ctx: AgentContext) -> Dict[str, Any]:
     ws = InterpreterWorkspace(ctx)
     skill_count = _sync_skill_nlu_metadata(ctx)
     scenario_mappings = _collect_scenario_intents(ctx)
+    system_feedback = collect_system_action_feedback_examples(ctx)
+    if system_feedback:
+        for mapping in scenario_mappings:
+            if mapping.scenario != "system" or not mapping.intent:
+                continue
+            extra = system_feedback.get(mapping.intent) or []
+            if extra:
+                seen: set[str] = set()
+                merged: list[str] = []
+                for item in [*mapping.examples, *extra]:
+                    if not isinstance(item, str) or not item.strip():
+                        continue
+                    token = item.strip()
+                    if token in seen:
+                        continue
+                    seen.add(token)
+                    merged.append(token)
+                mapping.examples = merged
     system_action_count = len(
         {
             mapping.intent

@@ -224,6 +224,10 @@ For Neural NLU, `adaos interpreter export-neural-training` writes the same
 curated ownership-aware examples into
 `state/interpreter/neural_training/examples_manifest.jsonl`. This is a rebuild
 input, not a mutation of the active `state/nlu/neural` model artifacts.
+Operator-approved examples saved through
+`POST /api/nlu/teacher/{webspace_id}/example/save` are written to their owning
+skill/scenario artifacts or to the system-action feedback overlay before this
+export step, so Rasa and Neural consume the same curated source.
 
 The parse and train bridges do not install or prepare Rasa. If the service-skill is missing, they return fallback
 reasons such as `rasa_base_url_unresolved` and let the operator run the install/update path intentionally.

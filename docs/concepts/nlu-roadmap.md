@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **83%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **85%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -30,9 +30,10 @@ but the productionization checklist remains mostly open.
 - [x] Human verification checklist separates current API/CLI checks from target UI behavior.
 - [ ] UI field for "check phrase" wired to the probe endpoint.
 - [ ] UI buttons: "correct", "fix", "save example".
-- [ ] Operator-approved positive feedback stored with audit metadata.
-- [ ] Route accepted feedback to the owning artifact:
-  skill, scenario, system action catalog, or named-entity source.
+- [x] Operator-approved positive feedback stored with audit metadata.
+- [x] Route accepted feedback to the owning NLU training artifact:
+  skill, scenario, or system action feedback overlay.
+- [ ] Route named-entity corrections to the governed named-entity source.
 - [ ] Add explicit correction targets for core/client actions that are not
   implemented as skills.
 
@@ -202,7 +203,7 @@ but the productionization checklist remains mostly open.
 - [x] Export scenario-owned examples from scenarios.
 - [x] Export core/client command examples from the system action catalog.
 - [ ] Export named-entity classes as masks, not as local alias training data.
-- [ ] Let Teacher-approved corrections update regex, Neural, and Rasa datasets
+- [x] Let Teacher-approved corrections update regex, Neural, and Rasa datasets
   through the owning artifact.
 - [ ] Rebuild/reindex the neural provider from curated examples after
   approved changes.
@@ -211,11 +212,10 @@ but the productionization checklist remains mostly open.
 
 1. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-2. Add "save correct example" backend action with skill/scenario/system-action
-   target selection and audit metadata.
-3. Wire the exported Neural training bundle into governed rebuild/reindex
+2. Wire the exported Neural training bundle into governed rebuild/reindex
    tooling after operator approval.
-4. Add full model promotion gates using macro-F1, abstain rate, and latency.
+3. Add full model promotion gates using macro-F1, abstain rate, and latency.
+4. Route named-entity corrections to the governed named-entity write path.
 5. Add runtime-backed host actions for move/hide/pin before exporting them as
    active NLU commands.
 
@@ -240,4 +240,6 @@ but the productionization checklist remains mostly open.
   default desktop commands such as modal open, scenario switch, app install toggle, webspace reload, and webspace reset.
 - `adaos interpreter export-neural-training` writes a curated Neural training bundle from skill, scenario, and system-action
   examples under `state/interpreter/neural_training` without mutating active provider artifacts.
+- `nlp.teacher.example.save` and `POST /api/nlu/teacher/{webspace_id}/example/save` now save operator-approved examples
+  into scenario/skill artifacts or a system-action feedback overlay with audit metadata.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

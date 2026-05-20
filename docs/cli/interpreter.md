@@ -37,6 +37,11 @@ entity annotations into plain text, and preserves owner metadata for future
 review/rebuild tooling. It does not modify active Neural artifacts under
 `.adaos/state/nlu/neural`.
 
+Operator-approved examples can enter that bundle through the Teacher backend:
+`POST /api/nlu/teacher/{webspace_id}/example/save` emits
+`nlp.teacher.example.save` and writes the phrase to the selected
+skill/scenario/system-action target with audit metadata.
+
 ## Runtime locations
 
 - Workspace template copy: `.adaos/workspace/skills/rasa_nlu_service_skill`
