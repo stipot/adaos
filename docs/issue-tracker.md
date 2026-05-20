@@ -2430,7 +2430,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 45%.
+Progress: 46%.
 
 Current useful pattern:
 
@@ -2621,6 +2621,13 @@ Validation notes:
   payload pressure. Core fix: `StreamRuntime` now stamps `owner`, `skill_id`,
   and `skill_name` into stream `_meta` by default, so active Browsers updates
   have the same attribution as direct snapshot-on-subscribe recovery.
+- Android TV follow-up (`dev_900ed67b...`) showed the TV client received
+  `browsers.devices` / `browsers.clients` stream events while the Browsers
+  surface was subscribed, then explicitly unsubscribed those receivers at
+  `2026-05-20T15:18:58Z`. After that, no stream reaction is expected on TV
+  until the surface opens/subscribes again. This is not evidence of a broken
+  stream route; if the modal was visibly open at that time, investigate the
+  client component lifecycle that released the receiver.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 
