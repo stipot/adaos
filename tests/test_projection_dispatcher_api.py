@@ -39,6 +39,31 @@ def _make_client() -> TestClient:
     return TestClient(app)
 
 
+def _sample_infrascope_snapshot() -> dict:
+    return {
+        "summary": {
+            "label": "Infrascope",
+            "value": "nominal",
+            "subtitle": "operator view",
+        },
+        "overview": {
+            "active_incidents": [],
+            "active_runtimes": [{"id": "runtime-a", "status": "online"}],
+        },
+        "inventory": {
+            "all": [
+                {"id": "browser-a", "kind": "browser", "status": "online"},
+                {"id": "skill-a", "kind": "skill", "status": "online"},
+            ],
+            "browsers": [{"id": "browser-a", "status": "online"}],
+            "runtimes": [{"id": "runtime-a", "status": "online"}],
+            "skills": [{"id": "skill-a", "status": "online"}],
+            "scenarios": [{"id": "desktop", "status": "online"}],
+        },
+        "operations": {"active": []},
+    }
+
+
 def test_projection_dispatcher_snapshot_endpoint_is_empty_by_default() -> None:
     client = _make_client()
 
@@ -47,8 +72,8 @@ def test_projection_dispatcher_snapshot_endpoint_is_empty_by_default() -> None:
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["ok"] is True
-    assert payload["handler_total"] == 1
-    assert payload["handlers"] == ["status-card:*"]
+    assert payload["handler_total"] == 2
+    assert payload["handlers"] == ["status-card:*", "status-card:infrascope-*"]
     assert payload["stats"]["incoming_total"] == 0
 
 
@@ -89,3 +114,58 @@ def test_projection_dispatcher_dispatch_endpoint_selects_demanded_projection() -
     assert payload["dispatcher"]["stats"]["incoming_total"] == 1
     assert payload["dispatcher"]["stats"]["refreshed_total"] == 1
     assert payload["dispatcher"]["lifecycle"][0]["status"] == "unavailable"
+
+
+def test_projection_dispatcher_refreshes_demanded_infrascope_card_from_yjs(monkeypatch) -> None:
+    client = _make_client()
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:infrascope-overview",
+                    consumer_id="widget:infrascope",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    class FakeYDoc:
+        def get_map(self, name):
+            assert name == "data"
+            return {"infrascope": _sample_infrascope_snapshot()}
+
+    class FakeReadContext:
+        async def __aenter__(self):
+            return FakeYDoc()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "async_read_ydoc", lambda _webspace_id: FakeReadContext())
+
+    resp = client.post(
+        "/api/node/projection-dispatcher/dispatch",
+        json={
+            "type": "infrascope.snapshot.changed",
+            "payload": {"webspace_id": "desktop"},
+            "source": "test",
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    refreshed = payload["report"]["refreshed"][0]
+    assert payload["report"]["selected"][0]["projection_key"] == "status-card:infrascope-overview"
+    assert refreshed["status"] == "ready"
+    assert refreshed["reason"] == "materialized"
+    assert refreshed["record"]["data"]["summary"] == "Infrascope | nominal | operator view"
+    assert refreshed["record"]["meta"]["projection_key"] == "status-card:infrascope-overview"
+    assert payload["dispatcher"]["lifecycle"][0]["status"] == "ready"

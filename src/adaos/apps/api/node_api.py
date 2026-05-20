@@ -53,14 +53,18 @@ from adaos.services.projection_demand import (
 )
 from adaos.services.projection_demand_mapper import build_browser_projection_demand_record
 from adaos.services.projection_dispatcher import (
+    ProjectionRefreshContext,
+    ProjectionRefreshResult,
     dispatch_demanded_projection_refresh,
     projection_dispatcher_snapshot,
+    register_projection_refresh_handler,
 )
 from adaos.services.projection_diagnostics import projection_operator_diagnostics
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
     publish_status_card,
+    status_card_id_from_projection_key,
     status_card_projection_record,
     status_card_registry_snapshot,
     sweep_status_card_registry,
@@ -115,6 +119,7 @@ from adaos.services.yjs.webspace import coerce_webspace_id, default_webspace_id
 
 router = APIRouter()
 _log = logging.getLogger("adaos.api.node_api")
+INFRASCOPE_STATUS_CARD_WILDCARD_HANDLER = "status-card:infrascope-*"
 _RELIABILITY_SUMMARY_METRICS_LOCK = threading.Lock()
 _RELIABILITY_SUMMARY_METRICS: dict[str, Any] = {
     "requestTotal": 0,
@@ -223,6 +228,56 @@ def _compact_status_card_refresh(refresh: Mapping[str, Any]) -> dict[str, Any]:
     if reason:
         compact["reason"] = reason
     return compact
+
+
+async def _refresh_infrascope_status_card_projection(
+    context: ProjectionRefreshContext,
+) -> ProjectionRefreshResult:
+    try:
+        card_id = status_card_id_from_projection_key(context.projection_key)
+    except ValueError:
+        card_id = ""
+    card_ids = normalize_infrascope_status_card_ids([card_id])
+    if not card_ids:
+        return ProjectionRefreshResult(
+            projection_key=context.projection_key,
+            webspace_id=context.webspace_id,
+            status="unavailable",
+            reason="infrascope_card_not_supported",
+        )
+    refresh = await _refresh_infrascope_status_cards(
+        webspace_id=context.webspace_id,
+        card_ids=card_ids,
+        demanded_only=True,
+    )
+    record = status_card_projection_record(
+        card_id=card_ids[0],
+        webspace_id=context.webspace_id,
+        access={"visibility": "operator"},
+        now=context.requested_at,
+    )
+    if record is None:
+        return ProjectionRefreshResult(
+            projection_key=context.projection_key,
+            webspace_id=context.webspace_id,
+            status="unavailable",
+            reason=str(refresh.get("reason") or "status_card_missing"),
+        )
+    return ProjectionRefreshResult(
+        projection_key=context.projection_key,
+        webspace_id=context.webspace_id,
+        status=record.status,
+        record=record.to_dict(),
+        reason=record.meta.lifecycle_reason,
+    )
+
+
+def _ensure_status_card_projection_handlers() -> None:
+    ensure_status_card_dispatcher_handler()
+    register_projection_refresh_handler(
+        INFRASCOPE_STATUS_CARD_WILDCARD_HANDLER,
+        _refresh_infrascope_status_card_projection,
+    )
 
 
 def _coerce_optional_int(value: Any) -> int | None:
@@ -2222,7 +2277,7 @@ async def node_projection_diagnostics(
     include_stale: bool = True,
     stale_after_s: float | None = None,
 ) -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     if include_runtime:
         publish_runtime_status_card(
@@ -2244,7 +2299,7 @@ async def node_status_cards_snapshot(
     include_infrascope: bool = False,
     infrascope_demanded_only: bool = False,
 ) -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     refreshes: dict[str, Any] = {}
     if include_runtime:
@@ -2266,7 +2321,7 @@ async def node_status_cards_snapshot(
 
 @router.post("/status-cards/runtime/refresh", dependencies=[Depends(require_token)])
 async def node_status_cards_refresh_runtime(webspace_id: str | None = None) -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     card = publish_runtime_status_card(
         webspace_id=target_webspace_id,
@@ -2300,7 +2355,7 @@ async def node_status_cards_sweep(
 
 @router.post("/status-cards", dependencies=[Depends(require_token)])
 async def node_status_cards_publish(payload: StatusCardPublishRequest) -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     target_webspace_id = _coerce_node_webspace_id(payload.webspace_id)
     try:
         card = publish_status_card(
@@ -2333,7 +2388,7 @@ async def node_status_cards_refresh_infrascope(
     payload: InfrascopeStatusCardsRefreshRequest | None = None,
     webspace_id: str | None = None,
 ) -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     request_payload = payload or InfrascopeStatusCardsRefreshRequest()
     target_webspace_id = _coerce_node_webspace_id(request_payload.webspace_id or webspace_id)
     refresh = await _refresh_infrascope_status_cards(
@@ -2360,7 +2415,7 @@ async def node_status_cards_refresh_infrascope(
 
 @router.get("/status-cards/{card_id}/projection", dependencies=[Depends(require_token)])
 async def node_status_card_projection(card_id: str, webspace_id: str | None = None) -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     record = status_card_projection_record(
         card_id=card_id,
@@ -2395,13 +2450,13 @@ async def node_status_card_details_refresh(card_id: str, webspace_id: str | None
 
 @router.get("/projection-dispatcher", dependencies=[Depends(require_token)])
 async def node_projection_dispatcher_snapshot() -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     return projection_dispatcher_snapshot()
 
 
 @router.post("/projection-dispatcher/dispatch", dependencies=[Depends(require_token)])
 async def node_projection_dispatcher_dispatch(payload: ProjectionDispatchRequest) -> dict[str, Any]:
-    ensure_status_card_dispatcher_handler()
+    _ensure_status_card_projection_handlers()
     event = Event(
         type=payload.type,
         payload=payload.payload,
