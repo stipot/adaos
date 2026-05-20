@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -278,6 +279,19 @@ def _total_memory_bytes() -> int | None:
         return None
 
 
+def _swap_used_bytes() -> int | None:
+    if psutil is None:
+        return None
+    try:
+        swap = psutil.swap_memory()
+    except Exception:
+        return None
+    try:
+        return int(swap.used)
+    except Exception:
+        return None
+
+
 def _memory_critical_available_percent_threshold() -> float:
     try:
         return max(
@@ -310,6 +324,68 @@ def _memory_critical_restart_cooldown_sec() -> float:
         return max(30.0, float(str(os.getenv("ADAOS_SUPERVISOR_MEMORY_CRITICAL_RESTART_COOLDOWN_SEC") or "120").strip()))
     except Exception:
         return 120.0
+
+
+def _control_plane_tripwire_duration_sec() -> float:
+    try:
+        return max(5.0, float(str(os.getenv("ADAOS_SUPERVISOR_CONTROL_PLANE_TRIPWIRE_DURATION_SEC") or "20").strip()))
+    except Exception:
+        return 20.0
+
+
+def _control_plane_tripwire_cooldown_sec() -> float:
+    try:
+        return max(30.0, float(str(os.getenv("ADAOS_SUPERVISOR_CONTROL_PLANE_TRIPWIRE_COOLDOWN_SEC") or "120").strip()))
+    except Exception:
+        return 120.0
+
+
+def _control_plane_supervisor_rss_threshold_bytes() -> int:
+    default_value = 1024 * 1024 * 1024
+    total_memory = _total_memory_bytes()
+    if total_memory and total_memory > 0:
+        default_value = min(default_value, max(512 * 1024 * 1024, int(float(total_memory) * 0.20)))
+    try:
+        return max(
+            128 * 1024 * 1024,
+            int(str(os.getenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RSS_BYTES") or str(default_value)).strip()),
+        )
+    except Exception:
+        return default_value
+
+
+def _control_plane_runtime_family_rss_threshold_bytes() -> int:
+    default_value = 3 * 1024 * 1024 * 1024
+    total_memory = _total_memory_bytes()
+    if total_memory and total_memory > 0:
+        default_value = min(default_value, max(1024 * 1024 * 1024, int(float(total_memory) * 0.50)))
+    try:
+        return max(
+            256 * 1024 * 1024,
+            int(str(os.getenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RUNTIME_RSS_BYTES") or str(default_value)).strip()),
+        )
+    except Exception:
+        return default_value
+
+
+def _control_plane_swap_used_threshold_bytes() -> int:
+    try:
+        return max(
+            128 * 1024 * 1024,
+            int(str(os.getenv("ADAOS_SUPERVISOR_CONTROL_PLANE_SWAP_USED_BYTES") or str(512 * 1024 * 1024)).strip()),
+        )
+    except Exception:
+        return 512 * 1024 * 1024
+
+
+def _control_plane_state_file_threshold_bytes() -> int:
+    try:
+        return max(
+            1024 * 1024,
+            int(str(os.getenv("ADAOS_SUPERVISOR_CONTROL_PLANE_STATE_FILE_BYTES") or str(16 * 1024 * 1024)).strip()),
+        )
+    except Exception:
+        return 16 * 1024 * 1024
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -1821,6 +1897,15 @@ def _process_family_rss_bytes(pid: int | None) -> tuple[int | None, int | None]:
     return root_rss, family_rss if family_rss > 0 else root_rss
 
 
+def _process_rss_bytes(pid: int | None) -> int | None:
+    if not pid or psutil is None:
+        return None
+    try:
+        return int(psutil.Process(int(pid)).memory_info().rss)
+    except Exception:
+        return None
+
+
 def _positive_int_or_none(value: Any) -> int | None:
     try:
         item = int(value)
@@ -1904,6 +1989,11 @@ class SupervisorManager:
         self._memory_critical_since: float | None = None
         self._memory_critical_reason: str | None = None
         self._memory_critical_restart_last_at: float | None = None
+        self._control_plane_tripwire_since: float | None = None
+        self._control_plane_tripwire_reason: str | None = None
+        self._control_plane_tripwire_last_action_at: float | None = None
+        self._control_plane_tripwire_last_action: dict[str, Any] | None = None
+        self._control_plane_tripwire_last_sample: dict[str, Any] | None = None
         self._sidecar_launch_cwd: str | None = None
         self._sidecar_last_start_reason: str | None = None
         self._sidecar_last_restart_reason: str | None = None
@@ -2751,6 +2841,250 @@ class SupervisorManager:
             return False, f"auto_profile_min_uptime:{observed}<{min_uptime_sec:.1f}s"
         return self._memory_profile_subnet_guard()
 
+    def _supervisor_state_file_pressure(self) -> dict[str, Any]:
+        state_dir = _supervisor_state_dir()
+        generic_threshold = _control_plane_state_file_threshold_bytes()
+        runtime_threshold = _supervisor_runtime_state_max_bytes()
+        files: list[dict[str, Any]] = []
+        offenders: list[dict[str, Any]] = []
+        try:
+            candidates = sorted(
+                item
+                for item in state_dir.iterdir()
+                if item.is_file() and item.suffix.lower() in {".json", ".jsonl"}
+            )
+        except Exception:
+            candidates = []
+        for path in candidates:
+            try:
+                size_bytes = int(path.stat().st_size)
+            except Exception:
+                continue
+            threshold = runtime_threshold if path.name == "runtime.json" else generic_threshold
+            item = {
+                "path": str(path),
+                "name": path.name,
+                "size_bytes": size_bytes,
+                "threshold_bytes": int(threshold),
+                "oversized": size_bytes > int(threshold),
+            }
+            files.append(item)
+            if item["oversized"]:
+                offenders.append(item)
+        return {
+            "state_dir": str(state_dir),
+            "files": files,
+            "offenders": offenders,
+            "max_file_bytes": max((int(item.get("size_bytes") or 0) for item in files), default=0),
+            "threshold_bytes": int(generic_threshold),
+            "runtime_threshold_bytes": int(runtime_threshold),
+        }
+
+    def _control_plane_tripwire_sample(
+        self,
+        *,
+        managed_pid: int | None = None,
+        runtime_process_rss: int | None = None,
+        runtime_family_rss: int | None = None,
+        sampled_at: float | None = None,
+    ) -> dict[str, Any]:
+        if managed_pid is None:
+            managed = _proc_details(self._proc, cwd_hint=self._managed_runtime_cwd)
+            managed_pid = managed.get("managed_pid")
+        if runtime_process_rss is None and runtime_family_rss is None:
+            runtime_process_rss, runtime_family_rss = _process_family_rss_bytes(managed_pid)
+        total_memory = _total_memory_bytes()
+        available_memory = self._memory_last_available_bytes
+        if available_memory is None:
+            available_memory = _available_memory_bytes()
+        sample = {
+            "schema": "adaos.supervisor.control_plane_tripwire.v1",
+            "sampled_at": time.time() if sampled_at is None else float(sampled_at),
+            "supervisor_pid": os.getpid(),
+            "supervisor_rss_bytes": _process_rss_bytes(os.getpid()),
+            "supervisor_rss_threshold_bytes": _control_plane_supervisor_rss_threshold_bytes(),
+            "runtime_pid": managed_pid,
+            "runtime_process_rss_bytes": runtime_process_rss,
+            "runtime_family_rss_bytes": runtime_family_rss,
+            "runtime_family_rss_threshold_bytes": _control_plane_runtime_family_rss_threshold_bytes(),
+            "swap_used_bytes": _swap_used_bytes(),
+            "swap_used_threshold_bytes": _control_plane_swap_used_threshold_bytes(),
+            "available_memory_bytes": available_memory,
+            "available_memory_percent": (
+                ((float(available_memory) / float(total_memory)) * 100.0)
+                if available_memory is not None and total_memory not in {None, 0}
+                else None
+            ),
+            "total_memory_bytes": total_memory,
+            "duration_sec": _control_plane_tripwire_duration_sec(),
+            "cooldown_sec": _control_plane_tripwire_cooldown_sec(),
+            "state_files": self._supervisor_state_file_pressure(),
+        }
+        self._control_plane_tripwire_last_sample = sample
+        return sample
+
+    def _control_plane_tripwire_reasons(self, sample: Mapping[str, Any]) -> list[str]:
+        reasons: list[str] = []
+        supervisor_rss = _positive_int_or_none(sample.get("supervisor_rss_bytes"))
+        supervisor_threshold = _positive_int_or_none(sample.get("supervisor_rss_threshold_bytes"))
+        runtime_rss = _positive_int_or_none(sample.get("runtime_family_rss_bytes"))
+        runtime_threshold = _positive_int_or_none(sample.get("runtime_family_rss_threshold_bytes"))
+        swap_used = _positive_int_or_none(sample.get("swap_used_bytes"))
+        swap_threshold = _positive_int_or_none(sample.get("swap_used_threshold_bytes"))
+        state_files = sample.get("state_files") if isinstance(sample.get("state_files"), Mapping) else {}
+        offenders = state_files.get("offenders") if isinstance(state_files.get("offenders"), list) else []
+        if supervisor_rss is not None and supervisor_threshold is not None and supervisor_rss >= supervisor_threshold:
+            reasons.append("supervisor_rss_threshold")
+        if runtime_rss is not None and runtime_threshold is not None and runtime_rss >= runtime_threshold:
+            reasons.append("runtime_family_rss_threshold")
+        if swap_used is not None and swap_threshold is not None and swap_used >= swap_threshold:
+            reasons.append("swap_used_threshold")
+        if offenders:
+            reasons.append("supervisor_state_file_oversized")
+        return reasons
+
+    def _control_plane_tripwire_decision(self, *, now: float | None = None) -> dict[str, Any] | None:
+        if self._stopping or not self._desired_running:
+            self._control_plane_tripwire_since = None
+            self._control_plane_tripwire_reason = None
+            return None
+        sample = self._control_plane_tripwire_sample()
+        reasons = self._control_plane_tripwire_reasons(sample)
+        if not reasons:
+            self._control_plane_tripwire_since = None
+            self._control_plane_tripwire_reason = None
+            return None
+        current_time = time.time() if now is None else float(now)
+        reason = ",".join(sorted(reasons))
+        state_files = sample.get("state_files") if isinstance(sample.get("state_files"), Mapping) else {}
+        offenders = state_files.get("offenders") if isinstance(state_files.get("offenders"), list) else []
+        if offenders:
+            return {
+                "reason": "supervisor.memory.control_plane_tripwire",
+                "message": "supervisor state files exceeded the control-plane size limit",
+                "action": "contain_state",
+                "critical_reason": reason,
+                "sample": sample,
+                "offenders": offenders,
+                "critical_for_sec": 0.0,
+                "restart_cooldown_sec": _control_plane_tripwire_cooldown_sec(),
+            }
+        if self._control_plane_tripwire_reason != reason:
+            self._control_plane_tripwire_reason = reason
+            self._control_plane_tripwire_since = current_time
+            return None
+        critical_since = float(self._control_plane_tripwire_since or current_time)
+        duration_sec = _control_plane_tripwire_duration_sec()
+        if (current_time - critical_since) < duration_sec:
+            return None
+        cooldown_sec = _control_plane_tripwire_cooldown_sec()
+        last_action_at = float(self._control_plane_tripwire_last_action_at or 0.0)
+        if last_action_at > 0.0 and (current_time - last_action_at) < cooldown_sec:
+            return None
+        action = "restart_runtime"
+        if "supervisor_rss_threshold" in reasons:
+            action = "restart_supervisor"
+        return {
+            "reason": "supervisor.memory.control_plane_tripwire",
+            "message": f"control-plane memory pressure stayed critical for {duration_sec:.0f}s",
+            "action": action,
+            "critical_reason": reason,
+            "sample": sample,
+            "critical_for_sec": max(0.0, current_time - critical_since),
+            "restart_cooldown_sec": float(cooldown_sec),
+        }
+
+    def _archive_oversized_supervisor_state_files(self, offenders: list[dict[str, Any]], *, reason: str) -> dict[str, Any]:
+        state_dir = _supervisor_state_dir()
+        timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        archive_dir = current_base_dir() / "state" / "incidents" / f"control-plane-state-tripwire-{timestamp}"
+        archived: list[dict[str, Any]] = []
+        for item in offenders:
+            try:
+                path = Path(str(item.get("path") or "")).expanduser().resolve()
+            except Exception:
+                continue
+            try:
+                if path.parent.resolve() != state_dir.resolve() or not path.is_file():
+                    continue
+            except Exception:
+                continue
+            try:
+                archive_dir.mkdir(parents=True, exist_ok=True)
+                target = archive_dir / path.name
+                if target.exists():
+                    target = archive_dir / f"{path.stem}-{uuid.uuid4().hex[:8]}{path.suffix}"
+                size_bytes = int(path.stat().st_size)
+                shutil.move(str(path), str(target))
+                if path.suffix.lower() == ".jsonl":
+                    path.write_text("", encoding="utf-8")
+                else:
+                    _write_json(
+                        path,
+                        {
+                            "ok": False,
+                            "state_truncated": True,
+                            "state_guard_fallback": "archived_oversized",
+                            "state_observed_size_bytes": size_bytes,
+                            "state_max_bytes": int(item.get("threshold_bytes") or 0),
+                            "archived_path": str(target),
+                            "archive_reason": str(reason or "control_plane_tripwire"),
+                            "updated_at": time.time(),
+                        },
+                    )
+                archived.append(
+                    {
+                        "path": str(path),
+                        "archived_path": str(target),
+                        "size_bytes": size_bytes,
+                        "threshold_bytes": int(item.get("threshold_bytes") or 0),
+                    }
+                )
+            except Exception as exc:
+                archived.append(
+                    {
+                        "path": str(path),
+                        "ok": False,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    }
+                )
+        return {
+            "ok": True,
+            "archive_dir": str(archive_dir),
+            "archived": archived,
+            "archived_total": len([item for item in archived if item.get("archived_path")]),
+        }
+
+    async def _apply_control_plane_tripwire_decision(self, decision: Mapping[str, Any]) -> None:
+        action = str(decision.get("action") or "").strip().lower()
+        self._control_plane_tripwire_last_action_at = time.time()
+        self._control_plane_tripwire_last_action = dict(decision)
+        self._last_error = str(decision.get("message") or decision.get("reason") or "control-plane memory tripwire")
+        if action == "contain_state":
+            offenders = decision.get("offenders") if isinstance(decision.get("offenders"), list) else []
+            containment = self._archive_oversized_supervisor_state_files(
+                [dict(item) for item in offenders if isinstance(item, Mapping)],
+                reason=str(decision.get("critical_reason") or decision.get("reason") or "control_plane_tripwire"),
+            )
+            self._control_plane_tripwire_last_action = {**dict(decision), "containment": containment}
+            _LOG.warning(
+                "control-plane tripwire contained oversized supervisor state files archived_total=%s archive_dir=%s",
+                containment.get("archived_total"),
+                containment.get("archive_dir"),
+            )
+            self._persist_runtime_state()
+            return
+        if action == "restart_supervisor":
+            restart = self._schedule_service_restart(reason=str(decision.get("reason") or "supervisor.memory.control_plane_tripwire"))
+            self._control_plane_tripwire_last_action = {**dict(decision), "restart": restart}
+            self._persist_runtime_state()
+            return
+        if action == "restart_runtime":
+            self._persist_runtime_state()
+            await self.restart_runtime(reason=str(decision.get("reason") or "supervisor.memory.control_plane_tripwire"))
+            return
+
     def _memory_critical_restart_decision(self, *, now: float | None = None) -> dict[str, Any] | None:
         if self._stopping or not self._desired_running:
             self._memory_critical_since = None
@@ -2964,6 +3298,13 @@ class SupervisorManager:
             if self._memory_last_available_bytes is not None and total_memory_bytes not in {None, 0}
             else None
         )
+        control_plane_sample = self._control_plane_tripwire_sample(
+            managed_pid=managed_pid,
+            runtime_process_rss=process_rss_bytes,
+            runtime_family_rss=family_rss_bytes,
+            sampled_at=now,
+        )
+        control_plane_reasons = self._control_plane_tripwire_reasons(control_plane_sample)
         family_rss_value = int(family_rss_bytes)
         baseline_family_rss = _positive_int_or_none(self._memory_baseline_family_rss_bytes)
         if family_rss_value > 0 and (baseline_family_rss is None or family_rss_value < baseline_family_rss):
@@ -3017,6 +3358,16 @@ class SupervisorManager:
                 "family_rss_bytes": family_rss_bytes,
                 "available_memory_bytes": self._memory_last_available_bytes,
                 "available_memory_percent": self._memory_last_available_percent,
+                "control_plane_pressure_state": "critical" if control_plane_reasons else "normal",
+                "control_plane_pressure_reasons": control_plane_reasons,
+                "control_plane_supervisor_rss_bytes": control_plane_sample.get("supervisor_rss_bytes"),
+                "control_plane_runtime_family_rss_bytes": control_plane_sample.get("runtime_family_rss_bytes"),
+                "control_plane_swap_used_bytes": control_plane_sample.get("swap_used_bytes"),
+                "control_plane_state_max_file_bytes": (
+                    (control_plane_sample.get("state_files") or {}).get("max_file_bytes")
+                    if isinstance(control_plane_sample.get("state_files"), Mapping)
+                    else None
+                ),
                 "baseline_rss_bytes": self._memory_baseline_family_rss_bytes,
                 "rss_growth_bytes": growth_bytes,
                 "rss_growth_bytes_per_min": slope,
@@ -4638,6 +4989,16 @@ class SupervisorManager:
             "critical_reason": self._memory_critical_reason,
             "critical_since": self._memory_critical_since,
             "critical_restart_last_at": self._memory_critical_restart_last_at,
+            "control_plane_tripwire": {
+                "state": "critical" if self._control_plane_tripwire_reason else "normal",
+                "reason": self._control_plane_tripwire_reason,
+                "since": self._control_plane_tripwire_since,
+                "last_action_at": self._control_plane_tripwire_last_action_at,
+                "last_action": self._control_plane_tripwire_last_action,
+                "last_sample": self._control_plane_tripwire_last_sample,
+                "duration_sec": _control_plane_tripwire_duration_sec(),
+                "cooldown_sec": _control_plane_tripwire_cooldown_sec(),
+            },
             "telemetry_path": str(supervisor_memory_telemetry_path()),
             "sessions_index_path": str(supervisor_memory_sessions_index_path()),
             "implemented_operation_events": list(TOP_LEVEL_OPERATION_EVENTS),
@@ -5831,6 +6192,13 @@ class SupervisorManager:
                         )
                     except Exception:
                         _LOG.warning("failed to self-heal critical memory pressure", exc_info=True)
+                    continue
+                control_plane_decision = self._control_plane_tripwire_decision()
+                if control_plane_decision is not None:
+                    try:
+                        await self._apply_control_plane_tripwire_decision(control_plane_decision)
+                    except Exception:
+                        _LOG.warning("failed to apply control-plane memory tripwire", exc_info=True)
                     continue
                 try:
                     await self._maybe_apply_memory_profile_mode()

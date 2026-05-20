@@ -4213,6 +4213,89 @@ def test_critical_memory_restart_is_allowed_while_live_subnet_is_present(monkeyp
     assert second["subnet_reason"] == "subnet_members_connected:2"
 
 
+def test_control_plane_tripwire_contains_oversized_supervisor_state(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RSS_BYTES", str(8 * 1024 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RUNTIME_RSS_BYTES", str(8 * 1024 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_SWAP_USED_BYTES", str(8 * 1024 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_STATE_FILE_BYTES", str(1024 * 1024))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    manager._persist_runtime_state = lambda: None
+    state_file = supervisor._supervisor_hub_root_watchdog_log_path()
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text("x" * (2 * 1024 * 1024), encoding="utf-8")
+
+    decision = manager._control_plane_tripwire_decision(now=100.0)
+
+    assert decision is not None
+    assert decision["action"] == "contain_state"
+    asyncio.run(manager._apply_control_plane_tripwire_decision(decision))
+    assert state_file.exists()
+    assert state_file.stat().st_size == 0
+    containment = manager._control_plane_tripwire_last_action["containment"]
+    assert containment["archived_total"] == 1
+    assert Path(containment["archived"][0]["archived_path"]).exists()
+
+
+def test_control_plane_tripwire_restarts_runtime_after_family_rss_duration(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_TRIPWIRE_DURATION_SEC", "5")
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RSS_BYTES", str(8 * 1024 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RUNTIME_RSS_BYTES", str(256 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_SWAP_USED_BYTES", str(8 * 1024 * 1024 * 1024))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+
+    class _Proc:
+        pid = 4321
+
+        @staticmethod
+        def poll():
+            return None
+
+    manager._proc = _Proc()  # type: ignore[assignment]
+    monkeypatch.setattr(supervisor, "_proc_details", lambda proc, cwd_hint=None: {"managed_pid": 4321})
+    monkeypatch.setattr(
+        supervisor,
+        "_process_family_rss_bytes",
+        lambda pid: (100 * 1024 * 1024, 300 * 1024 * 1024),
+    )
+    monkeypatch.setattr(supervisor, "_process_rss_bytes", lambda pid: 16 * 1024 * 1024)
+    monkeypatch.setattr(supervisor, "_swap_used_bytes", lambda: 0)
+    monkeypatch.setattr(supervisor, "_total_memory_bytes", lambda: 4 * 1024 * 1024 * 1024)
+    monkeypatch.setattr(supervisor, "_available_memory_bytes", lambda: 3 * 1024 * 1024 * 1024)
+
+    first = manager._control_plane_tripwire_decision(now=100.0)
+    second = manager._control_plane_tripwire_decision(now=106.0)
+
+    assert first is None
+    assert second is not None
+    assert second["action"] == "restart_runtime"
+    assert second["critical_reason"] == "runtime_family_rss_threshold"
+
+
+def test_control_plane_tripwire_requests_supervisor_restart_for_supervisor_rss(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_TRIPWIRE_DURATION_SEC", "5")
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RSS_BYTES", str(128 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_RUNTIME_RSS_BYTES", str(8 * 1024 * 1024 * 1024))
+    monkeypatch.setenv("ADAOS_SUPERVISOR_CONTROL_PLANE_SWAP_USED_BYTES", str(8 * 1024 * 1024 * 1024))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    monkeypatch.setattr(supervisor, "_proc_details", lambda proc, cwd_hint=None: {"managed_pid": 4321})
+    monkeypatch.setattr(supervisor, "_process_family_rss_bytes", lambda pid: (10 * 1024 * 1024, 10 * 1024 * 1024))
+    monkeypatch.setattr(supervisor, "_process_rss_bytes", lambda pid: 200 * 1024 * 1024)
+    monkeypatch.setattr(supervisor, "_swap_used_bytes", lambda: 0)
+    monkeypatch.setattr(supervisor, "_total_memory_bytes", lambda: 4 * 1024 * 1024 * 1024)
+    monkeypatch.setattr(supervisor, "_available_memory_bytes", lambda: 3 * 1024 * 1024 * 1024)
+
+    first = manager._control_plane_tripwire_decision(now=100.0)
+    second = manager._control_plane_tripwire_decision(now=106.0)
+
+    assert first is None
+    assert second is not None
+    assert second["action"] == "restart_supervisor"
+    assert second["critical_reason"] == "supervisor_rss_threshold"
+
+
 def test_spawn_runtime_locked_prefers_active_slot_manifest(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
     manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")

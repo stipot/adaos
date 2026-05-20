@@ -733,6 +733,16 @@ The important rule is that profiling is an escalated diagnostic mode under super
 
 Restart-into-profile is also an availability-affecting action. The automatic policy path must therefore defer profiling restarts while a recent browser session or live member link is observed; critical low-memory restart policy remains the separate last-resort recovery path. A profiling window starts only after the restarted runtime API is ready, so slow bootstrap time is not counted as useful sampled-profile time and cannot prematurely stop the profiler before final artifacts are materialized.
 
+The supervisor also owns a hard control-plane tripwire for failures that do not
+look like ordinary runtime RSS growth. It samples supervisor RSS, runtime
+process-family RSS, swap used, and top-level `state/supervisor/*.json|*.jsonl`
+sizes. Oversized supervisor state files are preserved under
+`state/incidents/control-plane-state-tripwire-*` and replaced with compact
+placeholders or empty JSONL files; sustained runtime-family pressure restarts
+the managed runtime, while sustained supervisor RSS pressure requests an
+autostart supervisor self-restart when that is available. This protects the
+control plane itself from becoming the source of the memory incident.
+
 ### Signals and admission rules
 
 Supervisor should avoid triggering profiling from one instantaneous RSS sample.

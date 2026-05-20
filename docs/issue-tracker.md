@@ -3181,10 +3181,21 @@ Human verification:
 - [x] Bound supervisor watchdog persisted state after the `.30` state-bloat
   incident; confirm supervisor recovery does not require reading unbounded
   watchdog history into memory.
-- [ ] Add a hard supervisor/control-plane memory tripwire for this class of
+- [x] Add a hard supervisor/control-plane memory tripwire for this class of
   incident: supervisor/runtime RSS, swap growth, and oversized
   `state/supervisor/*.json|*.jsonl` files should trigger visible local
   protection or quarantine evidence before the stand enters swap exhaustion.
+- 2026-05-20 implementation note: the tripwire now samples supervisor RSS,
+  runtime process-family RSS, swap used, and top-level supervisor state-file
+  sizes. Oversized state files are archived/truncated immediately under
+  `state/incidents/control-plane-state-tripwire-*`; sustained runtime-family
+  pressure requests `restart_runtime`; sustained supervisor RSS pressure
+  requests an autostart supervisor self-restart when available. The sample and
+  last action are exposed in `memory.control_plane_tripwire`.
+- [ ] Roll out the control-plane tripwire to `.30`/`.40`; verify
+  `/api/supervisor/public/memory-status` exposes `control_plane_tripwire`,
+  and run a short browser-attached soak showing no oversized supervisor state,
+  no swap climb, and server-side YJS/status metrics still available.
 - [ ] Re-run the `.30` 180-second browser-attached check after `7818eacf` and
   record both server-side YJS truth (`stateSync`, `yjsPressure`, eventbus
   backlog) and browser-side truth (`yjs.signal`, `client_yws_attempt_id`,
