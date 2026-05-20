@@ -200,7 +200,7 @@ _YWS_ROOM_BOOTSTRAP_STEP_TIMEOUT_S = _env_float("ADAOS_YWS_ROOM_BOOTSTRAP_STEP_T
 _YWS_ROOM_STALE_RECOVERY_TIMEOUT_S = _env_float("ADAOS_YWS_ROOM_STALE_RECOVERY_TIMEOUT_S", 3.0, minimum=0.25)
 _YWS_FIRST_MESSAGE_TIMEOUT_S = _env_float("ADAOS_YWS_FIRST_MESSAGE_TIMEOUT_S", 12.0, minimum=0.0)
 _YWS_MAX_ACTIVE_PER_WEBSPACE = _env_int("ADAOS_YWS_MAX_ACTIVE_PER_WEBSPACE", 6, minimum=1)
-_YWS_MAX_ACTIVE_PER_CLIENT = _env_int("ADAOS_YWS_MAX_ACTIVE_PER_CLIENT", 1, minimum=1)
+_YWS_MAX_ACTIVE_PER_CLIENT = _env_int("ADAOS_YWS_MAX_ACTIVE_PER_CLIENT", 2, minimum=1)
 _YWS_GUARD_RECENT_OPEN_10S = _env_int("ADAOS_YWS_GUARD_RECENT_OPEN_10S", 8, minimum=1)
 _YWS_GUARD_CLIENT_OPEN_15S = _env_int("ADAOS_YWS_GUARD_CLIENT_OPEN_15S", 4, minimum=1)
 _YWS_GUARD_WEBSPACE_MIN_CLIENTS_10S = _env_int("ADAOS_YWS_GUARD_WEBSPACE_MIN_CLIENTS_10S", 2, minimum=1)
@@ -2119,6 +2119,22 @@ def _set_websocket_yws_attempt_id(websocket: WebSocket, attempt_id: str) -> None
         pass
 
 
+def _set_websocket_client_yws_attempt_id(websocket: WebSocket, attempt_id: str) -> None:
+    token = str(attempt_id or "").strip()
+    if not token:
+        return
+    try:
+        scope = getattr(websocket, "scope", None)
+        if isinstance(scope, dict):
+            scope["adaos_client_yws_attempt_id"] = token
+    except Exception:
+        pass
+    try:
+        setattr(websocket, "_adaos_client_yws_attempt_id", token)
+    except Exception:
+        pass
+
+
 def _websocket_yws_attempt_id(websocket: WebSocket) -> str:
     try:
         token = str(getattr(websocket, "_adaos_yws_attempt_id", "") or "").strip()
@@ -2135,6 +2151,28 @@ def _websocket_yws_attempt_id(websocket: WebSocket) -> str:
     except Exception:
         pass
     return ""
+
+
+def _websocket_client_yws_attempt_id(websocket: WebSocket) -> str:
+    try:
+        token = str(getattr(websocket, "_adaos_client_yws_attempt_id", "") or "").strip()
+        if token:
+            return token
+    except Exception:
+        pass
+    try:
+        scope = getattr(websocket, "scope", None)
+        if isinstance(scope, dict):
+            token = str(scope.get("adaos_client_yws_attempt_id") or "").strip()
+            if token:
+                return token
+    except Exception:
+        pass
+    try:
+        params = getattr(websocket, "query_params", {}) or {}
+        return str(params.get("client_yws_attempt_id") or params.get("client_attempt_id") or "").strip()
+    except Exception:
+        return ""
 
 
 def _websocket_device_id(websocket: WebSocket) -> str:
@@ -2183,12 +2221,16 @@ def _active_yws_client_rows() -> list[dict[str, Any]]:
             if isinstance(device_counts, dict)
         }
         attempts: dict[str, list[str]] = {}
+        client_attempts: dict[str, list[str]] = {}
         for webspace_id, sockets in _ACTIVE_YWS_CONNECTIONS.items():
             for websocket in list(sockets or []):
                 device_id = _websocket_device_id(websocket)
                 attempt_id = _websocket_yws_attempt_id(websocket)
+                client_attempt_id = _websocket_client_yws_attempt_id(websocket)
                 if attempt_id:
                     attempts.setdefault(f"{webspace_id}::{device_id}", []).append(attempt_id)
+                if client_attempt_id:
+                    client_attempts.setdefault(f"{webspace_id}::{device_id}", []).append(client_attempt_id)
     rows: list[dict[str, Any]] = []
     for webspace_id, device_counts in clients.items():
         for device_id, count in sorted(device_counts.items()):
@@ -2201,14 +2243,26 @@ def _active_yws_client_rows() -> list[dict[str, Any]]:
             if attempt_ids:
                 row["attempt_ids"] = attempt_ids[:3]
                 row["latest_attempt_id"] = attempt_ids[-1]
+            client_attempt_ids = client_attempts.get(f"{webspace_id}::{device_id}") or []
+            if client_attempt_ids:
+                distinct_client_attempts = list(dict.fromkeys(client_attempt_ids))
+                row["client_attempt_ids"] = distinct_client_attempts[:3]
+                row["latest_client_attempt_id"] = client_attempt_ids[-1]
+                row["client_attempt_count"] = len(distinct_client_attempts)
             rows.append(row)
     rows.sort(key=lambda item: (-int(item.get("session_count") or 0), str(item.get("dev_id") or "")))
     return rows
 
 
-async def _close_existing_yws_client_connections(webspace_id: str, dev_id: str) -> int:
+async def _close_existing_yws_client_connections(
+    webspace_id: str,
+    dev_id: str,
+    *,
+    client_attempt_id: str | None = None,
+) -> int:
     key = str(webspace_id or "").strip() or "default"
     device_key = str(dev_id or "").strip() or "unknown"
+    client_attempt_key = str(client_attempt_id or "").strip()
     if not device_key or device_key == "unknown":
         return 0
     with _ACTIVE_YWS_LOCK:
@@ -2217,25 +2271,52 @@ async def _close_existing_yws_client_connections(webspace_id: str, dev_id: str) 
             for websocket in list(_ACTIVE_YWS_CONNECTIONS.get(key) or [])
             if _websocket_device_id(websocket) == device_key
         ]
-    if len(sockets) < _YWS_MAX_ACTIVE_PER_CLIENT:
+    close_targets: list[WebSocket] = []
+    same_attempt_target_ids: set[int] = set()
+    over_limit_target_ids: set[int] = set()
+    if client_attempt_key:
+        for websocket in sockets:
+            if _websocket_client_yws_attempt_id(websocket) == client_attempt_key:
+                close_targets.append(websocket)
+                same_attempt_target_ids.add(id(websocket))
+    remaining = [websocket for websocket in sockets if websocket not in close_targets]
+    over_limit_close_total = max(0, len(remaining) - _YWS_MAX_ACTIVE_PER_CLIENT + 1)
+    if over_limit_close_total:
+        for websocket in remaining[:over_limit_close_total]:
+            close_targets.append(websocket)
+            over_limit_target_ids.add(id(websocket))
+    if not close_targets:
         return 0
     closed = 0
-    for websocket in sockets:
+    same_attempt_closed = 0
+    over_limit_closed = 0
+    for websocket in close_targets:
         try:
             await websocket.close(code=1012, reason="replaced_by_new_yws_session")
             closed += 1
+            websocket_id = id(websocket)
+            if websocket_id in same_attempt_target_ids:
+                same_attempt_closed += 1
+            if websocket_id in over_limit_target_ids:
+                over_limit_closed += 1
         except Exception:
             pass
     if closed:
         _YWS_GUARD_DIAG["last_replaced_at"] = time.time()
         _YWS_GUARD_DIAG["last_replaced_webspace_id"] = key
         _YWS_GUARD_DIAG["last_replaced_dev_id"] = device_key
+        _YWS_GUARD_DIAG["last_replaced_client_attempt_id"] = client_attempt_key
+        _YWS_GUARD_DIAG["last_replaced_same_attempt"] = same_attempt_closed
+        _YWS_GUARD_DIAG["last_replaced_over_limit"] = over_limit_closed
         _YWS_GUARD_DIAG["replaced_total"] = int(_YWS_GUARD_DIAG.get("replaced_total") or 0) + closed
         _ylog.warning(
-            "yws guard replaced stale client sessions webspace=%s dev=%s closed=%s max_active_per_client=%s",
+            "yws guard replaced stale client sessions webspace=%s dev=%s closed=%s same_attempt=%s over_limit=%s client_attempt=%s max_active_per_client=%s",
             key,
             device_key,
             closed,
+            same_attempt_closed,
+            over_limit_closed,
+            client_attempt_key or None,
             _YWS_MAX_ACTIVE_PER_CLIENT,
         )
         await asyncio.sleep(0)
@@ -4172,6 +4253,7 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
         params.get("client_yws_attempt_id") or params.get("client_attempt_id"),
         max_len=128,
     ) or ""
+    _set_websocket_client_yws_attempt_id(websocket, client_attempt_id)
     browser_metadata = _browser_session_metadata(params)
 
     if _ws_trace_enabled():
@@ -4218,7 +4300,11 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
         _ylog.debug("browser access policy check failed webspace=%s dev=%s attempt=%s", webspace_id, dev_id, attempt_id, exc_info=True)
     if not await _accept_websocket(websocket, channel="yws"):
         return
-    replaced_existing = await _close_existing_yws_client_connections(webspace_id, dev_id)
+    replaced_existing = await _close_existing_yws_client_connections(
+        webspace_id,
+        dev_id,
+        client_attempt_id=client_attempt_id,
+    )
     if replaced_existing:
         deadline = time.monotonic() + 1.0
         while (

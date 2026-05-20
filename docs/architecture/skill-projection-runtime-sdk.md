@@ -77,6 +77,15 @@ Do not hide a core weakness by prematurely quieting the skill. Skill migration
 starts after the core can prove it protected itself and logged enough evidence
 to send the skill back for design-time route correction.
 
+YWS connectivity is part of that proof. The guard should unload excess input
+without making a healthy channel flap: duplicate reconnects from the same
+client provider attempt may replace the stale socket, but distinct provider
+attempts for one browser identity get a small bounded overlap before the oldest
+socket is trimmed. Diagnostics must expose both the server `yws_attempt_id` and
+the browser `client_yws_attempt_id` so a red/green indicator can be attributed
+to either real channel loss, duplicate providers, or skill pressure instead of
+being inferred from fallback HTTP snapshots.
+
 ## Core Concepts
 
 ### Projection Slot

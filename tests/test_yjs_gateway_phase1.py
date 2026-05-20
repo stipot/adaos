@@ -1263,6 +1263,111 @@ def test_yws_guard_replaces_existing_client_sessions(monkeypatch) -> None:
     gateway_module._untrack_yws_connection("ops", old_ws)
 
 
+def test_yws_guard_allows_distinct_client_attempt_overlap(monkeypatch) -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._YWS_GUARD_DIAG.clear()
+    monkeypatch.setattr(gateway_module, "_YWS_MAX_ACTIVE_PER_CLIENT", 2)
+
+    class _FakeWebSocket:
+        query_params = {"dev": "dev-2"}
+
+        def __init__(self) -> None:
+            self.closed: list[tuple[int, str]] = []
+
+        async def close(self, code: int = 1000, reason: str | None = None) -> None:
+            self.closed.append((code, str(reason or "")))
+
+    old_ws = _FakeWebSocket()
+    gateway_module._set_websocket_client_yws_attempt_id(old_ws, "client-a")
+    gateway_module._track_yws_connection("ops", old_ws, device_id="dev-2")
+
+    closed = asyncio.run(
+        gateway_module._close_existing_yws_client_connections(
+            "ops",
+            "dev-2",
+            client_attempt_id="client-b",
+        )
+    )
+
+    assert closed == 0
+    assert old_ws.closed == []
+    assert gateway_module._active_yws_connection_total_for_client("ops", "dev-2") == 1
+    gateway_module._untrack_yws_connection("ops", old_ws)
+
+
+def test_yws_guard_replaces_same_client_attempt_below_overlap_limit(monkeypatch) -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._YWS_GUARD_DIAG.clear()
+    monkeypatch.setattr(gateway_module, "_YWS_MAX_ACTIVE_PER_CLIENT", 2)
+
+    class _FakeWebSocket:
+        query_params = {"dev": "dev-2"}
+
+        def __init__(self) -> None:
+            self.closed: list[tuple[int, str]] = []
+
+        async def close(self, code: int = 1000, reason: str | None = None) -> None:
+            self.closed.append((code, str(reason or "")))
+
+    old_ws = _FakeWebSocket()
+    gateway_module._set_websocket_client_yws_attempt_id(old_ws, "client-a")
+    gateway_module._track_yws_connection("ops", old_ws, device_id="dev-2")
+
+    closed = asyncio.run(
+        gateway_module._close_existing_yws_client_connections(
+            "ops",
+            "dev-2",
+            client_attempt_id="client-a",
+        )
+    )
+
+    assert closed == 1
+    assert old_ws.closed == [(1012, "replaced_by_new_yws_session")]
+    assert gateway_module._YWS_GUARD_DIAG["last_replaced_same_attempt"] == 1
+    assert gateway_module._YWS_GUARD_DIAG["last_replaced_over_limit"] == 0
+    gateway_module._untrack_yws_connection("ops", old_ws)
+
+
+def test_yws_guard_trims_oldest_client_attempt_when_overlap_limit_full(monkeypatch) -> None:
+    gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
+    gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._YWS_GUARD_DIAG.clear()
+    monkeypatch.setattr(gateway_module, "_YWS_MAX_ACTIVE_PER_CLIENT", 2)
+
+    class _FakeWebSocket:
+        query_params = {"dev": "dev-2"}
+
+        def __init__(self, attempt: str) -> None:
+            self.closed: list[tuple[int, str]] = []
+            gateway_module._set_websocket_client_yws_attempt_id(self, attempt)
+
+        async def close(self, code: int = 1000, reason: str | None = None) -> None:
+            self.closed.append((code, str(reason or "")))
+
+    old_a = _FakeWebSocket("client-a")
+    old_b = _FakeWebSocket("client-b")
+    gateway_module._track_yws_connection("ops", old_a, device_id="dev-2")
+    gateway_module._track_yws_connection("ops", old_b, device_id="dev-2")
+
+    closed = asyncio.run(
+        gateway_module._close_existing_yws_client_connections(
+            "ops",
+            "dev-2",
+            client_attempt_id="client-c",
+        )
+    )
+
+    assert closed == 1
+    assert old_a.closed == [(1012, "replaced_by_new_yws_session")]
+    assert old_b.closed == []
+    assert gateway_module._YWS_GUARD_DIAG["last_replaced_same_attempt"] == 0
+    assert gateway_module._YWS_GUARD_DIAG["last_replaced_over_limit"] == 1
+    gateway_module._untrack_yws_connection("ops", old_a)
+    gateway_module._untrack_yws_connection("ops", old_b)
+
+
 def test_yws_impl_aborts_when_room_ready_times_out(monkeypatch) -> None:
     gateway_module._TRANSPORT_STATE["yws"].update(
         {

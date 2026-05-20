@@ -809,6 +809,13 @@ Observed behavior:
   skills and does not hide the migration debt; it keeps the update/YJS recovery
   path observable instead of timing out while the hub is already under memory
   or disk pressure.
+- The next `.30` checkpoint showed a different YWS source of red/green
+  flicker: one browser identity could have two competing client provider
+  attempts. With `max_active_per_client=1`, each new attempt closed the other
+  live socket, so the guard itself could sustain channel churn. The YWS guard
+  now keeps a bounded two-attempt overlap per browser identity, replaces only
+  duplicate sockets from the same `client_yws_attempt_id`, trims the oldest
+  excess attempt, and exposes client attempt ids in transport diagnostics.
 
 Working hypothesis:
 
@@ -924,6 +931,9 @@ Actions:
   still missing.
 - [x] Ensure every guardrail activation produces a structured reason record
   that points back to the triggering stream, webspace, skill, or event type.
+- [x] Make same-device YWS reconnect replacement non-flapping: allow a bounded
+  overlap of distinct browser provider attempts, replace stale sockets for the
+  same `client_yws_attempt_id`, and trim only excess sessions.
 
 #### HMG-004: Make eventbus and async backlog visible and bounded
 
@@ -2803,6 +2813,11 @@ Actions:
   Slot switch can remove the runtime cwd while ASGI still serves reliability
   diagnostics; default `.adaos/diagnostics/...` paths now resolve under
   `ADAOS_BASE_DIR` instead of calling `Path.cwd()`.
+- [x] Keep YWS pressure relief from becoming self-inflicted red/green flicker:
+  the server now correlates active sessions by browser
+  `client_yws_attempt_id`, allows a small bounded overlap for distinct
+  provider attempts of the same browser identity, and reports
+  `client_attempt_ids` / `latest_client_attempt_id` in active YWS diagnostics.
 
 2026-05-19 implementation checkpoint:
 
@@ -3128,6 +3143,11 @@ Human verification:
   only if RSS reaches a plateau, reliability metrics remain available, and YJS
   guard/stream/eventbus counters attribute noisy fixtures without starving the
   status/control plane.
+- [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
+  Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
+  same-device provider attempts; reliability diagnostics should show
+  `max_active_per_client=2` and active rows with `client_attempt_ids` when a
+  browser is reconnecting.
 - [ ] Run a focused `infrastate` two-browser soak after conversion and capture
   Yjs owner pressure, stream pressure, route pressure, and quarantine counters.
 - [ ] Record payload size reduction and polling reduction in this tracker.
