@@ -187,6 +187,104 @@ def _replace_slot_dir(prepared_slot: Path, slot_dir: Path) -> None:
     shutil.move(str(prepared_slot), str(slot_dir))
 
 
+_CORE_SLOT_DEPENDENCY_METADATA_FILES: tuple[str, ...] = (
+    "pyproject.toml",
+    "setup.cfg",
+    "setup.py",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "requirements.lock",
+    "uv.lock",
+    "poetry.lock",
+    "Pipfile",
+    "Pipfile.lock",
+)
+
+
+def _core_slot_dependency_metadata_relpaths(*repo_dirs: Path) -> list[str]:
+    relpaths = set(_CORE_SLOT_DEPENDENCY_METADATA_FILES)
+    for repo_dir in repo_dirs:
+        try:
+            root = Path(repo_dir).expanduser().resolve()
+        except Exception:
+            continue
+        if not root.exists():
+            continue
+        try:
+            relpaths.update(path.name for path in root.glob("requirements*.txt") if path.is_file())
+        except Exception:
+            pass
+    return sorted(relpaths)
+
+
+def _core_slot_dependency_metadata_state(existing_repo_dir: Path, candidate_repo_dir: Path) -> dict[str, object]:
+    checked_paths = _core_slot_dependency_metadata_relpaths(existing_repo_dir, candidate_repo_dir)
+    changed_paths: list[str] = []
+    for rel_path in checked_paths:
+        if _path_content_differs(existing_repo_dir / rel_path, candidate_repo_dir / rel_path):
+            changed_paths.append(rel_path)
+    return {
+        "ok": not changed_paths,
+        "basis": "dependency_metadata_compare",
+        "existing_repo_dir": str(existing_repo_dir),
+        "candidate_repo_dir": str(candidate_repo_dir),
+        "checked_paths": checked_paths,
+        "changed_paths": changed_paths,
+    }
+
+
+def _core_slot_reuse_existing_venv_enabled() -> bool:
+    value = str(os.getenv("ADAOS_CORE_SLOT_REUSE_EXISTING_VENV", "1") or "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def _existing_slot_venv_reuse_plan(slot_dir: Path, candidate_repo_dir: Path) -> dict[str, object]:
+    slot_root = Path(slot_dir).expanduser().resolve()
+    existing_repo_dir = slot_root / "repo"
+    existing_venv_dir = slot_root / "venv"
+    existing_python = _venv_python(existing_venv_dir)
+    enabled = _core_slot_reuse_existing_venv_enabled()
+    metadata_state = _core_slot_dependency_metadata_state(existing_repo_dir, Path(candidate_repo_dir).expanduser().resolve())
+    reasons: list[str] = []
+    if not enabled:
+        reasons.append("disabled")
+    if not existing_repo_dir.exists():
+        reasons.append("missing_existing_repo")
+    if not existing_venv_dir.exists():
+        reasons.append("missing_existing_venv")
+    if not existing_python.exists():
+        reasons.append("missing_existing_venv_python")
+    if not bool(metadata_state.get("ok")):
+        reasons.append("dependency_metadata_changed")
+    reusable = not reasons
+    return {
+        "reusable": reusable,
+        "reason": "dependency_metadata_unchanged" if reusable else ",".join(reasons),
+        "existing_repo_dir": str(existing_repo_dir),
+        "existing_venv_dir": str(existing_venv_dir),
+        "existing_python": str(existing_python),
+        "dependency_metadata": metadata_state,
+    }
+
+
+def _replace_slot_repo_preserving_venv(checkout_tmp: Path, slot_dir: Path) -> None:
+    slot_root = Path(slot_dir).expanduser().resolve()
+    repo_target = slot_root / "repo"
+    candidate = Path(checkout_tmp).expanduser().resolve()
+    try:
+        repo_target.resolve().relative_to(slot_root)
+    except Exception as exc:
+        raise RuntimeError(f"refusing repo replacement outside slot: {repo_target}") from exc
+    if not candidate.exists():
+        raise RuntimeError(f"candidate repo is missing: {candidate}")
+    if repo_target.exists() or repo_target.is_symlink():
+        if repo_target.is_dir() and not repo_target.is_symlink():
+            _force_remove_tree(repo_target)
+        else:
+            repo_target.unlink()
+    shutil.move(str(candidate), str(repo_target))
+
+
 def _cleanup_stale_temp_slot_dirs(
     slots_root: Path,
     *,
@@ -519,7 +617,7 @@ _PREPARED_SLOT_IMPORT_MODULES: tuple[str, ...] = (
 )
 
 
-def _validate_prepared_slot_imports(python_bin: Path) -> dict[str, object]:
+def _validate_prepared_slot_imports(python_bin: Path, *, repo_root: Path | None = None) -> dict[str, object]:
     modules = list(_PREPARED_SLOT_IMPORT_MODULES)
     script = (
         "import importlib, json\n"
@@ -531,8 +629,18 @@ def _validate_prepared_slot_imports(python_bin: Path) -> dict[str, object]:
         "print(json.dumps({'ok': True, 'modules': loaded}))\n"
     )
     env = dict(os.environ)
-    # Validate the installed package, not the slot repo PYTHONPATH overlay.
-    env.pop("PYTHONPATH", None)
+    validation_basis = "installed_package"
+    if repo_root is None:
+        # Validate the installed package, not the slot repo PYTHONPATH overlay.
+        env.pop("PYTHONPATH", None)
+    else:
+        validation_basis = "repo_overlay"
+        repo_src = Path(repo_root).expanduser().resolve() / "src"
+        existing_pythonpath = str(env.get("PYTHONPATH") or "").strip()
+        python_entries = [str(repo_src)]
+        if existing_pythonpath:
+            python_entries.extend(existing_pythonpath.split(os.pathsep))
+        env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(entry for entry in python_entries if str(entry).strip()))
     completed = subprocess.run(
         [str(python_bin), "-c", script],
         capture_output=True,
@@ -550,6 +658,8 @@ def _validate_prepared_slot_imports(python_bin: Path) -> dict[str, object]:
     return {
         "ok": True,
         "modules": list(payload.get("modules") or modules) if isinstance(payload, dict) else modules,
+        "basis": validation_basis,
+        "repo_root": str(Path(repo_root).expanduser().resolve()) if repo_root is not None else "",
     }
 
 
@@ -600,16 +710,28 @@ def prepare_slot(
             target_rev=target_rev,
             target_version=target_version,
         )
-        venv_tmp = prepared_slot / "venv"
-        _run([sys.executable, "-m", "venv", str(venv_tmp)])
-        py = _venv_python(venv_tmp)
-        _run([str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
-        _run([str(py), "-m", "pip", "install", str(checkout_tmp)])
-
+        venv_reuse_plan = _existing_slot_venv_reuse_plan(slot_dir, checkout_tmp)
+        reuse_existing_venv = bool(venv_reuse_plan.get("reusable"))
         final_repo_dir = slot_dir / "repo"
         final_venv_dir = slot_dir / "venv"
-        original_venv_dir = venv_tmp.resolve()
         final_py = _venv_python(final_venv_dir)
+        original_venv_dir: Path | None = None
+        if reuse_existing_venv:
+            venv_prepare = {
+                "mode": "reused_existing_slot_venv",
+                "reuse": venv_reuse_plan,
+            }
+        else:
+            venv_tmp = prepared_slot / "venv"
+            _run([sys.executable, "-m", "venv", str(venv_tmp)])
+            py = _venv_python(venv_tmp)
+            _run([str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
+            _run([str(py), "-m", "pip", "install", str(checkout_tmp)])
+            original_venv_dir = venv_tmp.resolve()
+            venv_prepare = {
+                "mode": "fresh_pip_install",
+                "reuse": venv_reuse_plan,
+            }
         git_commit = _git_text(checkout_tmp, "rev-parse", "HEAD")
         git_short_commit = _git_text(checkout_tmp, "rev-parse", "--short", "HEAD")
         git_branch = _git_text(checkout_tmp, "rev-parse", "--abbrev-ref", "HEAD")
@@ -649,11 +771,26 @@ def prepare_slot(
                 "PYTHONPATH": str(final_repo_dir / "src"),
                 "PYTHONUNBUFFERED": "1",
             },
+            "venv_prepare": venv_prepare,
         }
-        _replace_slot_dir(prepared_slot, slot_dir)
-        repair = _repair_moved_venv(final_venv_dir, original_venv_dir=original_venv_dir)
+        if reuse_existing_venv:
+            _replace_slot_repo_preserving_venv(checkout_tmp, slot_dir)
+            repair = {
+                "ok": True,
+                "skipped": True,
+                "reason": "reused_existing_slot_venv",
+                "venv_dir": str(final_venv_dir),
+            }
+        else:
+            _replace_slot_dir(prepared_slot, slot_dir)
+            if original_venv_dir is None:
+                raise RuntimeError("fresh prepared venv path was not recorded")
+            repair = _repair_moved_venv(final_venv_dir, original_venv_dir=original_venv_dir)
         manifest["venv_repair"] = repair
-        manifest["import_validation"] = _validate_prepared_slot_imports(final_py)
+        if reuse_existing_venv:
+            manifest["import_validation"] = _validate_prepared_slot_imports(final_py, repo_root=final_repo_dir)
+        else:
+            manifest["import_validation"] = _validate_prepared_slot_imports(final_py)
         if migrate_skill_runtimes:
             skill_runtime_migration = _migrate_installed_skill_runtimes(
                 final_py,

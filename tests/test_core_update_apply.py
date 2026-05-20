@@ -296,6 +296,38 @@ def test_validate_prepared_slot_imports_checks_installed_package_without_pythonp
     assert payload["ok"] is True
     assert captured["cmd"][1] == "-c"
     assert "PYTHONPATH" not in captured["env"]
+    assert payload["basis"] == "installed_package"
+
+
+def test_validate_prepared_slot_imports_can_use_repo_overlay(monkeypatch, tmp_path: Path) -> None:
+    import adaos.apps.core_update_apply as mod
+
+    captured: dict[str, object] = {}
+    repo_root = tmp_path / "slot" / "repo"
+    (repo_root / "src").mkdir(parents=True, exist_ok=True)
+
+    def _fake_run(cmd, *, capture_output=None, text=None, timeout=None, env=None):
+        captured["cmd"] = list(cmd)
+        captured["env"] = dict(env or {})
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps({"ok": True, "modules": ["adaos.services.runtime_refresh"]}),
+            stderr="",
+        )
+
+    monkeypatch.setenv("PYTHONPATH", "/tmp/source-overlay")
+    monkeypatch.setattr(mod.subprocess, "run", _fake_run)
+
+    payload = mod._validate_prepared_slot_imports(
+        tmp_path / "venv" / "bin" / "python",
+        repo_root=repo_root,
+    )
+
+    assert payload["ok"] is True
+    assert captured["env"]["PYTHONPATH"].split(mod.os.pathsep)[0] == str(repo_root.resolve() / "src")
+    assert "/tmp/source-overlay" in captured["env"]["PYTHONPATH"].split(mod.os.pathsep)
+    assert payload["basis"] == "repo_overlay"
 
 
 def test_strip_repo_vcs_metadata_removes_git_dir(tmp_path: Path) -> None:
@@ -474,6 +506,104 @@ def test_prepare_slot_preserves_explicit_empty_repo_url(monkeypatch, tmp_path: P
     assert manifest["slot"] == "A"
     assert captured["repo_url"] == ""
     assert cleanup_calls == [(str(slot_dir.parent.resolve()), 300.0)]
+
+
+def test_existing_slot_venv_reuse_plan_requires_unchanged_dependency_metadata(tmp_path: Path) -> None:
+    import adaos.apps.core_update_apply as mod
+
+    slot_dir = tmp_path / "slots" / "B"
+    existing_repo = slot_dir / "repo"
+    candidate_repo = tmp_path / "candidate"
+    existing_repo.mkdir(parents=True, exist_ok=True)
+    candidate_repo.mkdir(parents=True, exist_ok=True)
+    (existing_repo / "pyproject.toml").write_text("[project]\nname='adaos'\n", encoding="utf-8")
+    (candidate_repo / "pyproject.toml").write_text("[project]\nname='adaos'\n", encoding="utf-8")
+    python_path = mod._venv_python(slot_dir / "venv")
+    python_path.parent.mkdir(parents=True, exist_ok=True)
+    python_path.write_text("# python\n", encoding="utf-8")
+
+    plan = mod._existing_slot_venv_reuse_plan(slot_dir, candidate_repo)
+
+    assert plan["reusable"] is True
+    assert plan["reason"] == "dependency_metadata_unchanged"
+
+    (candidate_repo / "requirements.txt").write_text("new-package\n", encoding="utf-8")
+
+    changed = mod._existing_slot_venv_reuse_plan(slot_dir, candidate_repo)
+
+    assert changed["reusable"] is False
+    assert "dependency_metadata_changed" in changed["reason"]
+    assert changed["dependency_metadata"]["changed_paths"] == ["requirements.txt"]
+
+
+def test_prepare_slot_reuses_existing_slot_venv_for_code_only_update(monkeypatch, tmp_path: Path) -> None:
+    import adaos.apps.core_update_apply as mod
+
+    slot_dir = tmp_path / "slots" / "B"
+    existing_repo = slot_dir / "repo"
+    existing_repo.mkdir(parents=True, exist_ok=True)
+    (existing_repo / "pyproject.toml").write_text("[project]\nname='adaos'\n", encoding="utf-8")
+    (existing_repo / "old.txt").write_text("old\n", encoding="utf-8")
+    python_path = mod._venv_python(slot_dir / "venv")
+    python_path.parent.mkdir(parents=True, exist_ok=True)
+    python_path.write_text("# python\n", encoding="utf-8")
+
+    def _fake_prepare_checkout_repo(**kwargs):
+        checkout_dir = Path(kwargs["checkout_dir"])
+        (checkout_dir / "src" / "adaos" / "apps").mkdir(parents=True, exist_ok=True)
+        (checkout_dir / "src" / "adaos" / "apps" / "autostart_runner.py").write_text(
+            "print('new')\n",
+            encoding="utf-8",
+        )
+        (checkout_dir / "pyproject.toml").write_text("[project]\nname='adaos'\n", encoding="utf-8")
+        (checkout_dir / "new.txt").write_text("new\n", encoding="utf-8")
+        return "local_source_tree"
+
+    run_calls: list[list[str]] = []
+
+    def _fake_run(cmd, *, cwd=None):
+        run_calls.append(list(cmd))
+
+    validate_calls: list[dict[str, object]] = []
+
+    def _fake_validate(python_bin, *, repo_root=None):
+        validate_calls.append({"python_bin": Path(python_bin), "repo_root": Path(repo_root) if repo_root else None})
+        return {"ok": True, "modules": [], "basis": "repo_overlay", "repo_root": str(repo_root)}
+
+    written_manifests: list[dict[str, object]] = []
+
+    def _fake_write_slot_manifest(_slot, payload):
+        written_manifests.append(dict(payload))
+        return dict(payload)
+
+    monkeypatch.setattr(mod, "_prepare_checkout_repo", _fake_prepare_checkout_repo)
+    monkeypatch.setattr(mod, "_run", _fake_run)
+    monkeypatch.setattr(mod, "_strip_repo_vcs_metadata", lambda _repo_dir: None)
+    monkeypatch.setattr(mod, "_validate_prepared_slot_imports", _fake_validate)
+    monkeypatch.setattr(mod, "_migrate_installed_skill_runtimes", lambda *args, **kwargs: {"ok": True, "skills": []})
+    monkeypatch.setattr(mod, "_git_text", lambda *_args: "value")
+    monkeypatch.setattr(mod, "_detect_bootstrap_promotion_requirement", lambda *_args, **_kwargs: {"required": False, "changed_paths": []})
+    monkeypatch.setattr(mod, "_cleanup_stale_temp_slot_dirs", lambda *args, **kwargs: {"ok": True, "removed_total": 0})
+    monkeypatch.setattr(mod, "write_slot_manifest", _fake_write_slot_manifest)
+
+    manifest = mod.prepare_slot(
+        slot="B",
+        slot_dir_path=str(slot_dir),
+        base_dir=str(tmp_path / "base"),
+        repo_root=str(tmp_path / "repo-root"),
+        source_repo_root=str(tmp_path / "source"),
+        repo_url="",
+        migrate_skill_runtimes=False,
+    )
+
+    assert run_calls == []
+    assert (slot_dir / "venv").exists()
+    assert (slot_dir / "repo" / "new.txt").read_text(encoding="utf-8") == "new\n"
+    assert not (slot_dir / "repo" / "old.txt").exists()
+    assert manifest["venv_prepare"]["mode"] == "reused_existing_slot_venv"
+    assert manifest["venv_repair"]["skipped"] is True
+    assert validate_calls == [{"python_bin": python_path, "repo_root": slot_dir / "repo"}]
+    assert written_manifests and written_manifests[-1]["venv_prepare"]["mode"] == "reused_existing_slot_venv"
 
 
 def test_detect_bootstrap_promotion_requirement_reports_changed_paths(tmp_path: Path) -> None:

@@ -396,6 +396,13 @@ Important invariants:
 - root/bootstrap promotion never happens before the candidate already passed slot validation
 - root promotion must preserve any already-queued subsequent transition metadata so a self-update handoff does not lose the next requested transition
 - prepared slot contents must not inherit another slot's git remotes or become the authority for future updates
+- code-only core updates should not rebuild the inactive slot venv. When
+  dependency metadata is unchanged and the inactive slot already has a valid
+  venv, prepare replaces only `repo`, preserves `venv`, validates imports with
+  the same `PYTHONPATH=repo/src` overlay used by the runtime manifest, and
+  records `venv_prepare.mode=reused_existing_slot_venv`. Fresh `venv + pip
+  install` is reserved for dependency metadata changes or missing/invalid slot
+  venvs.
 
 ## Bootstrap/root promotion
 

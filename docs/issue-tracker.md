@@ -3164,6 +3164,22 @@ Human verification:
   attached-browser pressure and confirm either: warm-switch is skipped with an
   explicit insufficient-memory reason, or the node validates without SSH/root
   route timeouts.
+- [x] Identify the next core-side stall source: `.40` prepared
+  `target_version=7a2abbf8` by starting a fresh slot `venv + pip install`, and
+  the pip process stalled in `jbd2_log_wait_commit` while browser/YJS pressure
+  was active. This is a core update I/O bottleneck, not a YJS data-route
+  replacement issue.
+- [x] Add a code-only inactive-slot prepare path: when dependency metadata is
+  unchanged and the inactive slot already has a valid venv, preserve `venv`,
+  replace only `repo`, validate through the runtime `repo/src` overlay, and
+  record `venv_prepare.mode=reused_existing_slot_venv`.
+- [ ] Roll out the code-only prepare path to `.40` after the stuck prepare
+  process clears or the stand is externally recovered; verify the next
+  docs/code-only update does not spawn `pip install` and the manifest records
+  `venv_prepare.mode=reused_existing_slot_venv`.
+- [ ] Roll out the code-only prepare path to `.30` after SSH/root-route access
+  recovers; confirm attached browsers do not lose YWS solely because slot
+  preparation saturated disk/memory.
 - [ ] Run a focused `infrastate` two-browser soak after conversion and capture
   Yjs owner pressure, stream pressure, route pressure, and quarantine counters.
 - [ ] Record payload size reduction and polling reduction in this tracker.
