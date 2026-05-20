@@ -1998,6 +1998,50 @@ def _process_rss_bytes(pid: int | None) -> int | None:
         return None
 
 
+def _slot_runtime_listener_pids(host: str, port: int) -> set[int]:
+    if psutil is None:
+        return set()
+    expected_port = int(port)
+    expected_host = str(host or "").strip()
+    wildcard_hosts = {"", "0.0.0.0", "::"}
+    pids: set[int] = set()
+    try:
+        connections = psutil.net_connections(kind="tcp")
+    except Exception:
+        return set()
+    for conn in connections:
+        try:
+            if str(getattr(conn, "status", "") or "").upper() != "LISTEN":
+                continue
+            laddr = getattr(conn, "laddr", None)
+            conn_port = int(getattr(laddr, "port", 0) or (laddr[1] if isinstance(laddr, tuple) else 0))
+            if conn_port != expected_port:
+                continue
+            conn_host = str(getattr(laddr, "ip", "") or (laddr[0] if isinstance(laddr, tuple) and laddr else "")).strip()
+            if expected_host and conn_host not in {expected_host, "127.0.0.1", "::1"} and conn_host not in wildcard_hosts:
+                continue
+            pid = int(getattr(conn, "pid", 0) or 0)
+            if pid > 0:
+                pids.add(pid)
+        except Exception:
+            continue
+    return pids
+
+
+def _runtime_process_cmdline(pid: int) -> list[str]:
+    if psutil is None:
+        return []
+    try:
+        return [str(item) for item in psutil.Process(int(pid)).cmdline()]
+    except Exception:
+        return []
+
+
+def _looks_like_slot_runtime_process(pid: int) -> bool:
+    cmdline = " ".join(_runtime_process_cmdline(pid))
+    return "adaos.apps.autostart_runner" in cmdline or "adaos.apps.api.server" in cmdline
+
+
 def _positive_int_or_none(value: Any) -> int | None:
     try:
         item = int(value)
@@ -6095,6 +6139,98 @@ class SupervisorManager:
                 "slot": current_slot,
             }
 
+    async def _terminate_unmanaged_runtime_pid(
+        self,
+        *,
+        pid: int,
+        base_url: str,
+        reason: str,
+    ) -> None:
+        target_pid = int(pid)
+        shutdown_url = str(base_url or "").rstrip("/") + "/api/admin/shutdown"
+        try:
+            headers = {"Content-Type": "application/json"}
+            if self.token:
+                headers["X-AdaOS-Token"] = self.token
+            requests.post(
+                shutdown_url,
+                headers=headers,
+                json={"reason": reason, "drain_timeout_sec": 2.0, "signal_delay_sec": 0.1},
+                timeout=3.0,
+            )
+        except Exception:
+            _LOG.warning(
+                "unmanaged slot runtime shutdown request failed pid=%s url=%s reason=%s",
+                target_pid,
+                shutdown_url,
+                reason,
+                exc_info=True,
+            )
+        deadline = time.time() + 4.0
+        while time.time() < deadline:
+            if not psutil or not psutil.pid_exists(target_pid):
+                return
+            await asyncio.sleep(0.1)
+        with contextlib.suppress(Exception):
+            os.kill(target_pid, signal.SIGTERM)
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            if not psutil or not psutil.pid_exists(target_pid):
+                return
+            await asyncio.sleep(0.1)
+        with contextlib.suppress(Exception):
+            os.kill(target_pid, signal.SIGKILL)
+
+    async def _cleanup_untracked_slot_runtime_processes(
+        self,
+        *,
+        reason: str,
+        status: dict[str, Any] | None = None,
+        attempt: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        status_map = status if isinstance(status, dict) else read_core_update_status()
+        attempt_map = attempt if isinstance(attempt, dict) else _read_update_attempt()
+        if _is_transition_in_progress(status_map, attempt_map):
+            return {"ok": True, "stopped": 0, "skipped": "transition_in_progress"}
+        active_slot_name = str(active_slot() or "").strip().upper()
+        if not active_slot_name:
+            return {"ok": True, "stopped": 0, "skipped": "active_slot_unknown"}
+        tracked_pids = {os.getpid()}
+        for proc in (self._proc, self._candidate_proc):
+            with contextlib.suppress(Exception):
+                pid = int(getattr(proc, "pid", 0) or 0)
+                if pid > 0:
+                    tracked_pids.add(pid)
+        stopped: list[dict[str, Any]] = []
+        for slot_name, port in _slot_runtime_ports(self.runtime_port).items():
+            resolved_slot = str(slot_name or "").strip().upper()
+            if not resolved_slot or resolved_slot == active_slot_name:
+                continue
+            pids = _slot_runtime_listener_pids(self.runtime_host, int(port))
+            for pid in sorted(pids):
+                if pid in tracked_pids:
+                    continue
+                if not _looks_like_slot_runtime_process(pid):
+                    continue
+                base_url = self.slot_runtime_base_url(resolved_slot)
+                _LOG.warning(
+                    "stopping untracked idle slot runtime slot=%s pid=%s port=%s reason=%s",
+                    resolved_slot,
+                    pid,
+                    port,
+                    reason,
+                )
+                await self._terminate_unmanaged_runtime_pid(
+                    pid=pid,
+                    base_url=base_url,
+                    reason=reason,
+                )
+                stopped.append({"slot": resolved_slot, "pid": pid, "port": int(port)})
+        if stopped:
+            self._candidate_last_stop_reason = str(reason or "supervisor.slot_runtime.idle_cleanup")
+            self._persist_runtime_state()
+        return {"ok": True, "stopped": len(stopped), "processes": stopped}
+
     async def _promote_candidate_runtime(self, *, slot: str, reason: str) -> dict[str, Any]:
         resolved_slot = str(slot or "").strip().upper()
         current_candidate_slot = str(self._candidate_slot or "").strip().upper()
@@ -6904,6 +7040,12 @@ class SupervisorManager:
             )
             status = payload.get("status") if isinstance(payload.get("status"), dict) else {}
             attempt = payload.get("attempt") if isinstance(payload.get("attempt"), dict) else _read_update_attempt() or {}
+        if not _is_transition_in_progress(status, attempt):
+            await self._cleanup_untracked_slot_runtime_processes(
+                reason="supervisor.slot_runtime.idle_cleanup",
+                status=status,
+                attempt=attempt,
+            )
         if self._update_task is not None and not self._update_task.done():
             return
 

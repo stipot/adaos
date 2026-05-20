@@ -3281,6 +3281,19 @@ Human verification:
   runtime-debug cursors reported `YJS green` after the last provider sync.
   This closes the core-readiness gate for moving into skill optimization, with
   the public-root backend wait-budget rollout kept as hardening follow-up.
+- 2026-05-20 correction: the immediate follow-up process check found an
+  untracked inactive-slot runtime still listening on the other slot port after
+  warm switch (`.30`: active B around `560 MiB` plus inactive A around
+  `323 MiB`; `.40`: active B around `315 MiB` plus inactive A around
+  `233 MiB`). This reopens the memory part of the gate until supervisor cleans
+  orphaned slot-runtime listeners that survived supervisor/root restarts.
+- [x] Add supervisor cleanup for untracked idle slot-runtime listeners: when no
+  transition is in progress, scan slot ports, keep the active/managed runtime,
+  and gracefully stop any non-active AdaOS runtime process that is listening but
+  is no longer tracked as `candidate_proc`.
+- [ ] Roll out the orphan slot-runtime cleanup to `.30` and `.40`, then confirm
+  only supervisor plus one active slot runtime remain, RSS returns to the
+  single-runtime plateau, and YWS stays green after cleanup.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show

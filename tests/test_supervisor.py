@@ -1520,6 +1520,31 @@ def test_supervisor_monitor_cleans_idle_candidate_runtime(monkeypatch, tmp_path)
     assert manager._candidate_proc is None
 
 
+def test_supervisor_monitor_cleans_untracked_idle_slot_runtime(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    monkeypatch.setattr(supervisor, "active_slot", lambda: "B")
+    write_status({"state": "idle", "updated_at": 10.0})
+    supervisor._write_update_attempt({"state": "completed", "updated_at": 9.0})
+
+    def _listener_pids(host: str, port: int) -> set[int]:
+        return {4242} if port == 8777 else set()
+
+    stopped: list[tuple[int, str, str]] = []
+
+    async def _terminate_unmanaged_runtime_pid(*, pid: int, base_url: str, reason: str) -> None:
+        stopped.append((pid, base_url, reason))
+
+    monkeypatch.setattr(supervisor, "_slot_runtime_listener_pids", _listener_pids)
+    monkeypatch.setattr(supervisor, "_looks_like_slot_runtime_process", lambda pid: pid == 4242)
+    monkeypatch.setattr(manager, "_terminate_unmanaged_runtime_pid", _terminate_unmanaged_runtime_pid)
+
+    asyncio.run(manager._maybe_resume_or_continue_transition())
+
+    assert stopped == [(4242, "http://127.0.0.1:8777", "supervisor.slot_runtime.idle_cleanup")]
+    assert manager._candidate_last_stop_reason == "supervisor.slot_runtime.idle_cleanup"
+
+
 def test_supervisor_start_update_schedules_when_min_period_not_elapsed(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
     monkeypatch.setenv("ADAOS_SUPERVISOR_MIN_UPDATE_PERIOD_SEC", "300")
