@@ -1092,6 +1092,11 @@ Validation notes:
 - `.40`: `infrastate_skill` is also on `0.75.13`; there was no active
   infrastate projection traffic for `desktop` during the probe, so use `.40`
   as an idle/member validation point until an active browser opens the surface.
+- Stand caveat: the main-repo documentation commits triggered core-update
+  targets on `.30`/`.40`, but those targets are not required for the
+  skill-runtime migration and hit the existing slot-checkout defect
+  (`fatal: reference is not a tree`). The plans were cancelled after validation
+  so the stands remained listening.
 
 #### HMG-007: Keep guardrails observability-first
 
