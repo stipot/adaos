@@ -171,6 +171,43 @@ def test_register_status_registry_consumes_sdk_status_events(monkeypatch) -> Non
     assert changed[0].payload["card"]["id"] == "runtime"
 
 
+def test_publish_status_initializes_lazy_context_registry(monkeypatch) -> None:
+    bus = LocalEventBus()
+
+    class _Ctx:
+        def __init__(self) -> None:
+            self.bus = bus
+            self._registry = None
+
+        @property
+        def status_registry(self):
+            if self._registry is None:
+                self._registry = register_status_registry(self.bus)
+            return self._registry
+
+    ctx = _Ctx()
+    monkeypatch.setattr(sdk_status, "get_ctx", lambda: ctx)
+    monkeypatch.setattr(
+        sdk_status,
+        "get_current_skill",
+        lambda: SimpleNamespace(name="infrascope_skill"),
+    )
+
+    sdk_status.publish_status(
+        id="overview",
+        kind="overview",
+        scope="infrascope",
+        status="ready",
+        summary="ready",
+        webspace_id="desktop",
+    )
+
+    snapshot = ctx.status_registry.snapshot(webspace_id="desktop")
+    assert snapshot["total"] == 1
+    assert snapshot["cards"][0]["owner"] == "skill:infrascope_skill"
+    assert snapshot["diagnostics"]["publish_total"] == 1
+
+
 def test_agent_context_status_registry_registers_bus_subscription(tmp_path) -> None:
     from adaos.services.eventbus import emit
     from adaos.services.testing.bootstrap import bootstrap_test_ctx

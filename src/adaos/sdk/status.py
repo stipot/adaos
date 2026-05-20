@@ -28,6 +28,10 @@ def _emit_status(topic: str, payload: dict[str, Any]) -> None:
     bus = getattr(ctx, "bus", None)
     if bus is None:
         raise RuntimeError("AgentContext.bus is not initialized")
+    try:
+        ctx.status_registry
+    except Exception:
+        pass
     emit(bus, topic, payload, "sdk.status")
 
 
