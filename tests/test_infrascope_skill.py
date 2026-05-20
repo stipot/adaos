@@ -658,6 +658,51 @@ def test_infrascope_overview_stream_snapshot_uses_compact_direct_builder(monkeyp
     assert published[0][1][0]["details_receiver"] == "infrascope.inspector.member-1"
 
 
+def test_infrascope_status_cards_are_compact_route_refs(monkeypatch):
+    mod = _load_infrascope_module()
+    published: list[tuple[list[dict[str, object]], dict[str, object]]] = []
+
+    snapshot = {
+        "summary": {"value": "warning", "subtitle": "link flaps"},
+        "overview": {
+            "health_strip": [{"id": "health:member-1", "status": "warning", "details": {"large": "payload"}}],
+            "active_incidents": [{"id": "incident:member-1", "status": "warning", "summary": "link flaps"}],
+            "active_operations": [{"id": "op-1", "status": "warning", "details": {"large": "payload"}}],
+        },
+        "inventory": {
+            "all": [{"id": "hub-1"}, {"id": "member-1"}],
+            "hubs": [{"id": "hub-1"}],
+            "members": [{"id": "member-1"}],
+            "browsers": [{"id": "browser-1", "status": "online", "details": {"large": "payload"}}],
+            "runtimes": [{"id": "runtime-1", "status": "degraded"}],
+            "skills": [{"id": "skill:a", "status": "online"}],
+            "scenarios": [{"id": "scenario:a", "status": "online"}],
+        },
+        "operations": {"items": [{"id": "op-1", "status": "warning"}]},
+        "meta": {"partial": False, "error_total": 0},
+    }
+
+    monkeypatch.setattr(
+        mod.status_sdk,
+        "publish_status_many",
+        lambda cards, **kwargs: published.append((list(cards), dict(kwargs))) or {"ok": True, "published": len(list(cards))},
+    )
+
+    cards = mod._infrascope_status_cards(snapshot, webspace_id="desktop")
+    by_id = {card["id"]: card for card in cards}
+    mod._publish_status_cards(snapshot, webspace_id="desktop")
+
+    assert set(by_id) == {"overview", "active_incidents", "inventory", "browser_runtime", "registry", "operations"}
+    assert by_id["overview"]["details_ref"]["receiver"] == "infrascope.overview.health_strip"
+    assert by_id["active_incidents"]["status"] == "warning"
+    assert by_id["browser_runtime"]["status"] == "degraded"
+    assert by_id["inventory"]["metadata"]["objects"] == 2
+    assert "details" not in by_id["inventory"]
+    assert published[0][1]["owner"] == "skill:infrascope_skill"
+    assert published[0][1]["scope"] == "infrascope"
+    assert published[0][1]["_meta"] == {"webspace_id": "desktop"}
+
+
 def test_infrascope_adds_skill_migration_operation_row(monkeypatch):
     mod = _load_infrascope_module()
 

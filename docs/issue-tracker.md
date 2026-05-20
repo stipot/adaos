@@ -1105,6 +1105,12 @@ Validation notes:
   skill-runtime migration and hit the existing slot-checkout defect
   (`fatal: reference is not a tree`). The plans were cancelled after validation
   so the stands remained listening.
+- 2026-05-20: pushed `infrascope_skill` revision
+  `8597bd7f3c51326ab384d7ed652103c41946deec` (`0.28.5`). The new status-card
+  layer does not replace Yjs or stream data: it publishes a compact registry
+  index over the same Infrascope receivers, while rows and inspectors stay in
+  `infrascope.overview.*`, `infrascope.inventory.*`,
+  `infrascope.operations.active`, and `infrascope.inspector.*`.
 
 #### HMG-007: Keep guardrails observability-first
 
@@ -2469,7 +2475,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 58%.
+Progress: 70%.
 
 Current useful pattern:
 
@@ -2502,11 +2508,11 @@ Actions:
 - [x] Apply shared `HotEventBudget` to `infrascope_skill` browser-runtime and
   member-snapshot/meta refresh triggers; suppressed bursts keep one trailing
   refresh and only stable counters enter Yjs metadata.
-- [ ] Identify `infrascope` status cards: overview, active incidents,
+- [x] Identify `infrascope` status cards: overview, active incidents,
   inventory, browser/runtime state, registry, and operations.
-- [ ] Publish cards through the shared SDK helpers.
-- [ ] Keep overview/inventory/inspector streams as details targets.
-- [ ] Ensure inspector data stays lazy and is not embedded in status cards.
+- [x] Publish cards through the shared SDK helpers.
+- [x] Keep overview/inventory/inspector streams as details targets.
+- [x] Ensure inspector data stays lazy and is not embedded in status cards.
 - [x] Add tests proving overview/inventory stream snapshots can publish without
   building a full Infrascope snapshot.
 - [ ] Add byte-size instrumentation for compact overview sections and direct
@@ -2528,6 +2534,14 @@ Human verification:
 - During/after a managed core update, `.adaos/state/core_update/status.json`
   should move from `restarting/launch` to `succeeded/validate` once the runtime
   API is ready on the target slot.
+
+Validation notes:
+
+- 2026-05-20: pushed `infrascope_skill` revision
+  `8597bd7f3c51326ab384d7ed652103c41946deec` (`0.28.5`). Local regression
+  coverage proves the status-card batch contains only compact summaries,
+  counters, TTL, and stream receiver references; active rows, inventory
+  payloads, and inspectors remain in the existing stream/detail routes.
 
 #### STATUS-005B: Convert `browsers_skill` after core guard observability
 

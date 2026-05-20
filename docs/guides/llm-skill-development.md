@@ -373,6 +373,10 @@ Status card rules:
   pressure back to the skill route plan
 - use `publish_status_stream()` when the card itself should also be available
   as a replace-mode stream variable
+- when publishing a batch of cards from a refresh, build them from the compact
+  snapshot that was already computed and put only counters plus
+  `details_ref`/`route` receiver pointers in the card; do not rebuild
+  inspectors or inventories just to make cards
 - verify cards through `GET /api/node/status/cards`; the compatibility
   `/api/node/reliability/summary` surface also carries a compact `statusPlane`
   block for badge/status UI during migration
