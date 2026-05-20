@@ -209,6 +209,63 @@ def test_reconcile_update_status_rejects_terminal_success_for_wrong_active_slot(
     assert attempt["last_status"]["target_version"] == "2222222222222222222222222222222222222222"
 
 
+def test_reconcile_update_status_recovers_failed_mismatch_after_slot_catches_up(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    target = "2222222222222222222222222222222222222222"
+    monkeypatch.setattr(supervisor.time, "time", lambda: 520.0)
+    monkeypatch.setattr(supervisor, "active_slot", lambda: "A")
+    monkeypatch.setattr(
+        supervisor,
+        "active_slot_manifest",
+        lambda: {
+            "slot": "A",
+            "target_version": target,
+            "git_commit": target,
+            "git_short_commit": target[:7],
+        },
+    )
+    supervisor._write_update_attempt(
+        {
+            "state": "failed",
+            "action": "update",
+            "target_rev": "rev2026",
+            "target_version": target,
+            "requested_at": 450.0,
+            "transitioned_at": 460.0,
+            "updated_at": 500.0,
+            "completed_at": 500.0,
+            "completion_reason": "active slot target mismatch",
+            "last_status": {
+                "state": "failed",
+                "phase": "validate",
+                "target_version": target,
+                "active_slot_target_mismatch": True,
+            },
+        }
+    )
+
+    payload = supervisor._reconcile_update_status(
+        {
+            "ok": True,
+            "status": {
+                "state": "succeeded",
+                "phase": "validate",
+                "target_rev": "rev2026",
+                "target_version": target,
+                "updated_at": 519.0,
+            },
+            "_served_by": "runtime",
+        }
+    )
+
+    assert payload["_served_by"] == "supervisor_target_mismatch_recovered"
+    attempt = payload.get("attempt")
+    assert isinstance(attempt, dict)
+    assert attempt["state"] == "completed"
+    assert attempt["completion_reason"] == "active slot target mismatch recovered"
+    assert attempt["last_status"]["state"] == "succeeded"
+
+
 def test_sidecar_role_falls_back_to_load_config_when_ctx_config_is_missing(monkeypatch) -> None:
     manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token=None)
 

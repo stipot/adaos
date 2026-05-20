@@ -334,7 +334,9 @@ def _strip_summary_etag_volatiles(value: Any) -> Any:
                 "updated_at",
                 "updatedAt",
                 "changedAt",
+                "lastChangedAt",
                 "lastPublishLatencyMs",
+                "maxCardBytesObserved",
             }
         }
     if isinstance(value, list):

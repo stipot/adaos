@@ -1540,6 +1540,27 @@ def _active_slot_target_mismatch_status(status: dict[str, Any], attempt: dict[st
     )
 
 
+def _failed_target_mismatch_attempt_recovered(status: dict[str, Any], attempt: dict[str, Any]) -> bool:
+    if str(attempt.get("state") or "").strip().lower() != "failed":
+        return False
+    if str(attempt.get("completion_reason") or "").strip().lower() != "active slot target mismatch":
+        return False
+    if bool(status.get("active_slot_target_mismatch")):
+        return False
+    if not _is_terminal_update_status(status):
+        return False
+    if not _terminal_status_belongs_to_attempt(status, attempt):
+        return False
+    expected_target_version = str(status.get("target_version") or attempt.get("target_version") or "").strip()
+    if not expected_target_version:
+        return False
+    try:
+        manifest = active_slot_manifest()
+    except Exception:
+        manifest = None
+    return _manifest_matches_target_version(manifest, expected_target_version)
+
+
 def _fail_root_restart_attempt(
     *,
     status: dict[str, Any],
@@ -1587,6 +1608,15 @@ def _reconcile_update_status(payload: dict[str, Any]) -> dict[str, Any]:
         return payload
 
     payload["attempt"] = dict(attempt)
+    if _failed_target_mismatch_attempt_recovered(status, attempt):
+        payload["attempt"] = _complete_update_attempt(
+            state="completed",
+            status=status,
+            reason="active slot target mismatch recovered",
+        )
+        payload["_served_by"] = "supervisor_target_mismatch_recovered"
+        return payload
+
     now = time.time()
     timeout_sec = _update_attempt_timeout_sec()
     status_age = max(0.0, now - _status_updated_at(status)) if _status_updated_at(status) > 0.0 else 0.0

@@ -357,6 +357,20 @@ publish/flush failures, slow control flushes, and browser close reasons such as
 They are checked together with `yroom-*` bootstrap state before declaring the
 core ready for skill optimization.
 
+Status-plane freshness also has to be semantic. Thin reliability summaries may
+include timestamps, boundary observations, and cache metrics for operators, but
+their ETag/`If-None-Match` contract should change only when the compact state a
+browser would render changes. Repeated unchanged status-card publishes must
+therefore return `304` even if local diagnostic timestamps or observed byte
+high-water marks moved.
+
+Core-update status follows the same reconciliation rule. A supervisor may reject
+a terminal success while the active slot still points at the old target, but if
+the slot later catches up and the active manifest matches the requested target,
+the failed mismatch attempt should be self-healed to a completed recovered
+attempt. Otherwise operator status becomes stale evidence and can be mistaken
+for a YJS or stream regression.
+
 ## Reference Skills
 
 ### `browsers_skill`
@@ -470,6 +484,9 @@ diagnostic surface from becoming a primary Yjs pressure source.
   through `/api/node/reliability/summary` or its successor
 - [x] `status.summary_etag`: support `mode=thin` plus ETag/`If-None-Match`
   for unchanged polling responses
+- [x] `status.summary_semantic_etag`: keep volatile diagnostics such as
+  `lastChangedAt` and observed high-water byte marks out of the thin-summary
+  ETag so unchanged cards can reuse `304`
 - [x] `status.summary_client_cache`: use thin-summary ETags in the Angular
   communication runtime before requesting full compatibility details
 - [x] `status.summary_metrics`: expose summary mode, response bytes, cache
@@ -495,6 +512,9 @@ diagnostic surface from becoming a primary Yjs pressure source.
 - [x] `update.active_slot_target_validation`: reject terminal update success
   when the active slot manifest does not match the requested target version,
   so acceptance soaks cannot accidentally measure an old runtime
+- [x] `update.active_slot_target_recovery`: self-heal a failed mismatch attempt
+  after the active slot manifest catches up to the terminal target status, so
+  public update status does not preserve stale failure evidence
 - [x] `status.hot_event_budget`: add a shared debounce/window budget helper
   for hot event-to-status paths before skill-specific migrations
 - [x] `status.compact_boundary_diagnostics`: expose max card bytes, observed

@@ -3247,6 +3247,23 @@ Human verification:
   pass condition is: no sustained `hub_open_ack_timeout`, no `open_ack`
   publish failure, `hub-route` slow flushes remain observable but do not close
   the channel, and YWS runtime-debug stays green after initial provider sync.
+- 2026-05-20 rollout checkpoint: `.30` and `.40` both reached active slot
+  `10f9238` with normal memory (`.30` about `740 MiB` used, `32 MiB` swap;
+  `.40` about `470 MiB` used, `17 MiB` swap). `.30` still preserved a stale
+  supervisor attempt failure (`active slot target mismatch`) even though
+  `update-status` and the active manifest showed the requested target, so the
+  next core patch must self-heal recovered target-mismatch attempts instead of
+  leaving misleading failure evidence in the operator status plane.
+- [x] Add supervisor status reconciliation for recovered target mismatches:
+  when a previous `active slot target mismatch` failure later has a terminal
+  `succeeded/validate` status whose target matches the active slot manifest,
+  rewrite the attempt as `completed` with reason
+  `active slot target mismatch recovered`.
+- [x] Make thin reliability-summary ETags semantic rather than diagnostic:
+  volatile status-plane fields such as `lastChangedAt` and observed max-card
+  byte high-water marks remain visible in payloads/metrics, but repeated
+  unchanged cards can still return `304` and avoid unnecessary first-paint
+  polling churn.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show
