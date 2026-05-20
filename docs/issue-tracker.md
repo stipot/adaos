@@ -2550,10 +2550,10 @@ Actions:
   burst immediately and schedules one trailing refresh after `retry_after_ms`,
   so the final browser online/offline state is delivered without rebuilding the
   Browsers streams for every raw `browser.session.changed`.
-- [x] Compact browser stream rows by removing duplicate subtitle payload and
-  replacing verbose multi-line browser details with a one-line first-interaction
-  summary. Expanded IDs, auth/session facts, and diagnostics stay behind
-  actions/details rather than every `browsers.devices` stream row.
+- [x] Compact browser stream rows by removing duplicate subtitle, duplicated
+  browser id, constant icon, derived status, and verbose details from every row.
+  Expanded IDs, auth/session facts, and diagnostics stay behind actions/details
+  rather than every `browsers.devices` stream row.
 - [ ] Identify status cards: browser runtime, session/auth, access-link
   registry, device registry, and guard pressure.
 - [ ] Keep raw session churn in diagnostics streams/logs and publish only
@@ -2644,10 +2644,17 @@ Validation notes:
   subscribed.
 - Skill payload pass: pushed `browsers_skill` revision
   `2dc90ed87ebe19dd92fb822fb3978e0fc512483d`. Browser device/client stream
-  rows now keep a compact one-line details field and no longer duplicate the
-  rendered subtitle as `uiSubtitle` in the payload. This keeps the subscribed
-  stream route intact while reducing per-row bytes before the stream guard sees
-  an active modal.
+  rows first removed duplicated `uiSubtitle` and verbose multi-line details.
+  Follow-up stand probe on `.30` used the real client subscribe protocol and
+  showed `browsers.devices` still around 32 KB, enough to trigger stream guard
+  warning under fanout=3; the next pass removes remaining row dups (`device_id`,
+  constant icon, derived status, and inline details) and maps Settings actions
+  to `$event.id`.
+- Skill payload pass 2: pushed `browsers_skill` revision
+  `32f9348f34f1d5379582db2ddecdee6da324ea43`. The Browsers modal keeps the
+  same stream receivers and Settings workflow, but row payload is now
+  `id/title/subtitle/online`; details and device operations are loaded through
+  the selected-browser modal/actions.
 
 #### STATUS-006: Make `/api/node/reliability/summary` thin and versioned
 

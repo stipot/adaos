@@ -161,11 +161,12 @@ def test_browsers_skill_browser_tiles_include_online_flag(monkeypatch) -> None:
 
     assert tiles[0]["title"] == "Dev Browser"
     assert tiles[0]["online"] is True
-    assert tiles[0]["status"] == "online"
+    assert "device_id" not in tiles[0]
+    assert "status" not in tiles[0]
+    assert "icon" not in tiles[0]
+    assert "content" not in tiles[0]
     assert "uiSubtitle" not in tiles[0]
-    assert "\n" not in tiles[0]["content"]
     assert tiles[1]["online"] is False
-    assert tiles[1]["status"] == "offline"
 
 
 def test_browsers_skill_explicit_refresh_recomputes_without_rewriting_identical_yjs(monkeypatch) -> None:

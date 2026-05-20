@@ -463,6 +463,9 @@ Stream rows are not a dumping ground for every field the skill knows. Keep row
 payloads to the fields the widget renders for first interaction, avoid
 duplicating the same text under multiple names, and move verbose IDs, timelines,
 raw status, and diagnostics behind actions or details receivers.
+Prefer widget configuration or action parameter mappings over repeated constant
+fields in every row; for example, pass `$event.id` to an action instead of
+copying the same identifier to both `id` and `device_id`.
 
 Good shape:
 
