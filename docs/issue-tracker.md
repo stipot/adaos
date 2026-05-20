@@ -2353,7 +2353,7 @@ Human verification:
 
 Status: in progress.
 
-Progress: 84%.
+Progress: 88%.
 
 Expected API:
 
@@ -2381,7 +2381,16 @@ Actions:
   counters before skill-specific optimization hides the pressure source.
 - [x] Add tests showing a skill can publish status without touching Yjs or
   rebuilding a full snapshot.
+- [x] Ensure `adaos.sdk.status` initializes the lazy status registry before the
+  first SDK emit, so an early skill status batch is not lost before
+  `/api/node/status/cards` is first requested.
 - [x] Add migration notes for skill authors.
+
+Validation notes:
+
+- 2026-05-20: local regression coverage pins the lazy-registry case: a skill
+  can call `publish_status(...)` before any explicit status endpoint access,
+  and the card is materialized in `StatusRegistry` immediately.
 
 Human verification:
 
@@ -2542,6 +2551,12 @@ Validation notes:
   coverage proves the status-card batch contains only compact summaries,
   counters, TTL, and stream receiver references; active rows, inventory
   payloads, and inspectors remain in the existing stream/detail routes.
+- `.30` / `.40`: after applying the SDK lazy-registry fix to root source for
+  stand validation and restarting autostart, `refresh_snapshot` published six
+  `skill:infrascope_skill` cards (`overview`, `active_incidents`, `inventory`,
+  `browser_runtime`, `registry`, `operations`) with `oversizedCardTotal=0` and
+  max observed card size about 715 bytes. Repeated refreshes dedupe through the
+  registry once the live snapshot stabilizes.
 
 #### STATUS-005B: Convert `browsers_skill` after core guard observability
 
