@@ -3319,9 +3319,20 @@ Human verification:
   shutdown, clean the candidate, and preserve the current YWS/HTTP listener.
 - [x] Add the warm-switch prewarm-not-ready guard and regression test so a slow
   passive candidate cannot take down the active runtime listener.
-- [ ] Roll out the warm-switch prewarm-not-ready guard to `.30` and `.40`,
-  repeat the docs-only update path, and confirm failed/deferred prewarm leaves
-  the active runtime listener alive while ready candidates still promote.
+- [x] Roll out the warm-switch prewarm-not-ready guard to `.30` and `.40`,
+  and confirm the rollout leaves a single active listener on each stand.
+- [ ] Repeat a docs-only update after `b572adca` is active and confirm
+  failed/deferred prewarm leaves the active runtime listener alive while ready
+  candidates still promote.
+- 2026-05-20 validation after `b572adca`: both stands reached the guard build
+  with one supervisor plus one active runtime listener. `.30` completed root
+  promotion on slot A, stayed around `722 -> 730 MiB` used with swap fixed at
+  `32 MiB`, and reported `yjs_runtime state=nominal` with `yws=2`. `.40`
+  completed on slot B, stayed around `532 -> 527 MiB` used with swap fixed at
+  `17 MiB`, and had no active YWS clients in the post-check window. The failed
+  short-SHA prepare attempt proved active listeners stay alive during prepare
+  failure; the next docs-only checkpoint should exercise the new prewarm guard
+  under the already-deployed supervisor.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show
