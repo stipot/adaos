@@ -184,7 +184,8 @@ Current status:
 - `/api/node/status-cards` publishes and reads status-card projection records
 - `/api/node/projection-records/status-cards/materialize` can explicitly copy
   status-card projection records into the shared materialized
-  `ProjectionRecord` registry, with optional `card_ids` filtering
+  `ProjectionRecord` registry, with optional `card_ids` filtering and
+  `demanded_only=true` selection from browser demand
 - runtime lifecycle is now emitted as the built-in `status-card:runtime`
   platform card
 - demanded dispatcher refreshes `status-card:*` subscriptions through the shared
@@ -389,7 +390,7 @@ Use this checklist for every implementation slice touching the event model.
 | Event taxonomy | Stable vocabulary | Complete |
 | Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
-| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and shared projection-record materialization added |
+| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
 | Projection record ABI | Canonical record shape | Helper code, shared materialized registry, and status-card bridge added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
