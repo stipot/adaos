@@ -39,6 +39,7 @@ from adaos.services.yjs.store import ystore_write_metadata
 from adaos.services.yjs.update_origin import consume_backend_room_update
 from adaos.services.yjs.webspace import default_webspace_id
 from adaos.services.scheduler import get_scheduler
+from adaos.services.status.hot_events import HotEventBudget
 from adaos.domain import Event as DomainEvent
 from adaos.services.agent_context import get_ctx as get_agent_ctx
 
@@ -49,6 +50,7 @@ _TRANSPORT_LOCK = threading.RLock()
 _ACTIVE_YWS_LOCK = threading.RLock()
 _YWS_STORM_LOCK = threading.RLock()
 _YWS_ATTEMPT_LOCK = threading.RLock()
+_BROWSER_SESSION_EVENT_LOCK = threading.RLock()
 _TRANSPORT_STATE: dict[str, dict[str, Any]] = {
     "ws": {
         "active_connections": 0,
@@ -79,6 +81,19 @@ _YWS_GUARD_DIAG: dict[str, Any] = {
     "last_reject_reason": "",
     "last_reject_webspace_id": "",
     "last_reject_dev_id": "",
+}
+_BROWSER_SESSION_EVENT_BUDGET: HotEventBudget
+_BROWSER_SESSION_EVENT_PENDING: dict[str, dict[str, Any]] = {}
+_BROWSER_SESSION_EVENT_TASKS: dict[str, asyncio.Task[Any]] = {}
+_BROWSER_SESSION_EVENT_LAST_LOG_AT: dict[str, float] = {}
+_BROWSER_SESSION_EVENT_DIAG: dict[str, Any] = {
+    "published_total": 0,
+    "suppressed_total": 0,
+    "coalesced_total": 0,
+    "last_published_at": 0.0,
+    "last_suppressed_at": 0.0,
+    "last_reason": "",
+    "last_key": "",
 }
 _YWS_ATTEMPT_SEQ = 0
 _CURRENT_YWS_ATTEMPT_ID = contextvars.ContextVar("adaos_yws_attempt_id", default="")
@@ -236,6 +251,11 @@ _YROOM_AUTHORITATIVE_SELECTOR_LEASE_SEC = _env_float(
     "ADAOS_YJS_AUTHORITATIVE_SELECTOR_LEASE_SEC",
     30.0,
     minimum=0.0,
+)
+_BROWSER_SESSION_EVENT_BUDGET = HotEventBudget(
+    debounce_ms=_env_int("ADAOS_YWS_BROWSER_SESSION_EVENT_DEBOUNCE_MS", 1000, minimum=0),
+    window_ms=_env_int("ADAOS_YWS_BROWSER_SESSION_EVENT_WINDOW_MS", 10000, minimum=1),
+    max_events=_env_int("ADAOS_YWS_BROWSER_SESSION_EVENT_MAX_EVENTS", 5, minimum=1),
 )
 _EMPTY_Y_UPDATE = b"\x00\x00"
 _YROOM_INBOUND_GUARD_RESET_AT: dict[str, float] = {}
@@ -1723,6 +1743,177 @@ def _publish_runtime_event(topic: str, payload: dict[str, Any] | None = None, *,
         _log.debug("failed to publish runtime event topic=%s", topic, exc_info=True)
 
 
+def _browser_session_event_key(payload: dict[str, Any] | None) -> str:
+    data = payload if isinstance(payload, dict) else {}
+    webspace_id = str(data.get("webspace_id") or data.get("workspace_id") or "default").strip() or "default"
+    device_id = str(
+        data.get("device_id")
+        or data.get("dev_id")
+        or data.get("browser_key_id")
+        or data.get("session_id")
+        or "unknown"
+    ).strip() or "unknown"
+    return f"{webspace_id}::{device_id}"
+
+
+def _browser_session_event_payload(
+    payload: dict[str, Any],
+    *,
+    hot_event: dict[str, Any] | None = None,
+    coalesced: bool = False,
+) -> dict[str, Any]:
+    out = dict(payload or {})
+    if hot_event:
+        out["hot_event"] = dict(hot_event)
+    if coalesced:
+        out["coalesced"] = True
+        out["source"] = str(out.get("source") or "yws.gateway")
+    return out
+
+
+def _log_browser_session_event_suppressed(key: str, decision: dict[str, Any], payload: dict[str, Any]) -> None:
+    now = time.monotonic()
+    with _BROWSER_SESSION_EVENT_LOCK:
+        last = float(_BROWSER_SESSION_EVENT_LAST_LOG_AT.get(key) or 0.0)
+        if now - last < 5.0:
+            return
+        _BROWSER_SESSION_EVENT_LAST_LOG_AT[key] = now
+    _ylog.warning(
+        "browser.session.changed coalesced key=%s state=%s yws_state=%s reason=%s retry_after_ms=%s suppressed_total=%s coalesced_total=%s",
+        key,
+        payload.get("connection_state") or "-",
+        payload.get("yjs_channel_state") or "-",
+        decision.get("reason") or "-",
+        decision.get("retry_after_ms") or 0,
+        decision.get("suppressed_total") or 0,
+        decision.get("coalesced_total") or 0,
+    )
+
+
+async def _flush_browser_session_changed_later(key: str, delay_ms: int) -> None:
+    try:
+        await asyncio.sleep(max(0.0, float(delay_ms or 0) / 1000.0))
+        with _BROWSER_SESSION_EVENT_LOCK:
+            current = asyncio.current_task()
+            if _BROWSER_SESSION_EVENT_TASKS.get(key) is current:
+                _BROWSER_SESSION_EVENT_TASKS.pop(key, None)
+            payload = _BROWSER_SESSION_EVENT_PENDING.pop(key, None)
+        if payload:
+            _publish_browser_session_changed(payload, coalesced=True, _from_flush=True)
+    except asyncio.CancelledError:
+        return
+    except Exception:
+        _log.debug("failed to flush coalesced browser.session.changed key=%s", key, exc_info=True)
+
+
+def _schedule_browser_session_event_flush(key: str, retry_after_ms: int) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    with _BROWSER_SESSION_EVENT_LOCK:
+        current = _BROWSER_SESSION_EVENT_TASKS.get(key)
+        if current is not None and not current.done():
+            return
+        delay_ms = max(100, int(retry_after_ms or 0))
+        _BROWSER_SESSION_EVENT_TASKS[key] = loop.create_task(
+            _flush_browser_session_changed_later(key, delay_ms),
+            name=f"adaos-browser-session-event-flush-{key}",
+        )
+
+
+def _publish_browser_session_changed(
+    payload: dict[str, Any] | None,
+    *,
+    force: bool = False,
+    coalesced: bool = False,
+    now_ts: float | None = None,
+    schedule: bool = True,
+    _from_flush: bool = False,
+) -> bool:
+    data = dict(payload or {})
+    key = _browser_session_event_key(data)
+    if force:
+        decision = {
+            "admitted": True,
+            "reason": "forced",
+            "key": f"browser.session.changed/{key}",
+            "retry_after_ms": 0,
+            "suppressed_total": 0,
+            "coalesced_total": 0,
+        }
+    else:
+        decision = _BROWSER_SESSION_EVENT_BUDGET.admit(
+            "browser.session.changed",
+            key=key,
+            now_ts=now_ts,
+        ).to_dict()
+    if decision.get("admitted"):
+        with _BROWSER_SESSION_EVENT_LOCK:
+            if not _from_flush:
+                _BROWSER_SESSION_EVENT_PENDING.pop(key, None)
+                task = _BROWSER_SESSION_EVENT_TASKS.pop(key, None)
+                if task is not None and not task.done():
+                    task.cancel()
+            _BROWSER_SESSION_EVENT_DIAG["published_total"] = int(
+                _BROWSER_SESSION_EVENT_DIAG.get("published_total") or 0
+            ) + 1
+            _BROWSER_SESSION_EVENT_DIAG["last_published_at"] = time.time()
+            _BROWSER_SESSION_EVENT_DIAG["last_reason"] = str(decision.get("reason") or "")
+            _BROWSER_SESSION_EVENT_DIAG["last_key"] = key
+        _publish_runtime_event(
+            "browser.session.changed",
+            _browser_session_event_payload(
+                data,
+                hot_event=decision,
+                coalesced=coalesced,
+            ),
+        )
+        return True
+
+    with _BROWSER_SESSION_EVENT_LOCK:
+        _BROWSER_SESSION_EVENT_PENDING[key] = data
+        _BROWSER_SESSION_EVENT_DIAG["suppressed_total"] = int(
+            _BROWSER_SESSION_EVENT_DIAG.get("suppressed_total") or 0
+        ) + 1
+        _BROWSER_SESSION_EVENT_DIAG["coalesced_total"] = int(
+            _BROWSER_SESSION_EVENT_DIAG.get("coalesced_total") or 0
+        ) + 1
+        _BROWSER_SESSION_EVENT_DIAG["last_suppressed_at"] = time.time()
+        _BROWSER_SESSION_EVENT_DIAG["last_reason"] = str(decision.get("reason") or "")
+        _BROWSER_SESSION_EVENT_DIAG["last_key"] = key
+    _log_browser_session_event_suppressed(key, decision, data)
+    if schedule:
+        _schedule_browser_session_event_flush(key, int(decision.get("retry_after_ms") or 0))
+    return False
+
+
+def _browser_session_event_budget_snapshot(now: float) -> dict[str, Any]:
+    try:
+        budget = _BROWSER_SESSION_EVENT_BUDGET.snapshot(now_ts=now)
+    except Exception:
+        budget = {}
+    items = budget.get("items") if isinstance(budget, dict) else []
+    if not isinstance(items, list):
+        items = []
+    with _BROWSER_SESSION_EVENT_LOCK:
+        pending_total = len(_BROWSER_SESSION_EVENT_PENDING)
+        pending_keys = sorted(_BROWSER_SESSION_EVENT_PENDING.keys())[:8]
+        task_total = sum(1 for task in _BROWSER_SESSION_EVENT_TASKS.values() if task is not None and not task.done())
+        diag = dict(_BROWSER_SESSION_EVENT_DIAG)
+    return {
+        "schema": "adaos.browser_session_event_budget.v1",
+        "debounce_ms": budget.get("debounce_ms") if isinstance(budget, dict) else None,
+        "window_ms": budget.get("window_ms") if isinstance(budget, dict) else None,
+        "max_events": budget.get("max_events") if isinstance(budget, dict) else None,
+        "pending_total": int(pending_total),
+        "pending_keys": pending_keys,
+        "flush_task_total": int(task_total),
+        "top": items[:8],
+        **diag,
+    }
+
+
 def _normalize_ws_event_topics(raw_topics: Any) -> set[str]:
     if not isinstance(raw_topics, list):
         return set()
@@ -2691,6 +2882,7 @@ def _yws_storm_snapshot(now: float) -> dict[str, Any]:
             "incident_total": incident_total,
             **guard_diag,
         },
+        "browser_session_events": _browser_session_event_budget_snapshot(now),
     }
 
 
@@ -4340,8 +4532,7 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
                 )
             except Exception:
                 _ylog.debug("browser access registry guard update failed webspace=%s dev=%s", webspace_id, dev_id, exc_info=True)
-            _publish_runtime_event(
-                "browser.session.changed",
+            _publish_browser_session_changed(
                 {
                     "device_id": dev_id,
                     "webspace_id": webspace_id,
@@ -4355,6 +4546,7 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
                     "client_open_15s": guard_diag.get("client_open_15s"),
                     "source": "yws.gateway.guard",
                 },
+                force=True,
             )
         try:
             await websocket.close(code=1013, reason=state_token[:120])
@@ -4413,8 +4605,7 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
         )
     except Exception:
         _ylog.debug("browser access registry open update failed webspace=%s dev=%s", webspace_id, dev_id, exc_info=True)
-    _publish_runtime_event(
-        "browser.session.changed",
+    _publish_browser_session_changed(
         {
             "device_id": dev_id,
             "webspace_id": webspace_id,
@@ -4455,8 +4646,7 @@ async def _yws_impl(websocket: WebSocket, room: str | None) -> None:
                 )
             except Exception:
                 _ylog.debug("browser access registry close update failed webspace=%s dev=%s", webspace_id, dev_id, exc_info=True)
-            _publish_runtime_event(
-                "browser.session.changed",
+            _publish_browser_session_changed(
                 {
                     "device_id": dev_id,
                     "webspace_id": webspace_id,

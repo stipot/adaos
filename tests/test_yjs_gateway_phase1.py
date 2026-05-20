@@ -1219,6 +1219,90 @@ def test_active_browser_session_snapshot_tracks_yws_clients() -> None:
     assert gateway_module.active_browser_session_snapshot(now_ts=123.0)["peers"] == []
 
 
+def test_browser_session_changed_gateway_budget_coalesces_reconnect_churn(monkeypatch) -> None:
+    gateway_module._BROWSER_SESSION_EVENT_PENDING.clear()
+    gateway_module._BROWSER_SESSION_EVENT_TASKS.clear()
+    gateway_module._BROWSER_SESSION_EVENT_DIAG.update(
+        {
+            "published_total": 0,
+            "suppressed_total": 0,
+            "coalesced_total": 0,
+            "last_published_at": 0.0,
+            "last_suppressed_at": 0.0,
+            "last_reason": "",
+            "last_key": "",
+        }
+    )
+    monkeypatch.setattr(
+        gateway_module,
+        "_BROWSER_SESSION_EVENT_BUDGET",
+        gateway_module.HotEventBudget(debounce_ms=1000, window_ms=5000, max_events=2),
+    )
+    events: list[tuple[str, dict[str, object] | None]] = []
+    monkeypatch.setattr(
+        gateway_module,
+        "_publish_runtime_event",
+        lambda topic, payload=None, source="yjs.gateway": events.append((topic, payload)),
+    )
+
+    first = gateway_module._publish_browser_session_changed(
+        {
+            "device_id": "dev-hot",
+            "webspace_id": "desktop",
+            "connection_state": "connected",
+            "yjs_channel_state": "open",
+            "yjs_attempt_id": "yws-1",
+        },
+        now_ts=10.0,
+        schedule=False,
+    )
+    debounced = gateway_module._publish_browser_session_changed(
+        {
+            "device_id": "dev-hot",
+            "webspace_id": "desktop",
+            "connection_state": "closed",
+            "yjs_channel_state": "closed",
+            "yjs_attempt_id": "yws-1",
+        },
+        now_ts=10.2,
+        schedule=False,
+    )
+    second = gateway_module._publish_browser_session_changed(
+        {
+            "device_id": "dev-hot",
+            "webspace_id": "desktop",
+            "connection_state": "connected",
+            "yjs_channel_state": "open",
+            "yjs_attempt_id": "yws-2",
+        },
+        now_ts=11.2,
+        schedule=False,
+    )
+    limited = gateway_module._publish_browser_session_changed(
+        {
+            "device_id": "dev-hot",
+            "webspace_id": "desktop",
+            "connection_state": "closed",
+            "yjs_channel_state": "closed",
+            "yjs_attempt_id": "yws-2",
+        },
+        now_ts=11.4,
+        schedule=False,
+    )
+    snapshot = gateway_module._browser_session_event_budget_snapshot(12.0)
+
+    assert first is True
+    assert debounced is False
+    assert second is True
+    assert limited is False
+    assert [topic for topic, _payload in events] == ["browser.session.changed", "browser.session.changed"]
+    assert events[0][1]["hot_event"]["reason"] == "admitted"
+    assert events[1][1]["connection_state"] == "connected"
+    assert snapshot["suppressed_total"] == 2
+    assert snapshot["pending_total"] == 1
+    assert snapshot["pending_keys"] == ["desktop::dev-hot"]
+
+
 def test_yws_close_preserves_online_state_when_device_has_replacement_session() -> None:
     gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
     gateway_module._ACTIVE_YWS_CLIENTS.clear()
@@ -1652,8 +1736,15 @@ def test_yws_impl_cleans_up_after_first_message_timeout(monkeypatch) -> None:
     )
     gateway_module._ACTIVE_YWS_CONNECTIONS.clear()
     gateway_module._ACTIVE_YWS_CLIENTS.clear()
+    gateway_module._BROWSER_SESSION_EVENT_PENDING.clear()
+    gateway_module._BROWSER_SESSION_EVENT_TASKS.clear()
     monkeypatch.setattr(gateway_module, "_YWS_ROOM_READY_TIMEOUT_S", 1.0)
     monkeypatch.setattr(gateway_module, "_YWS_FIRST_MESSAGE_TIMEOUT_S", 0.01)
+    monkeypatch.setattr(
+        gateway_module,
+        "_BROWSER_SESSION_EVENT_BUDGET",
+        gateway_module.HotEventBudget(debounce_ms=0, window_ms=5000, max_events=100),
+    )
     events: list[tuple[str, dict[str, object] | None]] = []
 
     class _FakeWebSocket:

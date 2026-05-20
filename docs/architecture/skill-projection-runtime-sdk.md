@@ -271,6 +271,15 @@ when the owner guard is blocking normal skill work. Hot browser/session refresh
 events are not in this exception; they stay governed by the normal guard and
 their own debounce/budget design.
 
+YWS gateway `browser.session.changed` publication is the first source-side
+application of that design. The gateway updates the browser-session registry on
+every accepted close/open decision, but it does not publish every reconnect
+micro-transition into the EventBus. Events are admitted through a
+per-webspace/per-device debounce/window budget; suppressed updates keep the
+latest payload and flush a coalesced event after the budget opens. The YWS
+channel itself remains open, and guard/auth/active-limit denials can still be
+forced through as policy evidence.
+
 This is a compatibility valve, not the final ownership model. The target split
 is logical-plane separation:
 

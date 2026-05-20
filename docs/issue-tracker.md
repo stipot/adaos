@@ -2388,15 +2388,19 @@ Actions:
 - [x] Bound `browser.session.changed` at the core EventBus level before
   skill-specific optimization, preserving incoming counters while superseding
   stale queued handler work by `(event, webspace, device)`.
+- [x] Add dedicated YWS-gateway debounce/budget handling for
+  `browser.session.changed` open/close churn before EventBus publish. The
+  gateway still updates browser-session state and keeps YWS open; downstream
+  refreshes receive admitted or delayed coalesced events with hot-event
+  diagnostics.
 - [ ] Shrink primary Yjs usage to minimal bootstrap/control state and remove
   variable/diagnostic tables that can be served by streams or details.
 - [ ] Move current operator variables to replace-mode stream receivers with
   stable ids, fingerprints, freshness, and snapshot-on-subscribe semantics.
 - [ ] Keep append-mode streams only for true event/log tails with explicit
   maxItems, truncation, and duplicate suppression.
-- [ ] Add dedicated debounce/budget handling for `browser.session.changed`, YWS
-  open/close/reconnect, route pressure, and guard/quarantine events before they
-  update operator status.
+- [ ] Extend dedicated debounce/budget handling to route pressure and
+  guard/quarantine status projections before they update operator status.
 - [ ] Identify `infrastate` status cards: runtime, route/realtime, Yjs,
   operations, core update, marketplace, and skill/scenario registry.
 - [ ] Publish those cards through the shared SDK helpers.
@@ -3193,16 +3197,34 @@ Human verification:
   requests an autostart supervisor self-restart when available. The compact
   sample and last action are exposed in public memory status as
   `memory.control_plane_tripwire`.
-- [ ] Roll out the control-plane tripwire to `.30`/`.40`; verify
+- [x] Roll out the control-plane tripwire to `.30`/`.40`; verify
   `/api/supervisor/public/memory-status` exposes `control_plane_tripwire`,
   and run a short browser-attached soak showing no oversized supervisor state,
   no swap climb, and server-side YJS/status metrics still available.
-- [ ] Re-run the `.30` 180-second browser-attached check after `7818eacf` and
+- [x] Re-run the `.30` 180-second browser-attached check after `7818eacf` and
   record both server-side YJS truth (`stateSync`, `yjsPressure`, eventbus
   backlog) and browser-side truth (`yjs.signal`, `client_yws_attempt_id`,
   close/reconnect reason). If server-side YJS remains healthy while the visible
   browser indicator is red, treat it as a browser-control-route/debug-log
   investigation before changing YJS/Stream data routes.
+- 2026-05-20 follow-up checkpoint after control-plane tripwire rollout:
+  `.30` and `.40` both exposed `memory.control_plane_tripwire` in public
+  supervisor status, with small supervisor state files and stable swap. A live
+  synthetic oversized-state probe on `.40` was archived under
+  `state/incidents/control-plane-state-tripwire-*`, proving containment before
+  swap exhaustion.
+- The same 180-second browser-attached soak showed that memory containment is
+  no longer the blocking failure, but YJS is not yet fully controlled:
+  `.30` hit repeated same-device YWS open/close churn and
+  `browser.session.changed` bursts, while `.40` still showed
+  `infrastate_skill` write-amplification pressure. This keeps the core-readiness
+  gate open until hot browser-session events are coalesced at the gateway and
+  verified with Dev Browser, Mobile, and Opera/macOS.
+- [ ] After the YWS-gateway `browser.session.changed` budget rollout, repeat
+  the `.30`/`.40` browser-attached soak and confirm memory stays flat,
+  `browser_session_events.suppressed_total` or `coalesced_total` explains any
+  session churn, eventbus backlog stays near zero, and the visible YJS signal
+  does not sustain red/green flicker solely from same-device reconnects.
 - [ ] After the bounded YWS client-attempt overlap rollout, verify Dev Browser,
   Mobile, and Opera/macOS do not sustain red/green YJS flicker from duplicate
   same-device provider attempts; reliability diagnostics should show
