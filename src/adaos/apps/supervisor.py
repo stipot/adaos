@@ -1524,6 +1524,7 @@ class SupervisorManager:
         self._memory_suspicion_reason: str | None = None
         self._memory_suspicion_since: float | None = None
         self._memory_active_session_id: str | None = None
+        self._memory_profile_finalizing_session_id: str | None = None
         self._memory_last_session_id: str | None = None
         self._memory_baseline_family_rss_bytes: int | None = None
         self._memory_last_growth_bytes: int | None = None
@@ -2077,6 +2078,8 @@ class SupervisorManager:
         )
         self._memory_active_session_id = None
         self._memory_requested_profile_mode = None
+        if session_id == str(self._memory_profile_finalizing_session_id or "").strip():
+            self._memory_profile_finalizing_session_id = None
         if session_id == str(self._memory_publish_request_session_id or "").strip():
             self._memory_publish_request_session_id = None
         self._memory_profile_mode = "normal"
@@ -2168,6 +2171,13 @@ class SupervisorManager:
             active_state = str(active_session.get("session_state") or "").strip().lower()
             if active_state in {"planned", "requested", "running"}:
                 raise HTTPException(status_code=409, detail="a memory profiling session is already active")
+        finalizing_session_id = str(self._memory_profile_finalizing_session_id or "").strip()
+        if finalizing_session_id:
+            finalizing_session = read_memory_session_summary(finalizing_session_id) or {}
+            finalizing_state = str(finalizing_session.get("session_state") or "").strip().lower()
+            if finalizing_state not in {"finished", "failed", "cancelled"}:
+                raise HTTPException(status_code=409, detail="a memory profiling session is finalizing")
+            self._memory_profile_finalizing_session_id = None
         session_id = f"mem-{uuid.uuid4().hex[:8]}"
         now = time.time()
         summary = self._upsert_memory_session_summary(
@@ -2694,6 +2704,70 @@ class SupervisorManager:
             if (artifacts_dir / name).exists():
                 return True
         return False
+
+    def _record_memory_profile_finalize_missing(
+        self,
+        session_id: str | None,
+        *,
+        shutdown_status_code: int | None,
+        shutdown_error: str | None,
+        reason: str,
+    ) -> None:
+        token = str(session_id or "").strip()
+        if not token or self._memory_profile_finalize_observed(token):
+            return
+        summary = read_memory_session_summary(token)
+        if not isinstance(summary, dict):
+            return
+        now = time.time()
+        operation_window = summary.get("operation_window") if isinstance(summary.get("operation_window"), dict) else {}
+        operation_window = dict(operation_window)
+        operation_window["failure_reason"] = "profile_finalize_marker_missing"
+        operation_window["failure_stage"] = "profile_finalize_timeout"
+        operation_window["finalize_marker_missing_at"] = now
+        operation_window["shutdown_status_code"] = shutdown_status_code
+        operation_window["shutdown_error"] = shutdown_error
+        summary["session_state"] = "failed"
+        summary["failure_reason"] = "profile_finalize_marker_missing"
+        summary["failure_stage"] = "profile_finalize_timeout"
+        summary["stop_reason"] = reason
+        summary["stopped_at"] = summary.get("stopped_at") or now
+        summary["finished_at"] = summary.get("finished_at") or now
+        summary["operation_window"] = operation_window
+        updated = self._upsert_memory_session_summary(summary)
+        artifact_ref = None
+        try:
+            artifact_ref = self._capture_memory_profile_local_incident_artifact(
+                token,
+                reason="profile_finalize_marker_missing",
+                stage="profile_finalize_timeout",
+                details={
+                    "shutdown_status_code": shutdown_status_code,
+                    "shutdown_error": shutdown_error,
+                    "stop_reason": reason,
+                },
+            )
+        except Exception:
+            _LOG.warning(
+                "failed to capture missing finalize marker incident artifact session_id=%s",
+                token,
+                exc_info=True,
+            )
+        self._append_memory_operation(
+            session_id=token,
+            event="tool_invoked",
+            profile_mode=str(updated.get("profile_mode") or self._memory_profile_mode),
+            details={
+                "action": "profile_finalize_missing",
+                "reason": "profile_finalize_marker_missing",
+                "stage": "profile_finalize_timeout",
+                "shutdown_status_code": shutdown_status_code,
+                "shutdown_error": shutdown_error,
+                "artifact_id": str((artifact_ref or {}).get("artifact_id") or "").strip() or None,
+                "control_mode": IMPLEMENTED_PROFILE_CONTROL_MODE,
+            },
+        )
+        self._persist_runtime_state()
 
     def _schedule_service_restart(self, *, reason: str) -> dict[str, Any]:
         delay_sec = _root_restart_delay_sec()
@@ -4137,6 +4211,7 @@ class SupervisorManager:
             "implemented_profile_launch_env": list(PROFILE_LAUNCH_ENV_KEYS),
             "requested_profile_mode": self._memory_requested_profile_mode,
             "requested_session_id": self._memory_active_session_id,
+            "finalizing_session_id": self._memory_profile_finalizing_session_id,
             "publish_request_session_id": self._memory_publish_request_session_id,
             "suspicion_state": self._memory_suspicion_state,
             "suspicion_reason": self._memory_suspicion_reason,
@@ -4452,6 +4527,10 @@ class SupervisorManager:
             },
         )
         if token == str(self._memory_active_session_id or "").strip():
+            if next_state == "stopped":
+                self._memory_profile_finalizing_session_id = token
+            elif token == str(self._memory_profile_finalizing_session_id or "").strip():
+                self._memory_profile_finalizing_session_id = None
             self._memory_active_session_id = None
             self._memory_requested_profile_mode = None
         self._persist_runtime_state()
@@ -4749,6 +4828,8 @@ class SupervisorManager:
         self._runtime_unhealthy_kind = None
         if profile_mode != "normal":
             self._mark_active_memory_session_running(runtime_instance_id=runtime_instance_id, transition_role=transition_role)
+        elif self._memory_profile_finalizing_session_id:
+            self._memory_profile_finalizing_session_id = None
         self._persist_runtime_state()
 
     async def _spawn_sidecar_locked(self, *, reason: str = "supervisor.sidecar.start") -> None:
@@ -4842,7 +4923,11 @@ class SupervisorManager:
         if proc.poll() is not None:
             return
         profile_mode = self._memory_profile_mode if proc is self._proc else "normal"
-        profile_session_id = str(self._memory_active_session_id or "").strip() if proc is self._proc else ""
+        profile_session_id = (
+            str(self._memory_active_session_id or self._memory_profile_finalizing_session_id or "").strip()
+            if proc is self._proc
+            else ""
+        )
         drain_timeout_sec, signal_delay_sec, graceful_wait_sec, terminate_wait_sec = _runtime_profile_graceful_shutdown_timeout_sec(
             profile_mode
         )
@@ -4921,6 +5006,12 @@ class SupervisorManager:
                         profile_session_id,
                         shutdown_status_code,
                         shutdown_error,
+                    )
+                    self._record_memory_profile_finalize_missing(
+                        profile_session_id,
+                        shutdown_status_code=shutdown_status_code,
+                        shutdown_error=shutdown_error,
+                        reason=reason,
                     )
             deadline = time.time() + float(graceful_wait_sec)
             graceful_checks = max(1, int(float(graceful_wait_sec) / 0.2) + 2)

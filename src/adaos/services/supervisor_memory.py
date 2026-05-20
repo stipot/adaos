@@ -400,6 +400,8 @@ class MemorySessionSummary:
     finished_at: float | None = None
     stopped_at: float | None = None
     stop_reason: str | None = None
+    failure_reason: str | None = None
+    failure_stage: str | None = None
     suspected_leak: bool = False
     retry_of_session_id: str | None = None
     retry_root_session_id: str | None = None
@@ -436,6 +438,8 @@ class MemorySessionSummary:
             finished_at=_float(source.get("finished_at")),
             stopped_at=_float(source.get("stopped_at")),
             stop_reason=_optional_string(source.get("stop_reason")),
+            failure_reason=_optional_string(source.get("failure_reason")),
+            failure_stage=_optional_string(source.get("failure_stage")),
             suspected_leak=_bool(source.get("suspected_leak")),
             retry_of_session_id=_optional_string(source.get("retry_of_session_id")),
             retry_root_session_id=_optional_string(source.get("retry_root_session_id")),
@@ -473,6 +477,8 @@ class MemorySessionSummary:
             "finished_at": self.finished_at,
             "stopped_at": self.stopped_at,
             "stop_reason": self.stop_reason,
+            "failure_reason": self.failure_reason,
+            "failure_stage": self.failure_stage,
             "suspected_leak": self.suspected_leak,
             "retry_of_session_id": self.retry_of_session_id,
             "retry_root_session_id": self.retry_root_session_id,

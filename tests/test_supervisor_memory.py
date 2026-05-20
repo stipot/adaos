@@ -287,6 +287,31 @@ def test_publish_memory_profile_stamps_artifact_published_refs(monkeypatch, tmp_
     assert stopped["runtime"]["requested_profile_mode"] is None
 
 
+def test_stop_running_memory_profile_tracks_finalizing_session(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    manager._memory_active_session_id = "mem-001"
+    manager._memory_requested_profile_mode = "sampled_profile"
+    manager._memory_profile_mode = "sampled_profile"
+    manager._upsert_memory_session_summary(
+        {
+            "session_id": "mem-001",
+            "profile_mode": "sampled_profile",
+            "session_state": "running",
+            "requested_at": 10.0,
+            "started_at": 11.0,
+        }
+    )
+
+    stopped = manager.stop_memory_profile("mem-001", reason="operator.stop")
+
+    assert stopped["session"]["session_state"] == "stopped"
+    assert stopped["runtime"]["requested_session_id"] is None
+    assert stopped["runtime"]["requested_profile_mode"] is None
+    assert stopped["runtime"]["finalizing_session_id"] == "mem-001"
+    assert manager._memory_profile_finalizing_session_id == "mem-001"
+
+
 def test_build_memory_profile_report_marks_remote_artifact_policy(tmp_path) -> None:
     inline_path = tmp_path / "inline.json"
     inline_path.write_text(json.dumps({"top_allocations": []}), encoding="utf-8")
@@ -815,6 +840,41 @@ def test_supervisor_observes_runtime_profile_finalize_markers(monkeypatch, tmp_p
     )
 
     assert manager._memory_profile_finalize_observed("mem-001") is True
+
+
+def test_supervisor_records_missing_runtime_profile_finalize_marker(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ADAOS_BASE_DIR", str(tmp_path))
+    manager = supervisor.SupervisorManager(runtime_host="127.0.0.1", runtime_port=8777, token="dev-local-token")
+    manager._memory_profile_mode = "sampled_profile"
+    manager._memory_profile_finalizing_session_id = "mem-001"
+    manager._upsert_memory_session_summary(
+        {
+            "session_id": "mem-001",
+            "profile_mode": "sampled_profile",
+            "session_state": "stopped",
+            "requested_at": 10.0,
+            "started_at": 11.0,
+            "stopped_at": 55.0,
+        }
+    )
+
+    manager._record_memory_profile_finalize_missing(
+        "mem-001",
+        shutdown_status_code=200,
+        shutdown_error=None,
+        reason="supervisor.memory.complete_profile_mode.sampled_profile",
+    )
+
+    session = manager.memory_session("mem-001")
+    assert session is not None
+    assert session["session"]["session_state"] == "failed"
+    assert session["session"]["failure_reason"] == "profile_finalize_marker_missing"
+    assert session["session"]["operation_window"]["failure_stage"] == "profile_finalize_timeout"
+    assert any(
+        item.get("kind") == "local_incident_context"
+        for item in session["session"].get("artifact_refs", [])
+    )
+    assert session["operations"][-1]["details"]["action"] == "profile_finalize_missing"
 
 
 def test_supervisor_retry_memory_profile_clones_retryable_session(monkeypatch, tmp_path) -> None:

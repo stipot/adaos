@@ -53,6 +53,56 @@ def test_local_event_bus_subscribe_debug_can_be_enabled(monkeypatch):
     assert any("bus.subscribe" in message for message in messages)
 
 
+def test_browser_session_changed_is_bounded_by_default(monkeypatch):
+    monkeypatch.delenv("ADAOS_EVENTBUS_BOUNDED_TOPICS", raising=False)
+    monkeypatch.delenv("ADAOS_EVENTBUS_SUPERSEDE_BY_HANDLER_TOPICS", raising=False)
+
+    bus = LocalEventBus()
+    snapshot = bus.backlog_snapshot()
+
+    assert "browser.session.changed" in snapshot["bounded_topics"]
+
+
+@pytest.mark.asyncio
+async def test_browser_session_changed_supersedes_queued_handler_work(monkeypatch):
+    monkeypatch.delenv("ADAOS_EVENTBUS_BOUNDED_TOPICS", raising=False)
+    monkeypatch.delenv("ADAOS_EVENTBUS_SUPERSEDE_BY_HANDLER_TOPICS", raising=False)
+    bus = LocalEventBus()
+    release = asyncio.Event()
+    seen: list[int] = []
+
+    async def handler(event: Event):
+        seen.append(int(event.payload.get("seq") or 0))
+        await release.wait()
+
+    bus.subscribe("browser.session.changed", handler)
+    for seq in range(5):
+        bus.publish(
+            Event(
+                type="browser.session.changed",
+                payload={
+                    "webspace_id": "desktop",
+                    "device_id": "dev-1",
+                    "seq": seq,
+                },
+                source="test",
+                ts=0.0,
+            )
+        )
+
+    snapshot = bus.backlog_snapshot()
+    superseded = dict(snapshot["top_bounded_superseded_types"])
+
+    assert snapshot["bounded_queue_total"] <= 1
+    assert superseded["browser.session.changed"] >= 4
+
+    release.set()
+    ok = await bus.wait_for_idle(timeout=1.0)
+
+    assert ok is True
+    assert seen == [4]
+
+
 @pytest.mark.asyncio
 async def test_local_event_bus_reports_webio_stream_control_pressure():
     bus = LocalEventBus()

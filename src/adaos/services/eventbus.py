@@ -18,6 +18,7 @@ _WEBIO_STREAM_CONTROL_EVENTS = {
     "webio.stream.snapshot.requested",
     "webio.stream.subscription.changed",
 }
+_BROWSER_SESSION_CHANGED_EVENT = "browser.session.changed"
 
 
 def _trace_subscribe_enabled() -> bool:
@@ -74,7 +75,8 @@ def _bounded_event_topics() -> tuple[str, ...]:
     raw = str(
         os.getenv(
             "ADAOS_EVENTBUS_BOUNDED_TOPICS",
-            "webio.stream.snapshot.requested,webio.stream.subscription.changed,subnet.member.snapshot.changed",
+            "webio.stream.snapshot.requested,webio.stream.subscription.changed,"
+            "subnet.member.snapshot.changed,browser.session.changed",
         )
         or ""
     ).strip()
@@ -86,7 +88,7 @@ def _bounded_supersede_by_handler_topics() -> tuple[str, ...]:
     raw = str(
         os.getenv(
             "ADAOS_EVENTBUS_SUPERSEDE_BY_HANDLER_TOPICS",
-            "webio.stream.snapshot.requested,webio.stream.subscription.changed",
+            "webio.stream.snapshot.requested,webio.stream.subscription.changed,browser.session.changed",
         )
         or ""
     ).strip()
@@ -228,6 +230,12 @@ class LocalEventBus(EventBus):
             node_id = str(self._event_field(event, "target_node_id", "node_id", "member_id") or "").strip()
             webspace_id = str(self._event_field(event, "webspace_id") or "").strip()
             return (event_type, node_id, webspace_id)
+        if event_type == _BROWSER_SESSION_CHANGED_EVENT:
+            webspace_id = str(self._event_field(event, "webspace_id", "workspace_id") or "default").strip() or "default"
+            device_id = str(
+                self._event_field(event, "device_id", "dev_id", "browser_key_id", "session_id") or ""
+            ).strip()
+            return (event_type, webspace_id, device_id)
         return None
 
     def _webio_stream_control_key(

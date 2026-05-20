@@ -787,6 +787,12 @@ Observed behavior:
   capture a useful growth artifact.
 - A concurrent skill bug also appeared in the hot path:
   `browsers_skill ... NameError: current_device_id is not defined`.
+- 2026-05-20 checkpoint on `.30` and `.40`: memory growth is still in the
+  runtime Python process, not in service-skill subprocesses or YStore files.
+  `.30` held about `2.5 GiB` RSS, `.40` about `3.6 GiB` RSS with about `7%`
+  available RAM. The latest auto sampled-profile sessions on both stands had
+  only start artifacts, exposing a finalize/attribution gap that must be
+  closed before we call the core guard observability milestone complete.
 
 Working hypothesis:
 
@@ -930,6 +936,9 @@ Actions:
   drops or coalesces work.
 - [x] Add an operator-facing incident summary that names the top topics and
   handlers contributing to backlog growth.
+- [x] Add `browser.session.changed` to the core EventBus bounded/supersede
+  defaults so browser reconnect/session churn remains observable but stale
+  queued handler work cannot keep growing behind the current state.
 
 #### HMG-005: Make memory incident capture reliable before the hub stalls
 
@@ -963,6 +972,10 @@ Actions:
   snapshot/request counters where still missing.
 - [x] Publish enough local-only artifacts to debug the next incident even if
   root publication is unavailable.
+- [x] Preserve the profiling session id while stopping an active sampled/trace
+  profile and record a local incident when the runtime does not leave a
+  finalize marker, so policy profiles cannot silently end with only a start
+  snapshot.
 
 #### HMG-006: Fix skill-level amplifiers in snapshot and webio hot paths
 
@@ -2327,6 +2340,9 @@ Actions:
 - [x] Keep `get_snapshot(project=true)` from starving the widget under
   `warn`/`throttle`: admit compact Yjs status projection into the existing
   throttled projection path, but continue to suppress on `block`.
+- [x] Bound `browser.session.changed` at the core EventBus level before
+  skill-specific optimization, preserving incoming counters while superseding
+  stale queued handler work by `(event, webspace, device)`.
 - [ ] Shrink primary Yjs usage to minimal bootstrap/control state and remove
   variable/diagnostic tables that can be served by streams or details.
 - [ ] Move current operator variables to replace-mode stream receivers with
