@@ -240,6 +240,15 @@ operator must rebuild/retrain and promote a new `model.pt` before reindexing.
 On apply, AdaOS backs up the previous active `examples_manifest.jsonl`, copies
 the curated examples, removes stale index caches, and asks the service to
 reload.
+When curated examples introduce new labels, `adaos interpreter neural-rebuild
+--from-curated` trains a candidate Neural model with the provider-owned
+Char-CNN + BiLSTM architecture and writes the full service artifact layout under
+`state/interpreter/neural_candidates`. The command is non-mutating unless
+`--promote` is passed. Promotion backs up the previous active layout under
+`state/nlu/neural/rollback`, writes `active_model.json` and
+`rollback/latest.json`, removes stale indexes, and triggers service `/reindex`.
+Operators can pass `--min-dev-accuracy` and `--min-macro-f1` to enforce
+candidate quality gates before promotion.
 
 The parse and train bridges do not install or prepare Rasa. If the service-skill is missing, they return fallback
 reasons such as `rasa_base_url_unresolved` and let the operator run the install/update path intentionally.

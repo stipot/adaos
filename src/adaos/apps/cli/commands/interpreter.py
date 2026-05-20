@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 from urllib.request import Request, urlopen
 
 import typer
@@ -298,6 +298,82 @@ def neural_reindex(
             purge_indexes=purge_indexes,
         )
     )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
+@app.command("neural-rebuild")
+def neural_rebuild(
+    from_curated: bool = typer.Option(True, "--from-curated/--no-from-curated", help="Use the curated Neural training bundle."),
+    examples_path: Optional[Path] = typer.Option(None, "--examples", help="Explicit examples_manifest.jsonl."),
+    candidate_dir: Optional[Path] = typer.Option(None, "--candidate-dir", help="Where to write candidate artifacts."),
+    model_id: Optional[str] = typer.Option(None, "--model-id", help="Explicit model id for the candidate."),
+    epochs: int = typer.Option(40, "--epochs", min=1, help="Training epochs."),
+    batch_size: int = typer.Option(16, "--batch-size", min=1, help="Training batch size."),
+    learning_rate: float = typer.Option(0.003, "--learning-rate", min=0.000001, help="AdamW learning rate."),
+    seed: int = typer.Option(13, "--seed", help="Training split/shuffle seed."),
+    min_dev_accuracy: float = typer.Option(0.0, "--min-dev-accuracy", min=0.0, max=1.0, help="Required candidate dev accuracy."),
+    min_macro_f1: float = typer.Option(0.0, "--min-macro-f1", min=0.0, max=1.0, help="Required candidate macro-F1."),
+    promote: bool = typer.Option(False, "--promote", help="Promote the candidate into active Neural artifacts."),
+    reason: Optional[str] = typer.Option(None, "--reason", help="Promotion reason recorded in rollback pointer."),
+    start_service: bool = typer.Option(True, "--start/--no-start", help="Start the Neural service after promotion."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after post-promotion reindex."),
+) -> None:
+    """
+    Train a Neural NLU candidate model from curated examples, then optionally promote it.
+    """
+    ctx = get_ctx()
+    ws = _workspace()
+    export_summary = None
+    if from_curated:
+        sync_from_scenarios_and_skills(ctx)
+        export_summary = ws.export_neural_training_data()
+        examples_path = Path(str(export_summary["examples_path"]))
+    if examples_path is None:
+        raise typer.BadParameter("provide --examples or keep --from-curated enabled")
+
+    build = ws.rebuild_neural_candidate_from_examples(
+        examples_path=examples_path,
+        candidate_dir=candidate_dir,
+        model_id=model_id,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        seed=seed,
+        min_dev_accuracy=min_dev_accuracy,
+        min_macro_f1=min_macro_f1,
+    )
+    result: dict[str, Any] = {
+        "ok": bool(build.get("ok")) and not promote,
+        "mode": "candidate_build",
+        "export": export_summary,
+        "build": build,
+    }
+    if not build.get("ok"):
+        typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+        raise typer.Exit(code=1)
+
+    if promote:
+        promotion = ws.promote_neural_candidate(candidate_dir=Path(str(build["candidate_dir"])), reason=reason or "cli.neural-rebuild")
+        reindex_result = None
+        if promotion.get("ok"):
+            reindex_result = _run_blocking(
+                neural_service_bridge.reindex_active_model(
+                    start_service=start_service,
+                    stop_after=stop_after,
+                    purge_indexes=True,
+                )
+            )
+        result = {
+            "ok": bool(promotion.get("ok")) and bool(reindex_result and reindex_result.get("ok")),
+            "mode": "candidate_promote",
+            "export": export_summary,
+            "build": build,
+            "promotion": promotion,
+            "reindex": reindex_result,
+        }
+
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
     if not result.get("ok"):
         raise typer.Exit(code=1)

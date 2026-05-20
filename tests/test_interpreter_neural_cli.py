@@ -129,3 +129,63 @@ def test_neural_reindex_from_curated_plan_cli(monkeypatch):
     payload = json.loads(result.output)
     assert payload["mode"] == "curated_plan"
     assert payload["plan"]["apply_allowed"] is False
+
+
+def test_neural_rebuild_from_curated_candidate_cli(monkeypatch, tmp_path):
+    from adaos.apps.cli.commands import interpreter
+
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 1, "scenario_intents": 0, "system_action_intents": 0},
+    )
+
+    class FakeWorkspace:
+        def export_neural_training_data(self):
+            return {"ok": True, "examples_path": str(tmp_path / "examples_manifest.jsonl")}
+
+        def rebuild_neural_candidate_from_examples(self, **kwargs):
+            return {"ok": True, "candidate_dir": str(tmp_path / "candidate"), "result": {"metrics": {"model_id": "unit"}}}
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(interpreter.app, ["neural-rebuild", "--from-curated", "--epochs", "1"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["mode"] == "candidate_build"
+    assert payload["build"]["candidate_dir"] == str(tmp_path / "candidate")
+
+
+def test_neural_rebuild_promotes_and_reindexes(monkeypatch, tmp_path):
+    from adaos.apps.cli.commands import interpreter
+
+    async def _fake_reindex(**kwargs):
+        return {"ok": True, "checks": {"model_loaded": True}, "kwargs": kwargs}
+
+    monkeypatch.setattr(interpreter.neural_service_bridge, "reindex_active_model", _fake_reindex)
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 1, "scenario_intents": 0, "system_action_intents": 0},
+    )
+
+    class FakeWorkspace:
+        def export_neural_training_data(self):
+            return {"ok": True, "examples_path": str(tmp_path / "examples_manifest.jsonl")}
+
+        def rebuild_neural_candidate_from_examples(self, **kwargs):
+            return {"ok": True, "candidate_dir": str(tmp_path / "candidate")}
+
+        def promote_neural_candidate(self, **kwargs):
+            return {"ok": True, "model_id": "unit-promoted", "candidate_dir": str(kwargs["candidate_dir"])}
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(interpreter.app, ["neural-rebuild", "--from-curated", "--promote", "--stop-after"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["mode"] == "candidate_promote"
+    assert payload["promotion"]["model_id"] == "unit-promoted"
+    assert payload["reindex"]["kwargs"]["purge_indexes"] is True

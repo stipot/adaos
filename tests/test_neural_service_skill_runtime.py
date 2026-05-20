@@ -153,7 +153,7 @@ def test_detector_health_exposes_faiss_and_index_backend(monkeypatch, tmp_path):
 
     health = detector.health()
 
-    assert health["version"] == "0.2.9"
+    assert health["version"] == "0.2.10"
     assert "faiss_available" in health
     assert health["example_index"] == "faiss_disk"
     assert health["example_index_backend"] == "faiss"

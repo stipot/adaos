@@ -25,6 +25,7 @@ adaos interpreter sync-nlu
 adaos interpreter export-neural-training
 adaos interpreter neural-reindex --start --stop-after
 adaos interpreter neural-reindex --from-curated
+adaos interpreter neural-rebuild --from-curated --epochs 40
 adaos interpreter train --engine rasa
 adaos interpreter parse "open modal nlu_teacher_modal"
 adaos interpreter intent list
@@ -51,6 +52,14 @@ forces index cache removal before reload. `adaos interpreter neural-reindex
 Use `--from-curated --apply` only after operator approval; it replaces active
 examples and triggers service reindex only when the curated labels are already
 present in the active Neural model labels.
+
+`adaos interpreter neural-rebuild --from-curated` trains a new candidate model
+from the curated bundle and writes it under
+`.adaos/state/interpreter/neural_candidates`. It does not mutate the active
+provider unless `--promote` is passed. Promotion backs up the previous active
+layout under `.adaos/state/nlu/neural/rollback`, writes rollback pointers, clears
+stale indexes, and runs service reindex. `--min-dev-accuracy` and
+`--min-macro-f1` can require quality gates before the candidate is accepted.
 
 ## Runtime locations
 

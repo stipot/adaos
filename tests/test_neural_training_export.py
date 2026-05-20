@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 
 def test_neural_training_export_preserves_ownership_and_plain_text() -> None:
@@ -125,3 +126,49 @@ def test_neural_curated_reindex_apply_replaces_examples_and_removes_indexes() ->
     rows = [json.loads(line) for line in (active_root / "examples_manifest.jsonl").read_text(encoding="utf-8").splitlines()]
     assert any(row["intent"] == "skill.weather.lookup" and row["text"] == "weather in Berlin" for row in rows)
     assert (active_root / "curated_reindex.json").exists()
+
+
+def test_promote_neural_candidate_backs_up_active_model_and_writes_pointer() -> None:
+    from adaos.services.agent_context import get_ctx
+    from adaos.services.interpreter.workspace import InterpreterWorkspace
+
+    ctx = get_ctx()
+    ws = InterpreterWorkspace(ctx)
+    active_root = ctx.paths.state_dir() / "nlu" / "neural"
+    active_root.mkdir(parents=True)
+    (active_root / "model.pt").write_text("old model", encoding="utf-8")
+    (active_root / "labels.json").write_text(json.dumps(["old.intent"]), encoding="utf-8")
+    (active_root / "vocab.json").write_text(json.dumps(["<pad>"]), encoding="utf-8")
+    (active_root / "examples_manifest.jsonl").write_text(
+        json.dumps({"intent": "old.intent", "text": "old"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (active_root / "ranker_config.json").write_text("{}", encoding="utf-8")
+    (active_root / "metrics.json").write_text(json.dumps({"model_id": "old-model"}), encoding="utf-8")
+    (active_root / "faiss.index").write_text("stale", encoding="utf-8")
+
+    candidate = ws.root / "neural_candidates" / "unit"
+    candidate.mkdir(parents=True)
+    for name, content in {
+        "model.pt": "new model",
+        "labels.json": json.dumps(["new.intent"]),
+        "vocab.json": json.dumps(["<pad>", "n"]),
+        "examples_manifest.jsonl": json.dumps({"intent": "new.intent", "text": "new"}, ensure_ascii=False) + "\n",
+        "ranker_config.json": "{}",
+        "metrics.json": json.dumps({"model_id": "new-model"}),
+        "intent_map.json": json.dumps({"schema_version": 1, "intents": []}),
+        "intents_manifest.json": json.dumps({"schema_version": 1, "intents": []}),
+        "training_report.json": json.dumps({"ok": True}),
+    }.items():
+        (candidate / name).write_text(content, encoding="utf-8")
+
+    promoted = ws.promote_neural_candidate(candidate_dir=candidate, reason="unit")
+
+    assert promoted["ok"] is True
+    assert promoted["model_id"] == "new-model"
+    assert (active_root / "model.pt").read_text(encoding="utf-8") == "new model"
+    assert not (active_root / "faiss.index").exists()
+    pointer = json.loads((active_root / "active_model.json").read_text(encoding="utf-8"))
+    assert pointer["rollback_dir"]
+    assert (active_root / "rollback" / "latest.json").exists()
+    assert (Path(pointer["rollback_dir"]) / "model.pt").read_text(encoding="utf-8") == "old model"

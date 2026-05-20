@@ -101,6 +101,12 @@ Implemented now:
   - `adaos interpreter neural-reindex --from-curated` dry-runs an operator
     compatibility plan, and `--from-curated --apply` replaces active examples
     only when all curated labels already exist in the active Neural model.
+- Curated Neural candidate rebuild:
+  - `adaos interpreter neural-rebuild --from-curated`
+  - trains a candidate service artifact layout under
+    `state/interpreter/neural_candidates`
+  - `--promote` backs up the active model, writes rollback pointers, clears
+    stale indexes, and reloads the Neural service.
 - Operator-approved example save backend:
   - `POST /api/nlu/teacher/{webspace_id}/example/save`
   - event: `nlp.teacher.example.save`

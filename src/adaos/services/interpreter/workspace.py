@@ -5,6 +5,8 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
+import sys
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from importlib import resources
@@ -88,6 +90,56 @@ def _file_sha256(path: Path) -> str | None:
     except Exception:
         return None
     return digest.hexdigest()
+
+
+def _unique_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    stem = path.stem
+    suffix = path.suffix
+    for idx in range(1, 1000):
+        candidate = path.with_name(f"{stem}.{idx}{suffix}")
+        if not candidate.exists():
+            return candidate
+    return path.with_name(f"{stem}.{_utc_filename_stamp()}{suffix}")
+
+
+def _compact_neural_training_payload(payload: dict[str, Any], *, out_dir: Path) -> dict[str, Any]:
+    compact = dict(payload)
+    report = compact.get("report")
+    if isinstance(report, dict):
+        def _summary(section: Any) -> dict[str, Any]:
+            data = dict(section) if isinstance(section, dict) else {}
+            return {
+                key: data.get(key)
+                for key in ("total", "passed", "failed", "accuracy", "macro_f1", "latency_ms_avg")
+                if key in data
+            }
+
+        compact["report"] = {
+            key: report.get(key)
+            for key in (
+                "schema_version",
+                "created_at",
+                "model_id",
+                "epochs",
+                "batch_size",
+                "learning_rate",
+                "seed",
+                "split_strategy",
+                "warnings",
+                "examples_total",
+                "train_examples",
+                "dev_examples",
+                "history",
+                "gates",
+            )
+            if key in report
+        }
+        compact["report"]["train"] = _summary(report.get("train"))
+        compact["report"]["dev"] = _summary(report.get("dev"))
+        compact["report_path"] = str(out_dir / "training_report.json")
+    return compact
 
 
 @dataclass(slots=True)
@@ -759,15 +811,7 @@ class InterpreterWorkspace:
         if active_examples_path.exists():
             rollback_dir = active_root / "rollback"
             rollback_dir.mkdir(parents=True, exist_ok=True)
-            backup_path = rollback_dir / f"examples_manifest.{_utc_filename_stamp()}.jsonl"
-            if backup_path.exists():
-                stem = backup_path.stem
-                suffix = backup_path.suffix
-                for idx in range(1, 100):
-                    candidate = rollback_dir / f"{stem}.{idx}{suffix}"
-                    if not candidate.exists():
-                        backup_path = candidate
-                        break
+            backup_path = _unique_path(rollback_dir / f"examples_manifest.{_utc_filename_stamp()}.jsonl")
             shutil.copy2(active_examples_path, backup_path)
 
         shutil.copy2(curated_examples_path, active_examples_path)
@@ -802,6 +846,181 @@ class InterpreterWorkspace:
             encoding="utf-8",
         )
         return summary
+
+    def _neural_train_script_path(self) -> Path:
+        repo_root = Path(__file__).resolve().parents[4]
+        source_script = repo_root / "skills" / "neural_nlu_service_skill" / "scripts" / "train_artifacts.py"
+        if source_script.exists():
+            return source_script.resolve()
+        workspace_script = Path(self._ctx.paths.skills_dir()) / "neural_nlu_service_skill" / "scripts" / "train_artifacts.py"
+        return workspace_script.resolve()
+
+    def _neural_train_python(self) -> Path:
+        skills_root = Path(self._ctx.paths.skills_dir())
+        runtime_root = skills_root / ".runtime" / "neural_nlu_service_skill"
+        candidates: list[Path] = []
+        if runtime_root.exists():
+            candidates.extend(sorted(runtime_root.glob("v*/venv/Scripts/python.exe"), reverse=True))
+            candidates.extend(sorted(runtime_root.glob("v*/venv/bin/python"), reverse=True))
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.resolve()
+        return Path(sys.executable).resolve()
+
+    def rebuild_neural_candidate_from_examples(
+        self,
+        *,
+        examples_path: Path,
+        candidate_dir: Path | None = None,
+        model_id: str | None = None,
+        epochs: int = 40,
+        batch_size: int = 16,
+        learning_rate: float = 0.003,
+        seed: int = 13,
+        min_dev_accuracy: float = 0.0,
+        min_macro_f1: float = 0.0,
+    ) -> Dict[str, Any]:
+        candidate_root = self.root / "neural_candidates"
+        out_dir = candidate_dir or _unique_path(candidate_root / f"candidate.{_utc_filename_stamp()}")
+        out_dir = out_dir.expanduser().resolve()
+        script = self._neural_train_script_path()
+        python = self._neural_train_python()
+        cmd = [
+            str(python),
+            str(script),
+            "--examples",
+            str(examples_path.expanduser().resolve()),
+            "--out-dir",
+            str(out_dir),
+            "--epochs",
+            str(int(epochs)),
+            "--batch-size",
+            str(int(batch_size)),
+            "--learning-rate",
+            str(float(learning_rate)),
+            "--seed",
+            str(int(seed)),
+            "--min-dev-accuracy",
+            str(float(min_dev_accuracy)),
+            "--min-macro-f1",
+            str(float(min_macro_f1)),
+        ]
+        if model_id:
+            cmd.extend(["--model-id", model_id])
+        proc = subprocess.run(cmd, cwd=str(Path(__file__).resolve().parents[4]), text=True, capture_output=True)
+        stdout = proc.stdout.strip()
+        payload: dict[str, Any]
+        try:
+            payload = json.loads(stdout) if stdout else {}
+        except Exception:
+            payload = {}
+        compact_payload = _compact_neural_training_payload(payload, out_dir=out_dir) if payload else {}
+        result = {
+            "ok": bool(proc.returncode == 0 and payload.get("ok") is True),
+            "returncode": int(proc.returncode),
+            "candidate_dir": str(out_dir),
+            "python": str(python),
+            "script": str(script),
+            "command": cmd,
+            "stdout": "" if payload else stdout,
+            "stderr": proc.stderr.strip(),
+            "result": compact_payload,
+        }
+        if proc.returncode != 0 and not result["stderr"]:
+            result["stderr"] = "neural training failed quality gates or exited non-zero"
+        return result
+
+    def promote_neural_candidate(
+        self,
+        *,
+        candidate_dir: Path,
+        reason: str | None = None,
+    ) -> Dict[str, Any]:
+        candidate_dir = candidate_dir.expanduser().resolve()
+        required = [
+            "model.pt",
+            "labels.json",
+            "vocab.json",
+            "examples_manifest.jsonl",
+            "ranker_config.json",
+            "metrics.json",
+        ]
+        missing = [name for name in required if not (candidate_dir / name).exists()]
+        if missing:
+            return {"ok": False, "reason": "candidate_missing_required_artifacts", "missing": missing, "candidate_dir": str(candidate_dir)}
+
+        active_root = self._neural_artifact_root()
+        active_root.mkdir(parents=True, exist_ok=True)
+        rollback_root = active_root / "rollback"
+        rollback_root.mkdir(parents=True, exist_ok=True)
+        backup_dir = _unique_path(rollback_root / f"model.{_utc_filename_stamp()}")
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backed_up: list[str] = []
+        for child in active_root.iterdir():
+            if child.name == "rollback":
+                continue
+            dest = backup_dir / child.name
+            try:
+                if child.is_dir():
+                    shutil.copytree(child, dest)
+                else:
+                    shutil.copy2(child, dest)
+                backed_up.append(child.name)
+            except Exception:
+                continue
+
+        promoted_files: list[str] = []
+        for name in [
+            "model.pt",
+            "labels.json",
+            "vocab.json",
+            "intent_map.json",
+            "intents_manifest.json",
+            "examples_manifest.jsonl",
+            "ranker_config.json",
+            "metrics.json",
+            "training_report.json",
+            "golden_report.json",
+        ]:
+            source = candidate_dir / name
+            if source.exists():
+                shutil.copy2(source, active_root / name)
+                promoted_files.append(name)
+
+        removed_indexes: list[str] = []
+        for name in (
+            "faiss.index",
+            "faiss.index.json",
+            "negative_faiss.index",
+            "negative_faiss.index.json",
+            "example_index.pt",
+            "negative_example_index.pt",
+        ):
+            path = active_root / name
+            if path.exists():
+                try:
+                    path.unlink()
+                    removed_indexes.append(name)
+                except Exception:
+                    pass
+
+        metrics = _read_json_file(active_root / "metrics.json")
+        model_id = metrics.get("model_id") if isinstance(metrics, dict) else None
+        pointer = {
+            "schema_version": 1,
+            "promoted_at": _utc_now(),
+            "candidate_dir": str(candidate_dir),
+            "active_root": str(active_root),
+            "rollback_dir": str(backup_dir),
+            "reason": reason,
+            "model_id": model_id,
+            "promoted_files": promoted_files,
+            "backed_up_files": backed_up,
+            "removed_indexes": removed_indexes,
+        }
+        (active_root / "active_model.json").write_text(json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (rollback_root / "latest.json").write_text(json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return {"ok": True, **pointer}
 
     # ---------------------------------------------------------------- training
     def record_training(self, *, note: str | None = None, extra: Dict[str, Any] | None = None) -> Dict[str, Any]:

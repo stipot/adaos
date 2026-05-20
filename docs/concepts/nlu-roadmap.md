@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **86%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **88%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -175,7 +175,7 @@ but the productionization checklist remains mostly open.
   `metrics.json` in the service-owned active layout.
 - [x] Add immutable `model_id` and model provenance metadata for prepared
   notebook artifacts.
-- [ ] Add rollback pointer for the node-level active model.
+- [x] Add rollback pointer for the node-level active model.
 - [x] Add golden phrase regression report before model promotion.
 - [ ] Add full quality gates using macro-F1, abstain rate, and latency.
 - [ ] Defer per-locale/webspace/profile models until usage statistics justify
@@ -207,18 +207,16 @@ but the productionization checklist remains mostly open.
   through the owning artifact.
 - [x] Add governed Neural reindex planning/apply flow for curated examples
   that are compatible with the active model labels.
-- [ ] Rebuild/retrain the neural provider for curated examples that introduce
+- [x] Rebuild/retrain the neural provider for curated examples that introduce
   new model labels.
 
 ## Immediate Next Steps
 
 1. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-2. Add full Neural retrain/rebuild/promotion when curated examples introduce
-   labels that are not present in the active model head.
-3. Add full model promotion gates using macro-F1, abstain rate, and latency.
-4. Route named-entity corrections to the governed named-entity write path.
-5. Add runtime-backed host actions for move/hide/pin before exporting them as
+2. Add full model promotion gates using macro-F1, abstain rate, and latency.
+3. Route named-entity corrections to the governed named-entity write path.
+4. Add runtime-backed host actions for move/hide/pin before exporting them as
    active NLU commands.
 
 ## Last Completed Slice
@@ -247,4 +245,7 @@ but the productionization checklist remains mostly open.
 - `adaos interpreter neural-reindex` now reloads active Neural artifacts through service `/reindex`; `--from-curated`
   dry-runs the curated bundle and `--from-curated --apply` is guarded so active examples are replaced only when all
   curated labels already exist in the active model.
+- `adaos interpreter neural-rebuild --from-curated` now trains a candidate Neural model for curated examples with new
+  labels; explicit `--promote` backs up the active model, writes rollback pointers, clears stale indexes, and reindexes
+  the service.
 - NLU documentation now includes a human verification checklist and clearly separates current UI, backend/API-only behavior, and target UI.

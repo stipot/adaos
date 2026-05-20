@@ -190,3 +190,25 @@ The apply path only replaces `state/nlu/neural/examples_manifest.jsonl` when all
 curated labels already exist in the active model `labels.json`. New labels still
 require a full model rebuild/retrain before promotion, because the current
 `model.pt` classifier head cannot score labels it was not trained with.
+
+To train a new candidate model from the curated bundle without touching the
+active artifacts:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-rebuild --from-curated --epochs 40
+```
+
+The command writes a candidate under
+`state/interpreter/neural_candidates/candidate.<timestamp>` with `model.pt`,
+labels/vocab, manifests, `metrics.json`, and `training_report.json`. Promotion
+is explicit:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-rebuild --from-curated --promote --start --stop-after
+```
+
+Promotion backs up the previous active model layout under
+`state/nlu/neural/rollback`, writes `active_model.json` plus
+`rollback/latest.json`, removes stale indexes, and calls service `/reindex`.
+Use `--min-dev-accuracy` and `--min-macro-f1` to require candidate quality gates
+before promotion.

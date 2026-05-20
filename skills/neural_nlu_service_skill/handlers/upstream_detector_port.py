@@ -1210,7 +1210,7 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.9",
+            "version": "0.2.10",
             "torch_available": torch is not None,
             "faiss_available": faiss is not None,
             "model_loaded": bool(engine),
