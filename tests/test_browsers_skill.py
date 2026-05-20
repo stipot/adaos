@@ -162,6 +162,8 @@ def test_browsers_skill_browser_tiles_include_online_flag(monkeypatch) -> None:
     assert tiles[0]["title"] == "Dev Browser"
     assert tiles[0]["online"] is True
     assert tiles[0]["status"] == "online"
+    assert "uiSubtitle" not in tiles[0]
+    assert "\n" not in tiles[0]["content"]
     assert tiles[1]["online"] is False
     assert tiles[1]["status"] == "offline"
 

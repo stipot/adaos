@@ -455,9 +455,14 @@ render the surface and explain whether it is healthy.
 For heavy skills, prefer this split:
 
 - minimal bootstrap/control state in Yjs
-- operator-facing variables, active rows, and event tails in stream receivers
+- compact operator-facing variables and active rows in stream receivers
 - details behind a `Details` action or modal
 - full diagnostic evidence in disk snapshots or 360log
+
+Stream rows are not a dumping ground for every field the skill knows. Keep row
+payloads to the fields the widget renders for first interaction, avoid
+duplicating the same text under multiple names, and move verbose IDs, timelines,
+raw status, and diagnostics behind actions or details receivers.
 
 Good shape:
 
