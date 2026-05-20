@@ -212,6 +212,9 @@ Progress:
 - `/api/node/status-cards/infrascope/refresh` supports explicit `card_ids`
   and `demanded_only=true` refreshes so early Infrascope checks do not have to
   republish the full card family
+- the node projection dispatcher registers a more specific
+  `status-card:infrascope-*` handler that refreshes a demanded Infrascope card
+  from `data/infrascope` before returning its `ProjectionRecord`
 - live skill refresh hookup and browser demand wiring remain before this slice
   can replace the monolithic active view
 
@@ -372,13 +375,13 @@ Use this checklist for every implementation slice touching the event model.
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper added; browser client hookup remains |
-| Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API and status-card wildcard handler added |
+| Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, and Infrascope-specific demanded refresh handler added |
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` added |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
-| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry; API refresh path can publish from request payload or `data/infrascope`; explicit `card_ids` and `demanded_only` refreshes are supported; status-card snapshot and thin summary can refresh from `data/infrascope` on read; client/live-skill hookup remains |
+| Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry; API refresh path can publish from request payload or `data/infrascope`; explicit `card_ids` and `demanded_only` refreshes are supported; dispatcher can refresh demanded `status-card:infrascope-*` records from `data/infrascope`; status-card snapshot and thin summary can refresh from `data/infrascope` on read; client/live-skill hookup remains |
 
 ## Completion Definition
 
