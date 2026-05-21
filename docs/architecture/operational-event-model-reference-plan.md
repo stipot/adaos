@@ -137,6 +137,9 @@ Progress:
   first platform handler family
 - canonical `ProjectionRecord` results can now be materialized in a shared
   in-memory registry and inspected through `/api/node/projection-records`
+- `/api/node/projection-diagnostics` reports whether each demanded projection
+  has a materialized shared `ProjectionRecord`, including status, version,
+  fingerprint, lifecycle reason, and registry totals
 - Yjs projection record writes remain for later client adapter integration; the
   registry is the pre-Yjs materialization boundary
 
@@ -391,12 +394,12 @@ Use this checklist for every implementation slice touching the event model.
 | Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
-| Projection record ABI | Canonical record shape | Helper code, shared materialized registry, and status-card bridge added |
+| Projection record ABI | Canonical record shape | Helper code, shared materialized registry, status-card bridge, and diagnostics correlation added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, and session touch added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, and Infrascope-specific demanded refresh handler added |
-| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` added; optional Infrascope demanded-card refresh is available |
+| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, and optional Infrascope demanded-card refresh |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
