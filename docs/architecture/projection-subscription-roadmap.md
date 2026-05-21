@@ -229,13 +229,16 @@ Current status:
 
 ### 9. Cross-Skill Rollout
 
-- [ ] `rollout.monolith_inventory`: identify other browser-facing skills that currently publish monolithic Yjs JSON subtrees
+- [x] `rollout.monolith_inventory`: identify other browser-facing skills that currently publish monolithic Yjs JSON subtrees
 - [ ] `rollout.migrate_to_shared_contract`: migrate them onto the shared projection/subscription contract
 - [x] `rollout.shared_helpers`: provide a common helper layer so each skill does not reimplement subscription parsing and dispatch logic
 - [ ] `rollout.manifest_rules`: document how scenario manifests and skill manifests declare projection roots without inventing incompatible shapes
 
 Current status:
 
+- `/api/node/projection-migration/monolith-inventory` now reports direct
+  `data/<skill>` Yjs roots, smaller single-slot paths, stream receivers, and
+  shared bridge hints for workspace skills
 - `adaos.sdk.status` provides first shared helpers for publishing status-card
   projections from skills and platform code
 - helpers preserve current skill ownership as `skill:<name>` and support stream

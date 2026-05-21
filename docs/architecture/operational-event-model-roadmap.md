@@ -416,7 +416,7 @@ Primary source:
 
 ### Phase 9. Cross-Skill Rollout and Cleanup
 
-- [ ] `phase9.monolith_inventory`: identify remaining monolithic Yjs publishers
+- [x] `phase9.monolith_inventory`: identify remaining monolithic Yjs publishers
 - [ ] `phase9.shared_helpers`: provide shared helper layers for subscriptions, dispatcher use, and projection records
 - [ ] `phase9.compat_cleanup`: remove legacy monolith paths once replacements are stable
 - [ ] `phase9.test_matrix`: add tests for multi-webspace, multi-consumer, node-aware Yjs, platform emitters, and access metadata
