@@ -140,6 +140,9 @@ Progress:
 - `/api/node/projection-diagnostics` reports whether each demanded projection
   has a materialized shared `ProjectionRecord`, including status, version,
   fingerprint, lifecycle reason, and registry totals
+- `/api/node/projection-diagnostics?materialize_projection_records=true`
+  can run a demanded-only status-card materialization pass before reporting
+  shared `ProjectionRecord` correlation
 - Yjs projection record writes remain for later client adapter integration; the
   registry is the pre-Yjs materialization boundary
 
@@ -399,7 +402,7 @@ Use this checklist for every implementation slice touching the event model.
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, and session touch added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, and Infrascope-specific demanded refresh handler added |
-| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, and optional Infrascope demanded-card refresh |
+| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, and optional Infrascope demanded-card refresh |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime status-card pilot in progress |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
