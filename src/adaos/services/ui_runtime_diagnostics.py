@@ -10,6 +10,7 @@ from typing import Any, Mapping
 import anyio
 
 from adaos.services.agent_context import get_ctx
+from adaos.services.status_card_registry import publish_status_card
 from adaos.services.yjs.doc import async_read_ydoc
 from adaos.services.yjs.webspace import coerce_webspace_id, default_webspace_id
 
@@ -18,6 +19,8 @@ _MAX_EVENTS_PER_BATCH = 50
 _MAX_DETAILS_BYTES = 16_000
 _MAX_MESSAGE_CHARS = 1_500
 _FALLBACK_SKILL = "__ui_runtime__"
+UI_RUNTIME_STATUS_CARD_ID = "ui-runtime"
+UI_RUNTIME_STATUS_CARD_OWNER = "core:ui-runtime"
 
 
 async def ingest_ui_runtime_diagnostics(
@@ -57,12 +60,112 @@ async def ingest_ui_runtime_diagnostics(
 
     if records:
         await anyio.to_thread.run_sync(_append_records, records)
+    status_card = _publish_ui_runtime_status_card(
+        records,
+        webspace_id=target_webspace_id,
+        updated_at=time.time(),
+    )
+    status_card_payload = status_card.to_dict() if status_card is not None else None
     return {
         "ok": True,
         "accepted": len(records),
         "webspace_id": target_webspace_id,
         "events": accepted,
+        "status_card": status_card_payload,
     }
+
+
+def _publish_ui_runtime_status_card(
+    records: list[tuple[str, dict[str, Any]]],
+    *,
+    webspace_id: str,
+    updated_at: float,
+):
+    if not records:
+        return None
+    events = [record for _, record in records]
+    level_counts = _count_values(event.get("level") for event in events)
+    status = _status_from_level_counts(level_counts)
+    skills = _unique_values(event.get("skill_id") for event in events)
+    sources = _unique_values(event.get("source") for event in events)
+    codes = _unique_values(event.get("code") for event in events if event.get("code"))
+    last_event_ts = max((float(event.get("ts") or 0.0) for event in events), default=updated_at)
+    summary = _ui_runtime_summary(
+        accepted_total=len(events),
+        level_counts=level_counts,
+        skills=skills,
+    )
+    return publish_status_card(
+        id=UI_RUNTIME_STATUS_CARD_ID,
+        owner=UI_RUNTIME_STATUS_CARD_OWNER,
+        kind="ui-runtime-diagnostics",
+        scope={
+            "accepted_total": len(events),
+            "level_counts": level_counts,
+            "skill_ids": skills,
+            "sources": sources,
+            "codes": codes,
+            "last_event_ts": last_event_ts,
+        },
+        webspace_id=webspace_id,
+        status=status,
+        summary=summary,
+        ttl_ms=60000,
+        details_ref={
+            "kind": "api",
+            "path": "/api/node/logs",
+            "params": {"category": "skills"},
+        },
+        updated_at=updated_at,
+    )
+
+
+def _status_from_level_counts(level_counts: Mapping[str, int]) -> str:
+    if int(level_counts.get("ERROR") or 0) > 0:
+        return "degraded"
+    if int(level_counts.get("WARNING") or 0) > 0:
+        return "warning"
+    return "online"
+
+
+def _ui_runtime_summary(
+    *,
+    accepted_total: int,
+    level_counts: Mapping[str, int],
+    skills: list[str],
+) -> str:
+    parts: list[str] = []
+    for level in ("ERROR", "WARNING", "INFO", "DEBUG"):
+        total = int(level_counts.get(level) or 0)
+        if total:
+            parts.append(f"{total} {level.lower()}")
+    levels = ", ".join(parts) if parts else "no events"
+    if len(skills) == 1:
+        return f"UI diagnostics: {accepted_total} event(s), {levels}, skill {skills[0]}"
+    if len(skills) > 1:
+        return f"UI diagnostics: {accepted_total} event(s), {levels}, {len(skills)} skills"
+    return f"UI diagnostics: {accepted_total} event(s), {levels}"
+
+
+def _count_values(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        token = str(value or "").strip()
+        if not token:
+            continue
+        counts[token] = counts.get(token, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _unique_values(values: Any, *, limit: int = 12) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        token = _compact_string(value, max_chars=160)
+        if token and token not in result:
+            result.append(token)
+        if len(result) >= limit:
+            break
+    return result
 
 
 async def _normalize_event(raw: Mapping[str, Any], *, webspace_id: str) -> dict[str, Any] | None:
