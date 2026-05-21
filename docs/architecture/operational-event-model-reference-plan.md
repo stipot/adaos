@@ -148,6 +148,9 @@ Progress:
   `demanded_only=true` filtering for browser-facing cache updates
 - `/api/node/projection-records/yjs/cache` reads the same Yjs cache back and
   reports schema/fingerprint health for Swagger and operator acceptance checks
+- `/api/node/projection-diagnostics?include_yjs_cache=true` correlates demanded
+  projections with the `data/projectionRecords` cache; `materialize_yjs_cache=true`
+  can refresh the demanded cache before reporting
 - direct browser client adapter hookup remains, but the server-side Yjs
   materialization boundary is now explicit and test-covered
 
@@ -412,12 +415,12 @@ Use this checklist for every implementation slice touching the event model.
 | Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
-| Projection record ABI | Canonical record shape | Helper code, shared materialized registry, status-card bridge, diagnostics correlation, and `data/projectionRecords` Yjs materialization/readback added |
+| Projection record ABI | Canonical record shape | Helper code, shared materialized registry, status-card bridge, diagnostics correlation, `data/projectionRecords` Yjs materialization/readback, and diagnostics cache correlation added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, and session touch added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, and Infrascope-specific demanded refresh handler added |
-| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, and optional Infrascope demanded-card refresh |
+| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, and optional Infrascope demanded-card refresh |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime lifecycle, UI runtime diagnostics, toast notifications, and desktop shell snapshots publish platform status cards through the shared ABI |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
