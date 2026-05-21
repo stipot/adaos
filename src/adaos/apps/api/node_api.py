@@ -2347,6 +2347,8 @@ async def node_projection_diagnostics(
     include_runtime: bool = True,
     include_infrascope: bool = False,
     materialize_projection_records: bool = False,
+    materialize_yjs_cache: bool = False,
+    include_yjs_cache: bool = False,
     include_stale: bool = True,
     stale_after_s: float | None = None,
 ) -> dict[str, Any]:
@@ -2370,10 +2372,19 @@ async def node_projection_diagnostics(
             demanded_only=True,
             access={"visibility": "operator"},
         )
+    if materialize_yjs_cache:
+        refreshes["projection_records_yjs"] = await materialize_projection_records_to_yjs(
+            webspace_id=target_webspace_id,
+            demanded_only=True,
+        )
+    yjs_cache = None
+    if include_yjs_cache or materialize_yjs_cache:
+        yjs_cache = await read_projection_records_yjs_cache(webspace_id=target_webspace_id)
     diagnostics = projection_operator_diagnostics(
         webspace_id=target_webspace_id,
         include_stale=include_stale,
         stale_after_s=stale_after_s,
+        yjs_cache=yjs_cache,
     )
     if refreshes:
         diagnostics["refreshes"] = refreshes

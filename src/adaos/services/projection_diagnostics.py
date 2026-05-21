@@ -77,12 +77,57 @@ def _materialized_record_details(record: Mapping[str, Any] | None) -> dict[str, 
     }
 
 
+def _yjs_cache_record_details(
+    projection_key: str,
+    *,
+    yjs_cache: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    cache_present = bool(isinstance(yjs_cache, Mapping) and yjs_cache.get("cache_present"))
+    if not cache_present:
+        return {
+            "cached": False,
+            "cache_present": cache_present,
+            "status": None,
+            "version": None,
+            "fingerprint": None,
+            "schema_ok": None,
+            "fingerprint_ok": None,
+            "updated_at": None,
+        }
+    payload = yjs_cache.get("payload") if isinstance(yjs_cache.get("payload"), Mapping) else {}
+    records = payload.get("records") if isinstance(payload.get("records"), Mapping) else {}
+    record = records.get(projection_key) if isinstance(records.get(projection_key), Mapping) else None
+    if record is None:
+        return {
+            "cached": False,
+            "cache_present": True,
+            "status": None,
+            "version": None,
+            "fingerprint": None,
+            "schema_ok": yjs_cache.get("schema_ok"),
+            "fingerprint_ok": yjs_cache.get("fingerprint_ok"),
+            "updated_at": payload.get("updated_at"),
+        }
+    meta = record.get("meta") if isinstance(record.get("meta"), Mapping) else {}
+    return {
+        "cached": True,
+        "cache_present": True,
+        "status": record.get("status"),
+        "version": meta.get("version"),
+        "fingerprint": meta.get("fingerprint"),
+        "schema_ok": yjs_cache.get("schema_ok"),
+        "fingerprint_ok": yjs_cache.get("fingerprint_ok"),
+        "updated_at": payload.get("updated_at"),
+    }
+
+
 def projection_operator_diagnostics(
     *,
     webspace_id: str | None = None,
     include_stale: bool = True,
     stale_after_s: float | None = None,
     now: float | None = None,
+    yjs_cache: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     ts = float(now if now is not None else time.time())
     demand = projection_demand_snapshot(
@@ -128,6 +173,7 @@ def projection_operator_diagnostics(
                 card_id = None
             if card_id:
                 card = cards_by_id.get(card_id)
+        yjs_cache_record = _yjs_cache_record_details(projection_key, yjs_cache=yjs_cache)
         active.append(
             {
                 "projection_key": projection_key,
@@ -138,6 +184,7 @@ def projection_operator_diagnostics(
                 "handler": handler,
                 "status_card": _card_details(card, record),
                 "projection_record": _materialized_record_details(materialized_record),
+                "yjs_cache_record": yjs_cache_record if yjs_cache is not None else None,
                 "consumers": list(projection.get("consumers") or []),
             }
         )
@@ -153,6 +200,12 @@ def projection_operator_diagnostics(
     materialized_projection_total = sum(
         1 for item in active if (item.get("projection_record") or {}).get("materialized")
     )
+    yjs_cache_checked = yjs_cache is not None
+    yjs_cache_projection_total = (
+        sum(1 for item in active if (item.get("yjs_cache_record") or {}).get("cached"))
+        if yjs_cache_checked
+        else 0
+    )
     return {
         "ok": True,
         "webspace_id": str(webspace_id or "").strip() or None,
@@ -162,12 +215,18 @@ def projection_operator_diagnostics(
         "missing_status_card_total": missing_status_card_total,
         "materialized_projection_total": materialized_projection_total,
         "missing_projection_record_total": len(active) - materialized_projection_total,
+        "yjs_cache_checked": yjs_cache_checked,
+        "yjs_cache_projection_total": yjs_cache_projection_total,
+        "missing_yjs_cache_projection_total": (
+            len(active) - yjs_cache_projection_total if yjs_cache_checked else 0
+        ),
         "stale_projection_total": stale_projection_total,
         "active_projections": active,
         "demand": demand,
         "dispatcher": dispatcher,
         "status_registry": registry,
         "projection_registry": projection_registry,
+        "yjs_cache": dict(yjs_cache) if isinstance(yjs_cache, Mapping) else None,
         "updated_at": ts,
     }
 

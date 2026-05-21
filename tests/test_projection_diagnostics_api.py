@@ -223,6 +223,169 @@ def test_projection_diagnostics_can_materialize_demanded_projection_records() ->
     assert projection["projection_record"]["status"] == "ready"
 
 
+def test_projection_diagnostics_can_include_yjs_cache_readback(monkeypatch) -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/status-cards",
+        json={
+            "id": "runtime",
+            "owner": "core:runtime",
+            "kind": "runtime",
+            "scope": {"node_id": "node-a"},
+            "webspace_id": "desktop",
+            "status": "running",
+            "summary": "Runtime ready",
+            "updated_at": 10.0,
+        },
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+            updated_at=10.0,
+        )
+    )
+
+    async def fake_read_projection_records_yjs_cache(**_kwargs):
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": "desktop",
+            "cache_present": True,
+            "yjs_path": "data/projectionRecords",
+            "schema_ok": True,
+            "fingerprint_ok": True,
+            "payload": {
+                "updated_at": 12.0,
+                "records": {
+                    "status-card:runtime": {
+                        "status": "ready",
+                        "data": {"summary": "Runtime ready"},
+                        "meta": {
+                            "projection_key": "status-card:runtime",
+                            "version": 4,
+                            "fingerprint": "fp-yjs-runtime",
+                        },
+                    }
+                },
+            },
+        }
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "read_projection_records_yjs_cache", fake_read_projection_records_yjs_cache)
+
+    resp = client.get(
+        "/api/node/projection-diagnostics",
+        params={
+            "webspace_id": "desktop",
+            "include_runtime": "false",
+            "include_yjs_cache": "true",
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    projection = payload["active_projections"][0]
+    assert payload["yjs_cache_checked"] is True
+    assert payload["yjs_cache_projection_total"] == 1
+    assert payload["missing_yjs_cache_projection_total"] == 0
+    assert projection["yjs_cache_record"]["cached"] is True
+    assert projection["yjs_cache_record"]["version"] == 4
+    assert projection["yjs_cache_record"]["fingerprint"] == "fp-yjs-runtime"
+    assert projection["yjs_cache_record"]["schema_ok"] is True
+    assert projection["yjs_cache_record"]["fingerprint_ok"] is True
+
+
+def test_projection_diagnostics_can_materialize_and_read_yjs_cache(monkeypatch) -> None:
+    client = _make_client()
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+            updated_at=10.0,
+        )
+    )
+    captured = {}
+
+    async def fake_materialize_projection_records_to_yjs(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": kwargs["webspace_id"],
+            "yjs_path": "data/projectionRecords",
+            "demanded_only": bool(kwargs["demanded_only"]),
+            "record_total": 1,
+            "projection_keys": ["status-card:runtime"],
+        }
+
+    async def fake_read_projection_records_yjs_cache(**_kwargs):
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": "desktop",
+            "cache_present": True,
+            "yjs_path": "data/projectionRecords",
+            "schema_ok": True,
+            "fingerprint_ok": True,
+            "payload": {
+                "records": {
+                    "status-card:runtime": {
+                        "status": "ready",
+                        "meta": {
+                            "projection_key": "status-card:runtime",
+                            "version": 1,
+                            "fingerprint": "fp-yjs-runtime",
+                        },
+                    }
+                }
+            },
+        }
+
+    from adaos.apps.api import node_api
+
+    monkeypatch.setattr(node_api, "materialize_projection_records_to_yjs", fake_materialize_projection_records_to_yjs)
+    monkeypatch.setattr(node_api, "read_projection_records_yjs_cache", fake_read_projection_records_yjs_cache)
+
+    resp = client.get(
+        "/api/node/projection-diagnostics",
+        params={
+            "webspace_id": "desktop",
+            "include_runtime": "false",
+            "materialize_yjs_cache": "true",
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert captured["webspace_id"] == "desktop"
+    assert captured["demanded_only"] is True
+    assert payload["refreshes"]["projection_records_yjs"]["record_total"] == 1
+    assert payload["yjs_cache_checked"] is True
+    assert payload["yjs_cache_projection_total"] == 1
+
+
 def test_projection_diagnostics_counts_missing_status_card_for_demand() -> None:
     client = _make_client()
     write_client_subscription_record(
