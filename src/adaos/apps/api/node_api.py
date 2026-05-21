@@ -67,6 +67,10 @@ from adaos.services.projection_records import (
     projection_record_registry_snapshot,
     write_projection_record,
 )
+from adaos.services.projection_record_yjs import (
+    materialize_projection_records_to_yjs,
+    normalize_projection_record_keys,
+)
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
@@ -1586,6 +1590,14 @@ class StatusCardProjectionRecordsMaterializeRequest(BaseModel):
     webspace_id: str | None = None
     card_ids: list[str] | None = None
     demanded_only: bool = False
+    write_yjs: bool = False
+    now: float | None = None
+
+
+class ProjectionRecordsYjsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    projection_keys: list[str] | None = None
+    demanded_only: bool = False
     now: float | None = None
 
 
@@ -2597,12 +2609,35 @@ async def node_projection_records_materialize_status_cards(
 ) -> dict[str, Any]:
     request_payload = payload or StatusCardProjectionRecordsMaterializeRequest()
     target_webspace_id = _coerce_node_webspace_id(request_payload.webspace_id or webspace_id)
-    return materialize_status_card_projection_records(
+    result = materialize_status_card_projection_records(
         webspace_id=target_webspace_id,
         card_ids=request_payload.card_ids,
         demanded_only=request_payload.demanded_only,
         now=request_payload.now,
         access={"visibility": "operator"},
+    )
+    if request_payload.write_yjs:
+        result["yjs"] = await materialize_projection_records_to_yjs(
+            webspace_id=target_webspace_id,
+            projection_keys=normalize_projection_record_keys(result.get("records") or []),
+            demanded_only=False,
+            now=request_payload.now,
+        )
+    return result
+
+
+@router.post("/projection-records/yjs/materialize", dependencies=[Depends(require_token)])
+async def node_projection_records_yjs_materialize(
+    payload: ProjectionRecordsYjsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or ProjectionRecordsYjsMaterializeRequest()
+    target_webspace_id = _coerce_node_webspace_id(request_payload.webspace_id or webspace_id)
+    return await materialize_projection_records_to_yjs(
+        webspace_id=target_webspace_id,
+        projection_keys=request_payload.projection_keys,
+        demanded_only=request_payload.demanded_only,
+        now=request_payload.now,
     )
 
 

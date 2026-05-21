@@ -72,3 +72,45 @@ def test_projection_records_api_rejects_missing_identity() -> None:
 
     assert resp.status_code == 400
     assert resp.json()["detail"] == "webspace_id is required"
+
+
+def test_projection_records_api_materializes_yjs_cache(monkeypatch) -> None:
+    client = _make_client()
+    from adaos.apps.api import node_api
+
+    captured = {}
+
+    async def fake_materialize_projection_records_to_yjs(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": kwargs["webspace_id"],
+            "yjs_path": "data/projectionRecords",
+            "record_total": 1,
+            "projection_keys": list(kwargs["projection_keys"] or []),
+            "demanded_only": bool(kwargs["demanded_only"]),
+        }
+
+    monkeypatch.setattr(
+        node_api,
+        "materialize_projection_records_to_yjs",
+        fake_materialize_projection_records_to_yjs,
+    )
+
+    resp = client.post(
+        "/api/node/projection-records/yjs/materialize",
+        json={
+            "webspace_id": "desktop",
+            "projection_keys": ["status-card:runtime"],
+            "demanded_only": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["yjs_path"] == "data/projectionRecords"
+    assert payload["projection_keys"] == ["status-card:runtime"]
+    assert captured["webspace_id"] == "desktop"
+    assert captured["projection_keys"] == ["status-card:runtime"]
+    assert captured["demanded_only"] is True
