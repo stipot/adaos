@@ -10,6 +10,7 @@ from adaos.apps.api.auth import require_token
 from adaos.domain import make_client_subscription_record, make_projection_subscription
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_dispatcher import clear_projection_dispatcher
+from adaos.services.projection_records import clear_projection_record_registry
 from adaos.services.status_card_registry import clear_status_card_registry
 
 
@@ -32,6 +33,7 @@ def _make_client() -> TestClient:
 
     clear_projection_demand_registry()
     clear_projection_dispatcher()
+    clear_projection_record_registry()
     clear_status_card_registry()
     app = FastAPI()
     app.include_router(node_api.router, prefix="/api/node")
@@ -120,8 +122,64 @@ def test_projection_diagnostics_links_demand_handlers_and_status_cards() -> None
     assert runtime["status_card"]["published"] is True
     assert runtime["status_card"]["summary"] == "Runtime ready"
     assert runtime["status_card"]["projection_status"] == "ready"
+    assert runtime["projection_record"]["materialized"] is False
     assert runtime["pinned_total"] == 1
     assert by_key["projection:hub/overview"]["handler"]["available"] is False
+
+
+def test_projection_diagnostics_reports_materialized_projection_records() -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/status-cards",
+        json={
+            "id": "runtime",
+            "owner": "core:runtime",
+            "kind": "runtime",
+            "scope": {"node_id": "node-a"},
+            "webspace_id": "desktop",
+            "status": "running",
+            "summary": "Runtime ready",
+            "updated_at": 10.0,
+        },
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+            updated_at=10.0,
+        )
+    )
+    client.post(
+        "/api/node/projection-records/status-cards/materialize",
+        json={"webspace_id": "desktop", "demanded_only": True},
+    )
+
+    resp = client.get(
+        "/api/node/projection-diagnostics",
+        params={"webspace_id": "desktop", "include_runtime": "false"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["materialized_projection_total"] == 1
+    assert payload["missing_projection_record_total"] == 0
+    projection = payload["active_projections"][0]
+    assert projection["projection_key"] == "status-card:runtime"
+    assert projection["projection_record"]["materialized"] is True
+    assert projection["projection_record"]["status"] == "ready"
+    assert projection["projection_record"]["version"] == 1
+    assert projection["projection_record"]["lifecycle_reason"] == "materialized"
+    assert payload["projection_registry"]["record_total"] == 1
 
 
 def test_projection_diagnostics_counts_missing_status_card_for_demand() -> None:

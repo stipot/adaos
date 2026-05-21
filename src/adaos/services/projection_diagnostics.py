@@ -5,6 +5,7 @@ from typing import Any, Mapping
 
 from adaos.services.projection_demand import projection_demand_snapshot
 from adaos.services.projection_dispatcher import projection_dispatcher_snapshot
+from adaos.services.projection_records import projection_record_registry_snapshot
 from adaos.services.status_card_registry import (
     STATUS_CARD_PROJECTION_PREFIX,
     status_card_id_from_projection_key,
@@ -51,6 +52,31 @@ def _card_details(card: Mapping[str, Any] | None, record: Mapping[str, Any] | No
     }
 
 
+def _materialized_record_details(record: Mapping[str, Any] | None) -> dict[str, Any]:
+    if record is None:
+        return {
+            "materialized": False,
+            "status": None,
+            "version": None,
+            "fingerprint": None,
+            "lifecycle_reason": None,
+            "updated_at": None,
+            "changed_at": None,
+            "error": None,
+        }
+    meta = record.get("meta") if isinstance(record.get("meta"), Mapping) else {}
+    return {
+        "materialized": True,
+        "status": record.get("status"),
+        "version": meta.get("version"),
+        "fingerprint": meta.get("fingerprint"),
+        "lifecycle_reason": meta.get("lifecycle_reason"),
+        "updated_at": meta.get("updated_at"),
+        "changed_at": meta.get("changed_at"),
+        "error": record.get("error"),
+    }
+
+
 def projection_operator_diagnostics(
     *,
     webspace_id: str | None = None,
@@ -67,10 +93,16 @@ def projection_operator_diagnostics(
     )
     dispatcher = projection_dispatcher_snapshot()
     registry = status_card_registry_snapshot(webspace_id=webspace_id, now=ts)
+    projection_registry = projection_record_registry_snapshot(webspace_id=webspace_id)
     handlers = [str(item) for item in dispatcher.get("handlers", [])]
     records_by_projection = {
         _projection_key(record): record
         for record in registry.get("records", [])
+        if isinstance(record, Mapping) and _projection_key(record)
+    }
+    materialized_records_by_projection = {
+        _projection_key(record): record
+        for record in projection_registry.get("records", [])
         if isinstance(record, Mapping) and _projection_key(record)
     }
     cards_by_id = {
@@ -88,6 +120,7 @@ def projection_operator_diagnostics(
         card_id = None
         card = None
         record = records_by_projection.get(projection_key)
+        materialized_record = materialized_records_by_projection.get(projection_key)
         if projection_key.startswith(STATUS_CARD_PROJECTION_PREFIX):
             try:
                 card_id = status_card_id_from_projection_key(projection_key)
@@ -104,6 +137,7 @@ def projection_operator_diagnostics(
                 "stale_total": int(projection.get("stale_total") or 0),
                 "handler": handler,
                 "status_card": _card_details(card, record),
+                "projection_record": _materialized_record_details(materialized_record),
                 "consumers": list(projection.get("consumers") or []),
             }
         )
@@ -116,6 +150,9 @@ def projection_operator_diagnostics(
         and not (item.get("status_card") or {}).get("published")
     )
     stale_projection_total = sum(1 for item in active if int(item.get("stale_total") or 0) > 0)
+    materialized_projection_total = sum(
+        1 for item in active if (item.get("projection_record") or {}).get("materialized")
+    )
     return {
         "ok": True,
         "webspace_id": str(webspace_id or "").strip() or None,
@@ -123,11 +160,14 @@ def projection_operator_diagnostics(
         "active_consumer_total": sum(int(item.get("consumer_total") or 0) for item in active),
         "missing_handler_total": missing_handler_total,
         "missing_status_card_total": missing_status_card_total,
+        "materialized_projection_total": materialized_projection_total,
+        "missing_projection_record_total": len(active) - materialized_projection_total,
         "stale_projection_total": stale_projection_total,
         "active_projections": active,
         "demand": demand,
         "dispatcher": dispatcher,
         "status_registry": registry,
+        "projection_registry": projection_registry,
         "updated_at": ts,
     }
 
