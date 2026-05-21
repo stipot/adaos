@@ -2332,6 +2332,7 @@ async def node_projection_diagnostics(
     webspace_id: str | None = None,
     include_runtime: bool = True,
     include_infrascope: bool = False,
+    materialize_projection_records: bool = False,
     include_stale: bool = True,
     stale_after_s: float | None = None,
 ) -> dict[str, Any]:
@@ -2348,6 +2349,12 @@ async def node_projection_diagnostics(
         refreshes["infrascope"] = await _refresh_infrascope_status_cards(
             webspace_id=target_webspace_id,
             demanded_only=True,
+        )
+    if materialize_projection_records:
+        refreshes["projection_records"] = materialize_status_card_projection_records(
+            webspace_id=target_webspace_id,
+            demanded_only=True,
+            access={"visibility": "operator"},
         )
     diagnostics = projection_operator_diagnostics(
         webspace_id=target_webspace_id,

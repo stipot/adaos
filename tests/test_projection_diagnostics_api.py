@@ -182,6 +182,47 @@ def test_projection_diagnostics_reports_materialized_projection_records() -> Non
     assert payload["projection_registry"]["record_total"] == 1
 
 
+def test_projection_diagnostics_can_materialize_demanded_projection_records() -> None:
+    client = _make_client()
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+            updated_at=10.0,
+        )
+    )
+
+    resp = client.get(
+        "/api/node/projection-diagnostics",
+        params={
+            "webspace_id": "desktop",
+            "include_runtime": "true",
+            "materialize_projection_records": "true",
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["refreshes"]["projection_records"]["demanded_only"] is True
+    assert payload["refreshes"]["projection_records"]["materialized_total"] == 1
+    assert payload["materialized_projection_total"] == 1
+    projection = payload["active_projections"][0]
+    assert projection["projection_key"] == "status-card:runtime"
+    assert projection["status_card"]["published"] is True
+    assert projection["projection_record"]["materialized"] is True
+    assert projection["projection_record"]["status"] == "ready"
+
+
 def test_projection_diagnostics_counts_missing_status_card_for_demand() -> None:
     client = _make_client()
     write_client_subscription_record(
