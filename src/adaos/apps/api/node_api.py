@@ -39,6 +39,7 @@ from adaos.services.media_library import (
     media_file_path,
     media_snapshot,
 )
+from adaos.services.desktop_status_cards import publish_desktop_status_card
 from adaos.services.node_config import set_node_names as save_node_names_config
 from adaos.services.reliability import (
     media_plane_runtime_snapshot,
@@ -2370,6 +2371,7 @@ async def node_projection_diagnostics(
 async def node_status_cards_snapshot(
     webspace_id: str | None = None,
     include_runtime: bool = True,
+    include_desktop: bool = False,
     include_infrascope: bool = False,
     infrascope_demanded_only: bool = False,
 ) -> dict[str, Any]:
@@ -2382,6 +2384,12 @@ async def node_status_cards_snapshot(
             node_id=_local_node_id(),
             lifecycle=runtime_lifecycle_snapshot(),
         )
+    if include_desktop:
+        desktop = await WebDesktopService().get_snapshot_async(target_webspace_id)
+        refreshes["desktop"] = publish_desktop_status_card(
+            webspace_id=target_webspace_id,
+            snapshot=desktop,
+        ).to_dict()
     if include_infrascope:
         refreshes["infrascope"] = await _refresh_infrascope_status_cards(
             webspace_id=target_webspace_id,
@@ -2407,6 +2415,25 @@ async def node_status_cards_refresh_runtime(webspace_id: str | None = None) -> d
         "accepted": True,
         "webspace_id": target_webspace_id,
         "card": card.to_dict(),
+        "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
+    }
+
+
+@router.post("/status-cards/desktop/refresh", dependencies=[Depends(require_token)])
+async def node_status_cards_refresh_desktop(webspace_id: str | None = None) -> dict[str, Any]:
+    _ensure_status_card_projection_handlers()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    desktop = await WebDesktopService().get_snapshot_async(target_webspace_id)
+    card = publish_desktop_status_card(
+        webspace_id=target_webspace_id,
+        snapshot=desktop,
+    )
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "card": card.to_dict(),
+        "desktop": desktop.to_dict(),
         "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
     }
 
@@ -3127,6 +3154,10 @@ async def node_yjs_toggle_install(webspace_id: str, payload: WebspaceToggleInsta
     svc.toggle_install_with_live_room(str(payload.type), str(payload.id), target_webspace_id)
     installed = await svc.get_installed_async(target_webspace_id)
     desktop = await svc.get_snapshot_async(target_webspace_id)
+    status_card = publish_desktop_status_card(
+        webspace_id=target_webspace_id,
+        snapshot=desktop,
+    )
     return {
         "ok": True,
         "accepted": True,
@@ -3135,6 +3166,7 @@ async def node_yjs_toggle_install(webspace_id: str, payload: WebspaceToggleInsta
         "id": str(payload.id),
         "installed": installed.to_dict(),
         "desktop": desktop.to_dict(),
+        "status_card": status_card.to_dict(),
         "runtime": yjs_sync_runtime_snapshot(
             role=conf.role,
             webspace_id=target_webspace_id,
@@ -3147,11 +3179,16 @@ async def node_yjs_desktop_state(webspace_id: str) -> dict[str, Any]:
     conf = load_config()
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     desktop = await WebDesktopService().get_snapshot_async(target_webspace_id)
+    status_card = publish_desktop_status_card(
+        webspace_id=target_webspace_id,
+        snapshot=desktop,
+    )
     return {
         "ok": True,
         "accepted": True,
         "webspace_id": target_webspace_id,
         "desktop": desktop.to_dict(),
+        "status_card": status_card.to_dict(),
         "runtime": yjs_sync_runtime_snapshot(
             role=conf.role,
             webspace_id=target_webspace_id,
@@ -3199,11 +3236,16 @@ async def node_yjs_set_pinned_widgets(
     svc = WebDesktopService()
     svc.set_pinned_widgets_with_live_room(list(payload.pinnedWidgets or []), target_webspace_id)
     desktop = await svc.get_snapshot_async(target_webspace_id)
+    status_card = publish_desktop_status_card(
+        webspace_id=target_webspace_id,
+        snapshot=desktop,
+    )
     return {
         "ok": True,
         "accepted": True,
         "webspace_id": target_webspace_id,
         "desktop": desktop.to_dict(),
+        "status_card": status_card.to_dict(),
         "runtime": yjs_sync_runtime_snapshot(
             role=conf.role,
             webspace_id=target_webspace_id,
@@ -3255,11 +3297,16 @@ async def node_yjs_update_desktop(
         next_snapshot.hidden_sections = [str(item or "").strip() for item in payload.hiddenSections if str(item or "").strip()]
     svc.set_snapshot_with_live_room(next_snapshot, target_webspace_id)
     desktop = await svc.get_snapshot_async(target_webspace_id)
+    status_card = publish_desktop_status_card(
+        webspace_id=target_webspace_id,
+        snapshot=desktop,
+    )
     return {
         "ok": True,
         "accepted": True,
         "webspace_id": target_webspace_id,
         "desktop": desktop.to_dict(),
+        "status_card": status_card.to_dict(),
         "runtime": yjs_sync_runtime_snapshot(
             role=conf.role,
             webspace_id=target_webspace_id,
