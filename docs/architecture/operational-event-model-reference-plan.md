@@ -200,6 +200,10 @@ Current status:
 - `WebToastService` now emits transient toast notifications as the built-in
   `status-card:notifications` platform card while preserving the existing Yjs
   toast list for browser rendering
+- browser-shell desktop snapshots now emit the built-in
+  `status-card:desktop-shell` platform card through
+  `/api/node/status-cards/desktop/refresh`, optional
+  `/api/node/status-cards?include_desktop=true`, and desktop state reads
 - demanded dispatcher refreshes `status-card:*` subscriptions through the shared
   projection ABI
 - missing cards surface as `unavailable`; expired cards surface as `stale`
@@ -409,7 +413,7 @@ Use this checklist for every implementation slice touching the event model.
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, and session touch added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, and Infrascope-specific demanded refresh handler added |
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, and optional Infrascope demanded-card refresh |
-| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime lifecycle, UI runtime diagnostics, and toast notifications publish platform status cards through the shared ABI |
+| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime lifecycle, UI runtime diagnostics, toast notifications, and desktop shell snapshots publish platform status cards through the shared ABI |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
