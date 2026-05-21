@@ -16,6 +16,8 @@ INFRASCOPE_STATUS_CARD_IDS = (
     "infrascope-browsers",
     "infrascope-runtimes",
     "infrascope-registry",
+    "infrascope-inspectors",
+    "infrascope-topology",
 )
 
 
@@ -108,6 +110,46 @@ def _inventory_counts(inventory: Mapping[str, Any]) -> dict[str, int]:
         if rows:
             counts[str(key)] = len(rows)
     return counts
+
+
+def _inspector_items(snapshot: Mapping[str, Any]) -> list[tuple[str, Mapping[str, Any]]]:
+    inspectors = _mapping(snapshot.get("inspectors"))
+    items: list[tuple[str, Mapping[str, Any]]] = []
+    for key, value in inspectors.items():
+        token = str(key or "").strip()
+        inspector = _mapping(value)
+        if token and inspector:
+            items.append((token, inspector))
+    single = _mapping(snapshot.get("inspector"))
+    if single and not items:
+        items.append((str(single.get("object_id") or "local").strip() or "local", single))
+    return sorted(items, key=lambda item: item[0])
+
+
+def _inspector_status_rows(inspectors: list[tuple[str, Mapping[str, Any]]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for _object_id, inspector in inspectors:
+        obj = _mapping(inspector.get("object"))
+        status = inspector.get("status") or inspector.get("value") or obj.get("status")
+        if status:
+            rows.append({"status": status})
+        rows.extend(_mapping(item) for item in _items(inspector.get("incidents")))
+    return rows
+
+
+def _topology_edges(snapshot: Mapping[str, Any], inspectors: list[tuple[str, Mapping[str, Any]]]) -> list[Any]:
+    edges: list[Any] = []
+    edges.extend(_items(_mapping(snapshot.get("topology")).get("edges")))
+    for _object_id, inspector in inspectors:
+        edges.extend(_items(_mapping(inspector.get("topology")).get("edges")))
+    seen: set[str] = set()
+    unique: list[Any] = []
+    for edge in edges:
+        token = str(edge)
+        if token not in seen:
+            unique.append(edge)
+            seen.add(token)
+    return unique
 
 
 def _overview_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> InfrascopeStatusCardSpec:
@@ -261,6 +303,58 @@ def _registry_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> Infrasco
     )
 
 
+def _inspectors_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> InfrascopeStatusCardSpec:
+    inspectors = _inspector_items(snapshot)
+    object_ids = [object_id for object_id, _inspector in inspectors]
+    total = len(inspectors)
+    status = _worst_status(_inspector_status_rows(inspectors), empty="unknown") if total else "unknown"
+    related_receivers = [f"infrascope.inspector.{object_id}" for object_id in object_ids[:8]]
+    return InfrascopeStatusCardSpec(
+        id="infrascope-inspectors",
+        kind="object-inspector",
+        status=status,
+        summary=f"{total} inspector payload{'s' if total != 1 else ''}",
+        scope={
+            "webspace_id": webspace_id,
+            "section": "inspectors",
+            "inspector_total": total,
+            "object_ids": object_ids[:16],
+        },
+        details_ref={
+            "kind": "stream",
+            "receiver": "infrascope.inspector.local",
+            "params": {
+                "webspace_id": webspace_id,
+                "related_receivers": related_receivers,
+            },
+        },
+    )
+
+
+def _topology_spec(snapshot: Mapping[str, Any], *, webspace_id: str) -> InfrascopeStatusCardSpec:
+    inspectors = _inspector_items(snapshot)
+    edges = _topology_edges(snapshot, inspectors)
+    edge_total = len(edges)
+    status = "online" if edge_total else "unknown"
+    return InfrascopeStatusCardSpec(
+        id="infrascope-topology",
+        kind="topology",
+        status=status,
+        summary=f"{edge_total} topology edge{'s' if edge_total != 1 else ''}",
+        scope={
+            "webspace_id": webspace_id,
+            "section": "topology",
+            "edge_total": edge_total,
+            "inspector_total": len(inspectors),
+        },
+        details_ref={
+            "kind": "stream",
+            "receiver": "infrascope.inspector_field.topology.local",
+            "params": {"webspace_id": webspace_id},
+        },
+    )
+
+
 def build_infrascope_status_card_specs(
     snapshot: Mapping[str, Any],
     *,
@@ -279,6 +373,8 @@ def build_infrascope_status_card_specs(
         _browser_spec(data, webspace_id=target_webspace),
         _runtime_spec(data, webspace_id=target_webspace),
         _registry_spec(data, webspace_id=target_webspace),
+        _inspectors_spec(data, webspace_id=target_webspace),
+        _topology_spec(data, webspace_id=target_webspace),
     ]
     requested = normalize_infrascope_status_card_ids(card_ids)
     if requested is None:

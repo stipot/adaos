@@ -227,8 +227,8 @@ def test_status_card_api_snapshot_can_include_infrascope_cards_from_yjs(monkeypa
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["refreshes"]["infrascope"]["source"] == "data/infrascope"
-    assert payload["refreshes"]["infrascope"]["card_total"] == 7
-    assert payload["card_total"] == 8
+    assert payload["refreshes"]["infrascope"]["card_total"] == 9
+    assert payload["card_total"] == 10
     assert {card["id"] for card in payload["cards"]} >= {
         "runtime",
         "infrascope-overview",
@@ -251,8 +251,8 @@ def test_status_card_api_refreshes_infrascope_cards_from_request() -> None:
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["source"] == "request"
-    assert payload["card_total"] == 7
-    assert payload["snapshot"]["card_total"] == 7
+    assert payload["card_total"] == 9
+    assert payload["snapshot"]["card_total"] == 9
     assert {card["id"] for card in payload["cards"]} >= {
         "infrascope-overview",
         "infrascope-inventory",
@@ -336,8 +336,8 @@ def test_status_card_api_refreshes_infrascope_cards_from_yjs_snapshot(monkeypatc
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["source"] == "data/infrascope"
-    assert payload["card_total"] == 7
-    assert payload["snapshot"]["projection_total"] == 7
+    assert payload["card_total"] == 9
+    assert payload["snapshot"]["projection_total"] == 9
 
 
 def test_status_card_api_sweeps_stale_cards() -> None:

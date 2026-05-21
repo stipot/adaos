@@ -1944,13 +1944,13 @@ def test_node_reliability_summary_thin_mode_can_include_infrascope(monkeypatch) 
     payload = resp.json()
     assert payload["refreshes"]["infrascope"] == {
         "source": "data/infrascope",
-        "cardTotal": 7,
+        "cardTotal": 9,
         "skipped": False,
     }
-    assert payload["cardTotal"] == 8
-    assert payload["registryVersion"] == 8
-    assert payload["cache"]["etag"] == 'W/"status-card-registry:desktop:8"'
-    assert resp.headers["etag"] == 'W/"status-card-registry:desktop:8"'
+    assert payload["cardTotal"] == 10
+    assert payload["registryVersion"] == 10
+    assert payload["cache"]["etag"] == 'W/"status-card-registry:desktop:10"'
+    assert resp.headers["etag"] == 'W/"status-card-registry:desktop:10"'
     assert {card["id"] for card in payload["cards"]} >= {
         "runtime",
         "infrascope-overview",

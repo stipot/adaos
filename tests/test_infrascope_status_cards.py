@@ -62,6 +62,15 @@ def _snapshot() -> dict[str, object]:
                 }
             ]
         },
+        "inspectors": {
+            "local": {
+                "object_id": "local",
+                "value": "degraded",
+                "object": {"status": "degraded"},
+                "incidents": [{"severity": "high", "summary": "Local pressure"}],
+                "topology": {"edges": [{"from": "local", "to": "member-1"}]},
+            }
+        },
     }
 
 
@@ -77,6 +86,8 @@ def test_build_infrascope_status_card_specs_identifies_first_projection_families
         "infrascope-browsers",
         "infrascope-runtimes",
         "infrascope-registry",
+        "infrascope-inspectors",
+        "infrascope-topology",
     }
     assert by_id["infrascope-overview"].status == "degraded"
     assert by_id["infrascope-overview"].details_ref["tool"] == "get_snapshot"
@@ -101,6 +112,12 @@ def test_build_infrascope_status_card_specs_identifies_first_projection_families
     assert by_id["infrascope-registry"].scope["skill_total"] == 1
     assert by_id["infrascope-registry"].scope["scenario_total"] == 1
     assert by_id["infrascope-registry"].details_ref["receiver"] == "infrascope.inventory.skills"
+    assert by_id["infrascope-inspectors"].status == "degraded"
+    assert by_id["infrascope-inspectors"].scope["inspector_total"] == 1
+    assert by_id["infrascope-inspectors"].details_ref["receiver"] == "infrascope.inspector.local"
+    assert by_id["infrascope-topology"].status == "online"
+    assert by_id["infrascope-topology"].scope["edge_total"] == 1
+    assert by_id["infrascope-topology"].details_ref["receiver"] == "infrascope.inspector_field.topology.local"
 
 
 def test_publish_infrascope_status_cards_uses_shared_registry_and_owner() -> None:
@@ -108,9 +125,9 @@ def test_publish_infrascope_status_cards_uses_shared_registry_and_owner() -> Non
     snapshot = status_card_registry_snapshot(webspace_id="desktop", now=11.0)
     by_id = {item["id"]: item for item in snapshot["cards"]}
 
-    assert len(cards) == 7
-    assert snapshot["card_total"] == 7
-    assert snapshot["stats"]["changed_total"] == 7
+    assert len(cards) == 9
+    assert snapshot["card_total"] == 9
+    assert snapshot["stats"]["changed_total"] == 9
     assert by_id["infrascope-overview"]["owner"] == "skill:infrascope_skill"
     assert by_id["infrascope-overview"]["details_ref"]["kind"] == "tool"
     assert by_id["infrascope-incidents"]["details_ref"]["kind"] == "stream"
@@ -119,6 +136,8 @@ def test_publish_infrascope_status_cards_uses_shared_registry_and_owner() -> Non
     assert by_id["infrascope-browsers"]["details_ref"]["receiver"] == "infrascope.inventory.browsers"
     assert by_id["infrascope-runtimes"]["status"] == "warning"
     assert by_id["infrascope-registry"]["scope"]["skill_total"] == 1
+    assert by_id["infrascope-inspectors"]["scope"]["inspector_total"] == 1
+    assert by_id["infrascope-topology"]["scope"]["edge_total"] == 1
 
 
 def test_publish_infrascope_status_cards_can_filter_requested_projection_keys() -> None:
@@ -156,9 +175,9 @@ def test_publish_infrascope_status_cards_dedupes_unchanged_snapshot() -> None:
 
     snapshot = status_card_registry_snapshot(webspace_id="desktop", now=21.0)
 
-    assert snapshot["stats"]["publish_total"] == 14
-    assert snapshot["stats"]["changed_total"] == 7
-    assert snapshot["stats"]["unchanged_total"] == 7
+    assert snapshot["stats"]["publish_total"] == 18
+    assert snapshot["stats"]["changed_total"] == 9
+    assert snapshot["stats"]["unchanged_total"] == 9
 
 
 def test_build_infrascope_status_card_specs_requires_webspace_id() -> None:
