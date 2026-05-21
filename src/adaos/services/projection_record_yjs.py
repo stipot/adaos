@@ -7,7 +7,7 @@ from typing import Any, Iterable, Mapping
 from adaos.domain import ProjectionRecord, normalize_projection_record, projection_fingerprint
 from adaos.services.projection_demand import demanded_projection_keys
 from adaos.services.projection_records import list_projection_records, projection_record_registry_snapshot
-from adaos.services.yjs.doc import async_get_ydoc, mutate_live_room
+from adaos.services.yjs.doc import async_get_ydoc, async_read_ydoc, mutate_live_room
 from adaos.services.yjs.webspace import default_webspace_id
 
 
@@ -101,6 +101,68 @@ def _write_payload_to_doc(ydoc: Any, txn: Any, payload: Mapping[str, Any]) -> bo
     return True
 
 
+def _cache_payload_summary(payload: Mapping[str, Any], *, webspace_id: str) -> dict[str, Any]:
+    records = payload.get("records") if isinstance(payload.get("records"), Mapping) else {}
+    projection_keys = payload.get("projection_keys")
+    if not isinstance(projection_keys, list):
+        projection_keys = sorted(str(key) for key in records)
+    expected_fingerprint = projection_fingerprint(
+        {
+            "schema": payload.get("schema"),
+            "webspace_id": payload.get("webspace_id"),
+            "registry_version": payload.get("registry_version"),
+            "records": dict(records),
+        }
+    )
+    fingerprint = str(payload.get("fingerprint") or "")
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": webspace_id,
+        "cache_present": True,
+        "yjs_path": PROJECTION_RECORDS_YJS_PATH,
+        "schema": payload.get("schema"),
+        "schema_ok": payload.get("schema") == PROJECTION_RECORDS_YJS_SCHEMA,
+        "record_total": int(payload.get("record_total") or len(records)),
+        "projection_keys": list(projection_keys),
+        "registry_version": payload.get("registry_version"),
+        "fingerprint": fingerprint or None,
+        "fingerprint_ok": bool(fingerprint) and fingerprint == expected_fingerprint,
+        "updated_at": payload.get("updated_at"),
+        "payload": _json_clone(dict(payload)),
+    }
+
+
+async def read_projection_records_yjs_cache(*, webspace_id: str | None = None) -> dict[str, Any]:
+    target_webspace_id = _webspace_token(webspace_id)
+    try:
+        async with async_read_ydoc(target_webspace_id) as ydoc:
+            data_map = ydoc.get_map("data")
+            payload = data_map.get(PROJECTION_RECORDS_YJS_KEY)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "accepted": False,
+            "webspace_id": target_webspace_id,
+            "cache_present": False,
+            "yjs_path": PROJECTION_RECORDS_YJS_PATH,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    if not isinstance(payload, Mapping):
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": target_webspace_id,
+            "cache_present": False,
+            "yjs_path": PROJECTION_RECORDS_YJS_PATH,
+            "schema": PROJECTION_RECORDS_YJS_SCHEMA,
+            "record_total": 0,
+            "projection_keys": [],
+            "payload": None,
+        }
+    return _cache_payload_summary(payload, webspace_id=target_webspace_id)
+
+
 async def materialize_projection_records_to_yjs(
     *,
     webspace_id: str | None = None,
@@ -178,4 +240,5 @@ __all__ = [
     "build_projection_records_yjs_payload",
     "materialize_projection_records_to_yjs",
     "normalize_projection_record_keys",
+    "read_projection_records_yjs_cache",
 ]

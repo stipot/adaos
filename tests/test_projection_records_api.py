@@ -114,3 +114,40 @@ def test_projection_records_api_materializes_yjs_cache(monkeypatch) -> None:
     assert captured["webspace_id"] == "desktop"
     assert captured["projection_keys"] == ["status-card:runtime"]
     assert captured["demanded_only"] is True
+
+
+def test_projection_records_api_reads_yjs_cache(monkeypatch) -> None:
+    client = _make_client()
+    from adaos.apps.api import node_api
+
+    captured = {}
+
+    async def fake_read_projection_records_yjs_cache(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": kwargs["webspace_id"],
+            "cache_present": True,
+            "yjs_path": "data/projectionRecords",
+            "record_total": 1,
+            "projection_keys": ["status-card:runtime"],
+        }
+
+    monkeypatch.setattr(
+        node_api,
+        "read_projection_records_yjs_cache",
+        fake_read_projection_records_yjs_cache,
+    )
+
+    resp = client.get(
+        "/api/node/projection-records/yjs/cache",
+        params={"webspace_id": "desktop"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["cache_present"] is True
+    assert payload["yjs_path"] == "data/projectionRecords"
+    assert payload["projection_keys"] == ["status-card:runtime"]
+    assert captured["webspace_id"] == "desktop"

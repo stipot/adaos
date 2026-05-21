@@ -70,6 +70,7 @@ from adaos.services.projection_records import (
 from adaos.services.projection_record_yjs import (
     materialize_projection_records_to_yjs,
     normalize_projection_record_keys,
+    read_projection_records_yjs_cache,
 )
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
@@ -2578,6 +2579,12 @@ async def node_projection_record_item(projection_key: str, webspace_id: str | No
         "webspace_id": target_webspace_id,
         "record": record.to_dict(),
     }
+
+
+@router.get("/projection-records/yjs/cache", dependencies=[Depends(require_token)])
+async def node_projection_records_yjs_cache(webspace_id: str | None = None) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return await read_projection_records_yjs_cache(webspace_id=target_webspace_id)
 
 
 @router.post("/projection-records", dependencies=[Depends(require_token)])
