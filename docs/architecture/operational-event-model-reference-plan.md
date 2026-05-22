@@ -319,6 +319,10 @@ Progress:
 - `/api/node/projection-migration/recommendations` converts inventory, risk,
   bridge coverage, and shim findings into a prioritized migration backlog for
   the next skill rollout steps
+- canonical `ProjectionRecord` construction now normalizes MVP access metadata
+  for `shared`, `owner`, `guest`, and `dev`, and tests prove owner/guest
+  display or action metadata can differ without creating separate payload
+  branches
 
 Exit criteria:
 

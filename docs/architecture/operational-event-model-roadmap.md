@@ -398,7 +398,7 @@ Primary sources:
 - [ ] `phase7.infrascope_gate`: do not start `Infrascope` migration before Phases 0-6 are materially in place, except for preparatory inventory and tests that do not create a parallel projection contract
 - [ ] `phase7.infrascope_split`: migrate `Infrascope` from monolithic snapshots to projection families
 - [ ] `phase7.infrascope_platform_errors_outside_skill`: keep platform-originated diagnostics separate from skill-owned payloads
-- [ ] `phase7.infrascope_access_metadata`: validate shared payload plus access metadata behavior for owner/guest/dev audiences
+- [x] `phase7.infrascope_access_metadata`: validate shared payload plus access metadata behavior for owner/guest/dev audiences
 
 Primary source:
 
@@ -431,6 +431,9 @@ Progress:
   migrations can be selected from measured risk instead of manual inspection
 - the test matrix now covers multi-webspace projection-demand API isolation and
   dispatcher grouping for multiple consumers of the same projection
+- projection records now normalize MVP access metadata for `shared`, `owner`,
+  `guest`, and `dev`; tests prove owner/guest metadata can differ while the
+  payload fingerprint remains shared
 
 ## Pilot Priority
 

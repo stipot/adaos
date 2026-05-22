@@ -227,7 +227,7 @@ Current status:
 - [ ] `infrascope.split_projection_families`: split `overview`, `inventory`, `inspector`, `topology`, and modal/widget payloads into separate projections
 - [ ] `infrascope.stop_full_inspector_snapshot`: stop pre-materializing all inspectors into one Yjs snapshot
 - [ ] `infrascope.demanded_only_per_webspace`: publish only the projections actively demanded by each webspace
-- [ ] `infrascope.shared_payload_access_metadata`: verify that owner and guest use the same payload but can still receive different display/action treatment through access metadata
+- [x] `infrascope.shared_payload_access_metadata`: verify that owner and guest use the same payload but can still receive different display/action treatment through access metadata
 - [ ] `infrascope.platform_errors_separate`: publish platform-originated warnings and materialization errors as separate operator-facing projections instead of hiding them inside one skill snapshot
 
 ### 9. Cross-Skill Rollout
@@ -255,6 +255,8 @@ Current status:
   projections from skills and platform code
 - `adaos.sdk.data.projections` now keeps diagnostics for dirty-event drops,
   coalesced refreshes, and overlapping refresh pressure
+- `ProjectionRecord` normalizes MVP access metadata with `shared`, `owner`,
+  `guest`, and `dev` audiences while keeping owner and guest payloads shared
 - helpers preserve current skill ownership as `skill:<name>` and support stream
   details through `details_ref`
 - migration notes are captured in `status-card-sdk-migration.md`; first real
@@ -266,7 +268,7 @@ Current status:
 - [ ] `cleanup.remove_inline_debounce`: remove event-specific inline debounce logic that the dispatcher now supersedes
 - [x] `cleanup.operator_projection_diagnostics`: add operator diagnostics for active projections per webspace
 - [x] `cleanup.test_multi_webspace_and_consumers`: add tests for multi-webspace demand routing and multiple simultaneous consumers
-- [ ] `cleanup.test_access_metadata_and_dev`: add tests for guest-visible access metadata and `dev` audience handling
+- [x] `cleanup.test_access_metadata_and_dev`: add tests for guest-visible access metadata and `dev` audience handling
 - [ ] `cleanup.test_platform_emitters`: add tests for platform-emitted diagnostics and error projections
 
 ## Priority Candidates and Critical Assessment
