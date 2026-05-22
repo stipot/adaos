@@ -104,6 +104,9 @@ Current status:
   the event envelope or dispatcher ABI
 - status-card ABI should be treated as the first platform-emitter family and
   kept aligned with this projection contract
+- the SDK now has a `restore_active_demand(...)` helper for projection and
+  stream runtimes; the remaining roadmap item is wiring that helper to the
+  durable Yjs/source-of-truth restoration path
 
 ### 3. Projection ABI
 

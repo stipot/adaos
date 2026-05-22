@@ -145,6 +145,7 @@ The first usable SDK slice should expose:
 - `set_projection_if_changed(...)`
 - `refresh_dirty(...)`
 - `publish_stream_snapshot(...)`
+- `restore_active_demand(...)`
 
 Suggested usage:
 
@@ -180,6 +181,9 @@ must not.
 - Heavy diagnostics, logs, large histories, and detail panels are stream-only
   unless a compact summary projection is explicitly declared.
 - Projection lifecycle and pressure decisions must be observable.
+- Startup/reload recovery may restore active projection and stream demand from
+  browser subscription consumers, but must filter hidden, stale, unrelated
+  webspace, and unregistered surfaces before reactivating work.
 - Skill-local thread pools and event-loop bridges are transition shims.
 
 ## Reference Skills
@@ -277,7 +281,7 @@ section builders are split out.
   throttling and diagnostics
 - [x] `sdk.event_pressure_counters`: preserve coalesced/superseded/dropped
   evidence
-- [ ] `sdk.restore_active_demand`: restore active projection/stream demand on
+- [x] `sdk.restore_active_demand`: restore active projection/stream demand on
   startup where available
 
 ### 4. `browsers_skill` Migration

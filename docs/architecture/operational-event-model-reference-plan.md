@@ -306,6 +306,9 @@ Progress:
 - the shared SDK projection runtime now preserves dirty-event drops,
   coalesced refreshes, and overlapping refresh pressure in diagnostics, which
   keeps cross-skill migrations observable under bursty event traffic
+- projection and stream runtimes can restore active demand from existing
+  browser subscription consumers, with filtering for hidden/stale consumers,
+  unrelated webspaces, and unregistered slots or receivers
 
 Exit criteria:
 
@@ -439,7 +442,7 @@ Use this checklist for every implementation slice touching the event model.
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
 | Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry plus object-inspector/topology cards; API refresh path can publish from request payload or `data/infrascope`; explicit `card_ids` and `demanded_only` refreshes are supported; dispatcher and diagnostics can refresh demanded `status-card:infrascope-*` records from `data/infrascope`; no-cross-webspace churn is covered; status-card snapshot and thin summary can refresh from `data/infrascope` on read; `infrascope-overview` supports tool-backed lazy details refresh; client/live-skill hookup remains |
-| Cross-skill rollout | Inventory and migration path for remaining skills | Monolithic Yjs publisher inventory added through `/api/node/projection-migration/monolith-inventory`; SDK pressure counters added for dirty drops/coalesced/overlapping refreshes; migration and cleanup remain |
+| Cross-skill rollout | Inventory and migration path for remaining skills | Monolithic Yjs publisher inventory added through `/api/node/projection-migration/monolith-inventory`; SDK pressure counters added for dirty drops/coalesced/overlapping refreshes; SDK active-demand restore added for projection and stream runtimes; migration and cleanup remain |
 
 ## Completion Definition
 
