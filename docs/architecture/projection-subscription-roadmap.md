@@ -242,6 +242,10 @@ Current status:
 - `/api/node/projection-migration/monolith-inventory` now reports direct
   `data/<skill>` Yjs roots, smaller single-slot paths, stream receivers, and
   shared bridge hints for workspace skills
+- `/api/node/projection-migration/metrics` now exposes control metrics for
+  monolith exposure, migration readiness, and weighted legacy pressure; the
+  repeatable check procedure is captured in
+  [Projection Migration Control Examples](projection-migration-control-examples.md)
 - `adaos.sdk.status` provides first shared helpers for publishing status-card
   projections from skills and platform code
 - `adaos.sdk.data.projections` now keeps diagnostics for dirty-event drops,

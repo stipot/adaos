@@ -419,7 +419,13 @@ Primary source:
 - [x] `phase9.monolith_inventory`: identify remaining monolithic Yjs publishers
 - [ ] `phase9.shared_helpers`: provide shared helper layers for subscriptions, dispatcher use, and projection records
 - [ ] `phase9.compat_cleanup`: remove legacy monolith paths once replacements are stable
-- [ ] `phase9.test_matrix`: add tests for multi-webspace, multi-consumer, node-aware Yjs, platform emitters, and access metadata
+- [ ] `phase9.test_matrix`: add tests for multi-webspace, multi-consumer, node-aware Yjs, platform emitters, access metadata, and migration control metrics
+
+Progress:
+
+- migration control metrics are available through
+  `/api/node/projection-migration/metrics` and documented in
+  [Projection Migration Control Examples](projection-migration-control-examples.md)
 
 ## Pilot Priority
 
