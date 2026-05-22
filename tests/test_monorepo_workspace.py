@@ -50,9 +50,11 @@ def _init_monorepo(tmp_path: Path) -> Path:
     skills = remote / "skills"
     weather = skills / "weather_skill"
     news = skills / "news_skill"
+    alias = skills / "alias_skill"
     scenarios = remote / "scenarios"
     greet = scenarios / "greet_on_boot"
-    for path in (weather, news, greet):
+    vision = scenarios / "new_face_vision"
+    for path in (weather, news, alias, greet, vision):
         path.mkdir(parents=True, exist_ok=True)
 
     (weather / "skill.yaml").write_text(
@@ -63,8 +65,16 @@ def _init_monorepo(tmp_path: Path) -> Path:
         "id: news_skill\nname: News\nversion: '2.0.0'\n",
         encoding="utf-8",
     )
+    (alias / "skill.yaml").write_text(
+        "id: alias_skill_id\nname: Alias Skill\nversion: '1.0.0'\n",
+        encoding="utf-8",
+    )
     (greet / "scenario.yaml").write_text(
         "id: greet_on_boot\nname: Greet on boot\nversion: '1.0.0'\n",
+        encoding="utf-8",
+    )
+    (vision / "scenario.yaml").write_text(
+        "id: new_face_vision_scenario\nname: New Face Vision\nversion: '0.2.0'\n",
         encoding="utf-8",
     )
     (remote / "registry.json").write_text(
@@ -72,8 +82,15 @@ def _init_monorepo(tmp_path: Path) -> Path:
             "{\n"
             '  "version": 1,\n'
             '  "updated_at": "2026-03-06T00:00:00+00:00",\n'
-            '  "skills": [{"kind": "skill", "name": "weather_skill", "version": "1.0.0"}],\n'
-            '  "scenarios": [{"kind": "scenario", "name": "greet_on_boot", "version": "1.0.0"}]\n'
+            '  "skills": [\n'
+            '    {"kind": "skill", "id": "weather_skill", "name": "weather_skill", "version": "1.0.0"},\n'
+            '    {"kind": "skill", "id": "news_skill", "name": "news_skill", "version": "2.0.0"},\n'
+            '    {"kind": "skill", "id": "alias_skill_id", "name": "alias_skill", "version": "1.0.0"}\n'
+            '  ],\n'
+            '  "scenarios": [\n'
+            '    {"kind": "scenario", "id": "greet_on_boot", "name": "greet_on_boot", "version": "1.0.0"},\n'
+            '    {"kind": "scenario", "id": "new_face_vision_scenario", "name": "new_face_vision", "version": "0.2.0"}\n'
+            '  ]\n'
             "}\n"
         ),
         encoding="utf-8",
@@ -151,6 +168,34 @@ def test_scenario_reinstall_happy_path(monkeypatch, monorepo, paths):
     assert _git_status_clean(paths.workspace_dir())
 
 
+def test_skill_install_resolves_registry_id_to_workspace_name(monkeypatch, monorepo, paths):
+    monkeypatch.setenv("ADAOS_TESTING", "0")
+    repo = _make_skill_repo(paths, monorepo)
+
+    meta = repo.install("alias_skill_id")
+
+    assert meta.id.value == "alias_skill_id"
+    assert (paths.skills_dir() / "alias_skill" / "skill.yaml").exists()
+    sparse_file = paths.workspace_dir() / ".git" / "info" / "sparse-checkout"
+    contents = sparse_file.read_text(encoding="utf-8")
+    assert "skills/alias_skill" in contents
+    assert "skills/alias_skill_id" not in contents
+
+
+def test_scenario_install_resolves_registry_id_to_workspace_name(monkeypatch, monorepo, paths):
+    monkeypatch.setenv("ADAOS_TESTING", "0")
+    repo = _make_scenario_repo(paths, monorepo)
+
+    meta = repo.install("new_face_vision_scenario")
+
+    assert meta.id.value == "new_face_vision_scenario"
+    assert (paths.scenarios_dir() / "new_face_vision" / "scenario.yaml").exists()
+    sparse_file = paths.workspace_dir() / ".git" / "info" / "sparse-checkout"
+    contents = sparse_file.read_text(encoding="utf-8")
+    assert "scenarios/new_face_vision" in contents
+    assert "scenarios/new_face_vision_scenario" not in contents
+
+
 def test_uninstall_idempotent(monkeypatch, monorepo, paths):
     monkeypatch.setenv("ADAOS_TESTING", "0")
     repo = _make_skill_repo(paths, monorepo)
@@ -166,8 +211,10 @@ def test_install_missing_remote_path(monkeypatch, monorepo, paths):
     monkeypatch.setenv("ADAOS_TESTING", "0")
     repo = _make_skill_repo(paths, monorepo)
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError) as ei:
         repo.install("missing_skill")
+    assert "workspace registry.json" in str(ei.value)
+    assert "weather_skill" in str(ei.value)
 
     sparse_file = paths.workspace_dir() / ".git" / "info" / "sparse-checkout"
     if sparse_file.exists():
@@ -244,6 +291,38 @@ def test_sparse_set_preserves_dirty_files_inside_requested_scope(monkeypatch, mo
     stashes = _run_git(["stash", "list"], cwd=paths.workspace_dir())
     assert "adaos:auto-stash sparse-checkout" not in stashes
     assert not _git_status_clean(paths.workspace_dir())
+
+
+def test_sparse_set_restores_staged_deletion_only_workspace_in_prod(monkeypatch, tmp_path):
+    monkeypatch.setenv("ENV_TYPE", "prod")
+    root = tmp_path / ".adaos" / "workspace"
+    root.mkdir(parents=True, exist_ok=True)
+    deletion_storm = "\n".join(f"D  skills/old_skill_{idx}/skill.yaml" for idx in range(25)) + "\n"
+    status_responses = iter(
+        [
+            deletion_storm,
+            deletion_storm,
+            "",
+        ]
+    )
+    calls: list[list[str]] = []
+
+    def fake_run_git(args, cwd=None):
+        calls.append(list(args))
+        if args[:2] == ["status", "--porcelain"]:
+            return next(status_responses)
+        if args == ["reset", "--hard", "HEAD"]:
+            return "HEAD is now at abc123 seed"
+        if args[:2] == ["sparse-checkout", "set"]:
+            return ""
+        raise AssertionError(f"unexpected git call: {args!r}")
+
+    monkeypatch.setattr(cli_git_module, "_run_git", fake_run_git)
+
+    CliGitClient(depth=0).sparse_set(str(root), ["registry.json", "scenarios/new_face"], no_cone=True)
+
+    assert ["reset", "--hard", "HEAD"] in calls
+    assert not any(call[:2] == ["stash", "push"] for call in calls)
 
 
 def test_sparse_set_removes_stale_blocker_in_non_dev(monkeypatch, tmp_path):

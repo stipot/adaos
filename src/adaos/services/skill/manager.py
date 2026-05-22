@@ -468,11 +468,15 @@ class SkillManager:
         name = name.strip()
         if not _name_re.match(name):
             raise ValueError("invalid skill name")
+        test_mode = os.getenv("ADAOS_TESTING") == "1"
+        if not test_mode:
+            resolver = getattr(self.ctx.skills_repo, "resolve_install_name", None)
+            if callable(resolver):
+                name = str(resolver(name)).strip() or name
 
         # 1) регистрируем (идемпотентно)
         self.reg.register(name, pin=pin)
         # 2) в тестах/без .git — только реестр
-        test_mode = os.getenv("ADAOS_TESTING") == "1"
         if test_mode:
             return f"installed: {name} (registry-only{' test-mode' if test_mode else ''})"
         # 3) при безопасной установке проверяем, что рабочее дерево чисто под skills/*

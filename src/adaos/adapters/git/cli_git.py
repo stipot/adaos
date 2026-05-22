@@ -37,7 +37,12 @@ def _run_git(args: list[str], cwd: Optional[StrOrPath] = None) -> str:
     # TODO Проверить, git нет, но папка не пустая. Вместо операции c git даем дружественную ошибку
     # destination path 'C:\git\MUIV\adaos_test\adaos\.adaos_1\workspace' already exists and is not an empty directory
     if p.returncode != 0:
-        raise GitError(f"git {' '.join(args)} failed: {p.stderr.strip()}")
+        stderr = p.stderr.strip()
+        stdout = p.stdout.strip()
+        details = stderr
+        if stdout:
+            details = f"{details}\n{stdout}".strip()
+        raise GitError(f"git {' '.join(args)} failed: {details}")
     return p.stdout.strip()
 
 
@@ -325,6 +330,41 @@ def _dirty_paths_covered_by_sparse_request(dirty: Sequence[str], paths: Sequence
     return True
 
 
+def _status_lines(dir: StrOrPath) -> list[str]:
+    out = _run_git(["status", "--porcelain"], cwd=dir)
+    return [line.rstrip("\r\n") for line in out.splitlines() if line.strip()]
+
+
+def _status_is_staged_deletions_only(lines: Sequence[str]) -> bool:
+    return bool(lines) and all(line[:2] == "D " for line in lines)
+
+
+def _staged_deletion_restore_min_files() -> int:
+    try:
+        return max(1, int(str(os.getenv("ADAOS_STAGED_DELETION_RESTORE_MIN") or "20").strip()))
+    except Exception:
+        return 20
+
+
+def _restore_staged_deletions_if_safe(dir: StrOrPath, *, context: str) -> bool:
+    lines = _status_lines(dir)
+    if not _status_is_staged_deletions_only(lines):
+        return False
+    min_files = _staged_deletion_restore_min_files()
+    if len(lines) < min_files:
+        return False
+    repo_path = str(Path(dir))
+    _log.warning(
+        "git %s found staged deletion-only workspace; restoring tracked files repo=%s files=%s threshold=%s",
+        context,
+        repo_path,
+        len(lines),
+        min_files,
+    )
+    _run_git(["reset", "--hard", "HEAD"], cwd=dir)
+    return True
+
+
 class CliGitClient(GitClient):
     def __init__(self, depth: int = 1) -> None:
         self._depth: Final[int] = depth
@@ -468,20 +508,23 @@ class CliGitClient(GitClient):
                 dirty = self.changed_files(dir)
                 if dirty:
                     repo_path = str(Path(dir))
-                    _log.warning(
-                        "git sparse-checkout init with dirty worktree; auto-stashing repo=%s env_type=%s files=%s",
-                        repo_path,
-                        env_type,
-                        len(dirty),
-                    )
-                    _log_git_snapshot(dir)
-                    stash_ref = self.stash_push(
-                        str(dir),
-                        "adaos:auto-stash sparse-checkout init",
-                        include_untracked=True,
-                    )
-                    if stash_ref:
-                        _log.warning("git auto-stashed local changes repo=%s stash=%s", repo_path, stash_ref)
+                    if _restore_staged_deletions_if_safe(dir, context="sparse-checkout init"):
+                        dirty = self.changed_files(dir)
+                    if dirty:
+                        _log.warning(
+                            "git sparse-checkout init with dirty worktree; auto-stashing repo=%s env_type=%s files=%s",
+                            repo_path,
+                            env_type,
+                            len(dirty),
+                        )
+                        _log_git_snapshot(dir)
+                        stash_ref = self.stash_push(
+                            str(dir),
+                            "adaos:auto-stash sparse-checkout init",
+                            include_untracked=True,
+                        )
+                        if stash_ref:
+                            _log.warning("git auto-stashed local changes repo=%s stash=%s", repo_path, stash_ref)
         _run_git(args, cwd=dir)
 
     def sparse_set(self, dir: StrOrPath, paths: Sequence[str], no_cone: bool = True) -> None:
@@ -501,15 +544,25 @@ class CliGitClient(GitClient):
                         len(dirty),
                     )
                 else:
-                    _log.warning(
-                        "git sparse-checkout set with dirty worktree; auto-stashing repo=%s files=%s",
-                        repo_path,
-                        len(dirty),
-                    )
-                    _log_git_snapshot(dir)
-                    stash_ref = self.stash_push(str(dir), "adaos:auto-stash sparse-checkout set", include_untracked=True)
-                    if stash_ref:
-                        _log.warning("git auto-stashed local changes repo=%s stash=%s", repo_path, stash_ref)
+                    if env_type != "dev" and _restore_staged_deletions_if_safe(dir, context="sparse-checkout set"):
+                        dirty = self.changed_files(dir)
+                    if dirty:
+                        if _dirty_paths_covered_by_sparse_request(dirty, paths):
+                            _log.info(
+                                "git sparse-checkout set preserves dirty files inside requested scope repo=%s files=%s",
+                                repo_path,
+                                len(dirty),
+                            )
+                        else:
+                            _log.warning(
+                                "git sparse-checkout set with dirty worktree; auto-stashing repo=%s files=%s",
+                                repo_path,
+                                len(dirty),
+                            )
+                            _log_git_snapshot(dir)
+                            stash_ref = self.stash_push(str(dir), "adaos:auto-stash sparse-checkout set", include_untracked=True)
+                            if stash_ref:
+                                _log.warning("git auto-stashed local changes repo=%s stash=%s", repo_path, stash_ref)
         def _apply_sparse_set() -> None:
             _run_git([*args, *paths], cwd=dir)
             if _sanitize_sparse_checkout_file(dir):

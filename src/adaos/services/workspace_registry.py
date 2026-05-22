@@ -156,6 +156,76 @@ def find_workspace_registry_entry(
     return None
 
 
+def workspace_registry_install_name(entry: dict[str, Any], *, kind: RegistryKind) -> str:
+    install = entry.get("install")
+    install_name = _clean_text(install.get("name")) if isinstance(install, dict) else ""
+    name = install_name or _clean_text(entry.get("name"))
+    if not name:
+        path = _clean_text(entry.get("path"))
+        prefix = f"{kind}/"
+        if path.startswith(prefix):
+            name = path[len(prefix) :].strip("/")
+    return name or _clean_text(entry.get("id"))
+
+
+def resolve_workspace_registry_install_name(
+    workspace_root: Path,
+    *,
+    kind: RegistryKind,
+    name_or_id: str,
+    fallback_to_scan: bool = False,
+) -> tuple[str, dict[str, Any] | None]:
+    entry = find_workspace_registry_entry(
+        workspace_root,
+        kind=kind,
+        name_or_id=name_or_id,
+        fallback_to_scan=fallback_to_scan,
+    )
+    if entry is None:
+        return str(name_or_id or "").strip(), None
+    install_name = workspace_registry_install_name(entry, kind=kind)
+    return install_name or str(name_or_id or "").strip(), entry
+
+
+def format_workspace_registry_not_found(
+    workspace_root: Path,
+    *,
+    kind: RegistryKind,
+    name_or_id: str,
+    fallback_to_scan: bool = False,
+    limit: int = 8,
+) -> str:
+    noun = "skill" if kind == "skills" else "scenario"
+    requested = str(name_or_id or "").strip()
+    entries = list_workspace_registry_entries(
+        workspace_root,
+        kind=kind,
+        fallback_to_scan=fallback_to_scan,
+    )
+    needle = requested.lower()
+    candidates: list[str] = []
+    for item in entries:
+        name = _clean_text(item.get("name"))
+        artifact_id = _clean_text(item.get("id"))
+        title = _clean_text(item.get("title"))
+        haystack = " ".join(part for part in (name, artifact_id, title) if part).lower()
+        if needle and needle in haystack:
+            candidates.append(name or artifact_id)
+    if not candidates:
+        candidates = [
+            workspace_registry_install_name(item, kind=kind)
+            for item in entries[:limit]
+        ]
+    candidates = [item for item in dict.fromkeys(candidates) if item]
+    suffix = ""
+    if candidates:
+        suffix = f" Available {kind} include: {', '.join(candidates[:limit])}."
+    return (
+        f"{noun} '{requested}' is not listed in workspace registry.json. "
+        f"Install by the registry 'name' field, not by an arbitrary label.{suffix}"
+    )
+
+
 def build_registry_entry(kind: RegistryKind, artifact_dir: Path) -> dict[str, Any] | None:
     directory = Path(artifact_dir)
     manifest_path, manifest = _load_manifest(directory, kind)

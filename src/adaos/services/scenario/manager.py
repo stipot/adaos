@@ -56,10 +56,33 @@ def dependency_failure_message(result: dict[str, Any] | None) -> str:
         error = str(result.get("error") or "").strip()
         if error:
             return error
+        item_errors: list[str] = []
+        for raw in list(result.get("items") or []):
+            if not isinstance(raw, dict):
+                continue
+            name = str(raw.get("name") or "").strip()
+            detail = str(raw.get("error") or "").strip()
+            phase = str(raw.get("phase") or "").strip()
+            if phase and detail:
+                detail = f"{phase}: {detail}"
+            if name and detail:
+                item_errors.append(f"{name}: {detail}")
+        if item_errors:
+            return "required scenario dependencies failed: " + "; ".join(item_errors)
         failed = [str(item or "").strip() for item in list(result.get("failed") or []) if str(item or "").strip()]
         if failed:
             return f"required scenario dependencies failed: {', '.join(failed)}"
     return "required scenario dependencies failed"
+
+
+def _artifact_name_from_meta(meta: object, fallback: str) -> str:
+    path = str(getattr(meta, "path", "") or "").strip()
+    if path:
+        name = Path(path).name.strip()
+        if name:
+            return name
+    name = str(getattr(meta, "name", "") or "").strip()
+    return name or fallback
 
 
 class ScenarioDependencyLifecycleError(RuntimeError):
@@ -207,6 +230,10 @@ class ScenarioManager:
         name = name.strip()
         if not _name_re.match(name):
             raise ValueError("invalid scenario name")
+        if os.getenv("ADAOS_TESTING") != "1":
+            resolver = getattr(self.ctx.scenarios_repo, "resolve_install_name", None)
+            if callable(resolver):
+                name = str(resolver(name)).strip() or name
 
         self.reg.register(name, pin=pin)
         try:
@@ -252,7 +279,7 @@ class ScenarioManager:
         """
         target_webspace = webspace_id or default_webspace_id()
         meta = self.install(name, pin=pin)
-        artifact_name = name.strip()
+        artifact_name = _artifact_name_from_meta(meta, name.strip())
         try:
             dep_result = self.bootstrap_dependencies(artifact_name, webspace_id=target_webspace)
         except Exception as exc:
@@ -504,7 +531,19 @@ class ScenarioManager:
         depends = list(bindings.required)
         result["required"] = [dep for dep in depends if isinstance(dep, str) and dep]
         if not depends:
+            _log.info(
+                "scenario dependency bootstrap skipped scenario=%s webspace_id=%s required=0",
+                scenario_id,
+                target_webspace,
+            )
             return result
+
+        _log.info(
+            "scenario dependency bootstrap started scenario=%s webspace_id=%s required=%s",
+            scenario_id,
+            target_webspace,
+            ",".join(str(dep) for dep in result["required"]),
+        )
 
         # Use the same construction pattern as CLI SkillManager.
         skill_reg = SqliteSkillRegistry(self.ctx.sql)
@@ -527,25 +566,91 @@ class ScenarioManager:
                 "activated": False,
                 "ok": False,
             }
+            phase = "install"
             try:
                 # Ensure installed in monorepo and then activate runtime.
+                item["phase"] = phase
+                _log.info(
+                    "scenario dependency install started scenario=%s skill=%s webspace_id=%s",
+                    scenario_id,
+                    dep,
+                    target_webspace,
+                )
                 skill_mgr.install(dep)
                 item["installed"] = True
+                _log.info(
+                    "scenario dependency install completed scenario=%s skill=%s webspace_id=%s",
+                    scenario_id,
+                    dep,
+                    target_webspace,
+                )
+                phase = "prepare_runtime"
+                item["phase"] = phase
+                _log.info(
+                    "scenario dependency runtime preparation started scenario=%s skill=%s webspace_id=%s",
+                    scenario_id,
+                    dep,
+                    target_webspace,
+                )
                 runtime = skill_mgr.prepare_runtime(dep, run_tests=False)
                 item["prepared"] = True
                 version = getattr(runtime, "version", None)
                 slot = getattr(runtime, "slot", None)
                 item["version"] = version
                 item["slot"] = slot
+                _log.info(
+                    "scenario dependency runtime preparation completed scenario=%s skill=%s version=%s slot=%s webspace_id=%s",
+                    scenario_id,
+                    dep,
+                    str(version or ""),
+                    str(slot or ""),
+                    target_webspace,
+                )
+                phase = "activate"
+                item["phase"] = phase
+                _log.info(
+                    "scenario dependency activation started scenario=%s skill=%s version=%s slot=%s webspace_id=%s",
+                    scenario_id,
+                    dep,
+                    str(version or ""),
+                    str(slot or ""),
+                    target_webspace,
+                )
                 skill_mgr.activate_for_space(dep, version=version, slot=slot, space="default", webspace_id=target_webspace)
                 item["activated"] = True
                 item["ok"] = True
+                item["phase"] = "done"
                 result["succeeded"].append(dep)
+                _log.info(
+                    "scenario dependency activation completed scenario=%s skill=%s version=%s slot=%s webspace_id=%s",
+                    scenario_id,
+                    dep,
+                    str(version or ""),
+                    str(slot or ""),
+                    target_webspace,
+                )
             except Exception as exc:
+                item["phase"] = phase
                 item["error"] = f"{type(exc).__name__}: {exc}"
                 result["failed"].append(dep)
                 result["ok"] = False
+                _log.warning(
+                    "scenario dependency bootstrap failed scenario=%s skill=%s phase=%s webspace_id=%s error=%s",
+                    scenario_id,
+                    dep,
+                    phase,
+                    target_webspace,
+                    item["error"],
+                )
             result["items"].append(item)
+        _log.info(
+            "scenario dependency bootstrap finished scenario=%s webspace_id=%s ok=%s succeeded=%s failed=%s",
+            scenario_id,
+            target_webspace,
+            bool(result.get("ok")),
+            ",".join(str(dep) for dep in result.get("succeeded") or []),
+            ",".join(str(dep) for dep in result.get("failed") or []),
+        )
         try:
             emit(
                 self.bus,

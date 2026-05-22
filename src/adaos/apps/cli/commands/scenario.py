@@ -483,7 +483,11 @@ def install_cmd(
 
     mgr = _mgr()
     # Stage A2: use extended install that also applies dependencies.
-    meta = mgr.install_with_deps(name, pin=pin, webspace_id=default_webspace_id())
+    try:
+        meta = mgr.install_with_deps(name, pin=pin, webspace_id=default_webspace_id())
+    except Exception as exc:
+        typer.secho(f"install failed: {exc}", fg=typer.colors.RED)
+        raise typer.Exit(1) from exc
     try:
         asyncio.run(
             rebuild_webspace_from_sources(

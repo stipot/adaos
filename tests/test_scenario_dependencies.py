@@ -286,7 +286,26 @@ def test_install_with_deps_blocks_projection_when_required_dependency_fails_in_p
 
     assert excinfo.value.result["failed"] == ["bad_skill"]
     assert mgr.last_dependency_bootstrap_result["failed"] == ["bad_skill"]
+    assert str(excinfo.value) == "RuntimeError: prepare failed"
     assert sync_calls == []
+
+
+def test_dependency_failure_message_includes_item_error_details() -> None:
+    message = scenario_manager.dependency_failure_message(
+        {
+            "ok": False,
+            "failed": ["new_face_vision_skill"],
+            "items": [
+                {
+                    "name": "new_face_vision_skill",
+                    "phase": "prepare_runtime",
+                    "error": "RuntimeError: missing torch dependency",
+                }
+            ],
+        }
+    )
+
+    assert "new_face_vision_skill: prepare_runtime: RuntimeError: missing torch dependency" in message
 
 
 def test_install_with_deps_allows_degraded_projection_in_dev(monkeypatch) -> None:

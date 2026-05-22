@@ -219,6 +219,22 @@ def test_skill_api_exposes_management_routes() -> None:
     assert any(call.startswith("push:") for call in skill_mgr.calls)
 
 
+def test_skill_api_install_reports_runtime_preparation_failure() -> None:
+    class _FailingRuntimeSkillManager(_FakeSkillManager):
+        def prepare_runtime(self, name: str, run_tests: bool = False):
+            raise RuntimeError("missing torch dependency")
+
+    skill_mgr = _FailingRuntimeSkillManager()
+    scenario_mgr = _FakeScenarioManager()
+    client = _make_client(skill_mgr, scenario_mgr)
+
+    resp = client.post("/api/skills/install", json={"name": "demo"})
+
+    assert resp.status_code == 409
+    assert "runtime preparation failed for demo" in resp.json()["detail"]
+    assert "missing torch dependency" in resp.json()["detail"]
+
+
 def test_skill_api_list_prefers_workspace_version(monkeypatch) -> None:
     skill_mgr = _FakeSkillManager()
     scenario_mgr = _FakeScenarioManager()

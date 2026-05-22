@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -10,7 +11,11 @@ from typing import List, Optional
 import yaml
 
 from adaos.adapters.git.workspace import SparseWorkspace, wait_for_materialized
-from adaos.services.workspace_registry import registry_pattern_set
+from adaos.services.workspace_registry import (
+    format_workspace_registry_not_found,
+    registry_pattern_set,
+    resolve_workspace_registry_install_name,
+)
 from adaos.services.git.availability import get_git_availability
 from adaos.services.git.archive import materialize_subpath_from_github_zip
 from adaos.domain import SkillId, SkillMeta
@@ -26,6 +31,7 @@ except Exception:  # pragma: no cover
 _MANIFEST_NAMES = ("skill.yaml", "manifest.yaml", "adaos.skill.yaml")
 _CATALOG_FILE = "skills.yaml"
 _NAME_RE = re.compile(r"^[a-zA-Z0-9_\-\/]+$")
+_log = logging.getLogger(__name__)
 
 
 def _looks_like_url(s: str) -> bool:
@@ -119,6 +125,48 @@ class GitSkillRepository(SkillRepository):
         else:
             self.paths.workspace_dir().mkdir(parents=True, exist_ok=True)
 
+    def resolve_install_name(self, ref: str) -> str:
+        self.ensure()
+        name = ref.strip()
+        if not _NAME_RE.match(name):
+            raise ValueError("invalid skill name")
+
+        workspace_root = self.paths.workspace_dir()
+        av = get_git_availability(base_dir=self.paths.base_dir())
+        if av.enabled and av.git_path and (workspace_root / ".git").exists():
+            sparse = SparseWorkspace(self.git, workspace_root)
+            sparse.update(add=registry_pattern_set([]))
+            try:
+                self.git.pull(str(workspace_root))
+            except Exception:
+                pass
+            resolved, entry = resolve_workspace_registry_install_name(
+                workspace_root,
+                kind="skills",
+                name_or_id=name,
+                fallback_to_scan=False,
+            )
+            if entry is None:
+                raise FileNotFoundError(
+                    format_workspace_registry_not_found(
+                        workspace_root,
+                        kind="skills",
+                        name_or_id=name,
+                        fallback_to_scan=False,
+                    )
+                )
+            if resolved != name:
+                _log.warning(
+                    "skill install request resolved through registry repo=%s request=%s name=%s id=%s version=%s",
+                    str(workspace_root),
+                    name,
+                    resolved,
+                    str(entry.get("id") or ""),
+                    str(entry.get("version") or ""),
+                )
+            return resolved
+        return name
+
     # --- listing / get
 
     def list(self) -> list[SkillMeta]:
@@ -164,6 +212,7 @@ class GitSkillRepository(SkillRepository):
             raise ValueError("invalid skill name")
 
         workspace_root = self.paths.workspace_dir()
+        name = self.resolve_install_name(name)
         target = f"skills/{name}"
 
         av = get_git_availability(base_dir=self.paths.base_dir())

@@ -442,14 +442,29 @@ async def install(body: InstallReq, mgr: SkillManager = Depends(_get_manager)):
             "path": str(getattr(meta, "path", "")),
         },
     }
-    prep = mgr.prepare_runtime(body.name, run_tests=False)
-    slot = mgr.activate_for_space(
-        body.name,
-        version=getattr(prep, "version", None),
-        slot=getattr(prep, "slot", None),
-        space="default",
-        webspace_id=webspace_id,
-    )
+    skill_name = str(payload["skill"].get("id") or body.name)
+    try:
+        prep = mgr.prepare_runtime(skill_name, run_tests=False)
+    except Exception as exc:
+        log.exception("runtime preparation failed after skill install: %s", skill_name)
+        raise HTTPException(
+            status_code=409,
+            detail=f"runtime preparation failed for {skill_name}: {type(exc).__name__}: {exc}",
+        ) from exc
+    try:
+        slot = mgr.activate_for_space(
+            skill_name,
+            version=getattr(prep, "version", None),
+            slot=getattr(prep, "slot", None),
+            space="default",
+            webspace_id=webspace_id,
+        )
+    except Exception as exc:
+        log.exception("runtime activation failed after skill install: %s", skill_name)
+        raise HTTPException(
+            status_code=409,
+            detail=f"runtime activation failed for {skill_name}: {type(exc).__name__}: {exc}",
+        ) from exc
     payload["runtime"] = {
         "version": getattr(prep, "version", None),
         "slot": slot,
