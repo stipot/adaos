@@ -138,8 +138,8 @@ Current status:
 - node-aware stream receiver hints and compatibility-era node ownership metadata
   already exist in the browser/runtime path
 - shared `data/projectionRecords` Yjs cache now preserves `meta.node_id` and
-  reports `node_ids` so operator diagnostics can see node-scoped projection
-  records without parsing every payload entry
+  reports `node_ids` plus `node_scoped_record_total` so operator diagnostics
+  can see node-scoped projection records without parsing every payload entry
 - a server-side browser demand registry, full-overwrite API, and browser-state
   mapper are implemented
 - direct Angular client hookup remains pending because the client submodule is
