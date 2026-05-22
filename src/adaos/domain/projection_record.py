@@ -8,6 +8,9 @@ import time
 from typing import Any, Mapping
 
 
+PROJECTION_ACCESS_AUDIENCES = {"shared", "owner", "guest", "dev"}
+
+
 class ProjectionStatus(str, Enum):
     READY = "ready"
     LOADING = "loading"
@@ -22,6 +25,63 @@ def _mapping(value: Any) -> Mapping[str, Any]:
 
 def _compact(value: Mapping[str, Any]) -> dict[str, Any]:
     return {str(key): item for key, item in value.items() if item is not None}
+
+
+def _coerce_bool(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    token = str(value).strip().lower()
+    if token in {"1", "true", "yes", "on"}:
+        return True
+    if token in {"0", "false", "no", "off"}:
+        return False
+    return bool(value)
+
+
+def _coerce_actions(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    try:
+        return [str(item).strip() for item in value if str(item).strip()]
+    except TypeError:
+        token = str(value).strip()
+        return [token] if token else []
+
+
+def normalize_projection_access_metadata(
+    access: Mapping[str, Any] | None = None,
+    *,
+    audience: str | None = None,
+    read_only: bool | None = None,
+    sensitive: bool | None = None,
+    actions_allowed: Any = None,
+    display_hints: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return the MVP projection access metadata shape.
+
+    The payload remains shared; clients use this metadata to adjust available
+    actions and presentation for owner, guest, and dev audiences.
+    """
+
+    base = dict(access) if isinstance(access, Mapping) else {}
+    audience_token = str(audience if audience is not None else base.get("audience") or "shared").strip().lower()
+    if audience_token not in PROJECTION_ACCESS_AUDIENCES:
+        audience_token = "shared"
+    hints = _mapping(display_hints if display_hints is not None else base.get("display_hints"))
+    return {
+        **base,
+        "audience": audience_token,
+        "read_only": _coerce_bool(read_only if read_only is not None else base.get("read_only"), default=False),
+        "sensitive": _coerce_bool(sensitive if sensitive is not None else base.get("sensitive"), default=False),
+        "actions_allowed": _coerce_actions(
+            actions_allowed if actions_allowed is not None else base.get("actions_allowed")
+        ),
+        "display_hints": dict(hints),
+    }
 
 
 def _json_default(value: Any) -> str:
@@ -173,7 +233,7 @@ def make_projection_record(
         ),
         source=source,
         source_authority=source_authority,
-        access=access,
+        access=normalize_projection_access_metadata(access),
         lifecycle_reason=lifecycle_reason,
     )
     return ProjectionRecord(status=_coerce_status(status), data=data, meta=meta, error=error)
@@ -201,7 +261,7 @@ def normalize_projection_record(record: Mapping[str, Any] | ProjectionRecord) ->
             changed_at=meta.get("changed_at"),
             source=meta.get("source"),
             source_authority=meta.get("source_authority"),
-            access=_mapping(meta.get("access")) or None,
+            access=normalize_projection_access_metadata(_mapping(meta.get("access"))),
             lifecycle_reason=meta.get("lifecycle_reason"),
         ),
         error=record.get("error"),
@@ -214,5 +274,6 @@ __all__ = [
     "ProjectionStatus",
     "make_projection_record",
     "normalize_projection_record",
+    "normalize_projection_access_metadata",
     "projection_fingerprint",
 ]

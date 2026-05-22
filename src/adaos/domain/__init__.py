@@ -5,6 +5,7 @@ from .projection_record import (
     ProjectionRecord,
     ProjectionStatus,
     make_projection_record,
+    normalize_projection_access_metadata,
     normalize_projection_record,
     projection_fingerprint,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "make_status_card_projection_record",
     "normalize_client_subscription_record",
     "normalize_event_envelope",
+    "normalize_projection_access_metadata",
     "normalize_projection_subscription",
     "normalize_projection_record",
     "normalize_status_card_details_ref",

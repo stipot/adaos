@@ -153,7 +153,14 @@ def test_status_card_projection_record_aligns_with_projection_abi() -> None:
     assert payload["meta"]["fingerprint"] == card.fingerprint
     assert payload["meta"]["version"] == card.version
     assert payload["meta"]["changed_at"] == card.changed_at
-    assert payload["meta"]["access"] == {"visibility": "operator"}
+    assert payload["meta"]["access"] == {
+        "visibility": "operator",
+        "audience": "shared",
+        "read_only": False,
+        "sensitive": False,
+        "actions_allowed": [],
+        "display_hints": {},
+    }
 
 
 def test_status_card_projection_record_can_mark_stale_lifecycle() -> None:
