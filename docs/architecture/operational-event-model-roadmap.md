@@ -270,6 +270,10 @@ Current checkpoint as of 2026-05-15:
 - deterministic projection-key helpers now cover status cards, browser
   surfaces (`page`, `widget`, `modal`, `panel`), and node-scoped wrappers,
   so compatibility-era surfaces can converge on one key vocabulary
+- projection migration inventory now classifies legacy `data/<skill>` Yjs
+  branches as transitional read-compatible surfaces with
+  `projection-record-only` write policy, while `data/projectionRecords` is
+  treated as the core-owned canonical cache
 
 Primary sources:
 

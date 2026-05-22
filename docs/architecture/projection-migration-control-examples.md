@@ -22,6 +22,9 @@ receivers, and shared bridges. Important fields:
 - `risk_counts`: high, medium, and low migration risk buckets
 - `items[].roots[].shape`: `monolithic-yjs-root`, `sectioned-yjs-root`, or
   `single-yjs-slot`
+- `items[].roots[].compatibility`: migration rule for the Yjs branch,
+  including `classification`, `read_policy`, `write_policy`, and
+  `migration_action`
 - `items[].shim_findings`: skill-local projection shims that should move into
   the shared SDK, including direct `ctx_subnet.set*` writes, local fingerprint
   caches, local executor bridges, and local `data_projections` loaders
@@ -44,6 +47,13 @@ The response aggregates the inventory into diploma-friendly control metrics:
 | `migration_readiness_ratio` | higher is better | `modern_surface_total / observed_surface_total` | Share already represented by sectioned/single-slot Yjs, stream receivers, or shared bridges |
 | `legacy_pressure_score` | lower is better | `sum(monolithic_roots * risk_weight)` | Weighted backlog of monolithic publishers |
 | `local_shim_pressure_score` | lower is better | `sum(local_shim * severity_weight)` | Weighted backlog of skill-local projection shims that should move into the shared SDK |
+
+Additional counters:
+
+- `legacy_compatible_root_total`: Yjs roots that are still accepted as
+  transitional legacy branches.
+- `projection_record_cache_root_total`: roots that point at the canonical
+  `data/projectionRecords` cache rather than a skill-owned JSON branch.
 
 ### Migration Recommendations
 
@@ -84,6 +94,8 @@ Record:
 - `migration_readiness_ratio`
 - `legacy_pressure_score`
 - `local_shim_pressure_score`
+- `legacy_compatible_root_total`
+- `projection_record_cache_root_total`
 - `top_monolithic_candidates`
 - `items[].recommended_next_step` from the recommendations endpoint
 

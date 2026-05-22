@@ -329,6 +329,11 @@ Progress:
 - shared `data/projectionRecords` cache summaries now expose `node_ids` and
   `node_scoped_record_total` while preserving each record's `meta.node_id`
   through Yjs materialization and readback
+- legacy `data/<skill>` Yjs branches are now reported with explicit
+  compatibility metadata: monolithic roots, single-slot branches, and
+  sectioned roots remain transitional read surfaces, but their write policy is
+  `projection-record-only`; the shared `data/projectionRecords` branch is
+  classified as the canonical core-owned cache
 
 Exit criteria:
 
@@ -453,7 +458,7 @@ Use this checklist for every implementation slice touching the event model.
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
 | Projection record ABI | Canonical record shape | Helper code, deterministic projection-key helpers, shared materialized registry, status-card bridge, diagnostics correlation, `data/projectionRecords` Yjs materialization/readback, and diagnostics cache correlation added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
-| Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata plus `data/projectionRecords.node_ids` and `node_scoped_record_total` readback coverage; top-level envelope remains |
+| Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata plus `data/projectionRecords.node_ids`, `node_scoped_record_total`, and legacy branch compatibility classification; top-level envelope remains |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, session touch, and multi-webspace API isolation tests added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, and optional Infrascope demanded-card refresh |
@@ -462,7 +467,7 @@ Use this checklist for every implementation slice touching the event model.
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
 | Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry plus object-inspector/topology cards; API refresh path can publish from request payload or `data/infrascope`; explicit `card_ids` and `demanded_only` refreshes are supported; dispatcher and diagnostics can refresh demanded `status-card:infrascope-*` records from `data/infrascope`; no-cross-webspace churn is covered; status-card snapshot and thin summary can refresh from `data/infrascope` on read; `infrascope-overview` supports tool-backed lazy details refresh; client/live-skill hookup remains |
-| Cross-skill rollout | Inventory and migration path for remaining skills | Monolithic Yjs publisher inventory added through `/api/node/projection-migration/monolith-inventory`; skill-local projection shim findings added to the inventory; migration metrics added through `/api/node/projection-migration/metrics`; prioritized migration recommendations added through `/api/node/projection-migration/recommendations`; SDK pressure counters added for dirty drops/coalesced/overlapping refreshes; SDK active-demand restore added for projection and stream runtimes; migration and cleanup remain |
+| Cross-skill rollout | Inventory and migration path for remaining skills | Monolithic Yjs publisher inventory added through `/api/node/projection-migration/monolith-inventory`; legacy branch compatibility rules classify transitional read surfaces versus the canonical `data/projectionRecords` cache; skill-local projection shim findings added to the inventory; migration metrics added through `/api/node/projection-migration/metrics`; prioritized migration recommendations added through `/api/node/projection-migration/recommendations`; SDK pressure counters added for dirty drops/coalesced/overlapping refreshes; SDK active-demand restore added for projection and stream runtimes; migration and cleanup remain |
 
 ## Completion Definition
 

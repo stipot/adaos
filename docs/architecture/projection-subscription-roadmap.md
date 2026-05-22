@@ -178,8 +178,23 @@ Current status:
 - [ ] `yjs.cache_by_projection_key`: cache projection payloads by `projection_key`
 - [ ] `yjs.reuse_cached_views`: reuse cached payloads when switching back to recently materialized views
 - [ ] `yjs.reduce_broad_observers`: avoid broad `observeDeep(data)` patterns where a stable nested projection path is available
-- [ ] `yjs.legacy_compat_rules`: document the compatibility rules for legacy plain-JSON projection branches during migration
+- [x] `yjs.legacy_compat_rules`: document the compatibility rules for legacy plain-JSON projection branches during migration
 - [ ] `yjs.named_entity_registry_reference`: use `registry.named_entities` as an implemented read-only compatibility reference for projection fingerprinting and privacy limits
+
+Current status:
+
+- migration inventory now attaches `compatibility` metadata to each discovered
+  `data/<skill>` Yjs root, separating legacy monolithic roots, single-slot
+  branches, sectioned roots, unsupported references, and the canonical
+  `data/projectionRecords` cache
+- legacy plain-JSON branches are allowed as transitional read surfaces only;
+  new writes are expected to flow through `ProjectionRecord` materialization
+  and stable `projection_key` values
+- `data/projectionRecords` is explicitly classified as the core-owned
+  canonical cache rather than another skill-owned monolithic branch
+- control metrics now expose `legacy_compatible_root_total` and
+  `projection_record_cache_root_total` so branch compatibility can be tracked
+  during rollout
 
 ### 7. Early Pilot Sequence
 
@@ -255,6 +270,9 @@ Current status:
   monolith exposure, migration readiness, and weighted legacy pressure; the
   repeatable check procedure is captured in
   [Projection Migration Control Examples](projection-migration-control-examples.md)
+- inventory roots include compatibility rules for legacy Yjs branches, so
+  rollout reports can distinguish read-compatible migration branches from the
+  canonical `data/projectionRecords` cache
 - `/api/node/projection-migration/recommendations` now turns the same evidence
   into a prioritized migration backlog with concrete next actions per skill
 - `adaos.sdk.status` provides first shared helpers for publishing status-card
