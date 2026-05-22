@@ -8,6 +8,9 @@ from typing import Any, Iterable, Mapping
 import yaml
 
 
+PROJECTION_RECORDS_COMPAT_BRANCH = "data/projectionRecords"
+
+
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
@@ -43,6 +46,73 @@ def _path_root(path: str) -> str:
     if len(parts) >= 2 and parts[0] == "data":
         return "/".join(parts[:2])
     return str(path or "").strip("/")
+
+
+def legacy_projection_branch_compatibility(
+    path: Any,
+    *,
+    shape: Any | None = None,
+    projection_key: Any | None = None,
+) -> dict[str, Any]:
+    normalized = _normalize_y_path(path)
+    projection_key_token = str(projection_key or "").strip() or None
+    if not normalized:
+        return {
+            "path": str(path or "").strip(),
+            "compatible": False,
+            "legacy_branch": False,
+            "classification": "unsupported-yjs-path",
+            "read_policy": "none",
+            "write_policy": "reject",
+            "projection_record_required": True,
+            "projection_key": projection_key_token,
+            "migration_action": "declare_projection_record_or_remove_reference",
+        }
+
+    if normalized == PROJECTION_RECORDS_COMPAT_BRANCH:
+        return {
+            "path": normalized,
+            "compatible": True,
+            "legacy_branch": False,
+            "classification": "projection-record-cache",
+            "read_policy": "canonical-cache",
+            "write_policy": "core-owned-cache",
+            "projection_record_required": False,
+            "projection_key": projection_key_token,
+            "migration_action": "keep_projection_record_cache",
+        }
+
+    branch_shape = str(shape or "").strip()
+    parts = [part for part in normalized.split("/") if part]
+    root = _path_root(normalized)
+    if branch_shape == "monolithic-yjs-root":
+        classification = "legacy-monolithic-root"
+        migration_action = "split_monolithic_root_to_projection_records"
+    elif branch_shape == "single-yjs-slot" or len(parts) == 3:
+        classification = "legacy-single-slot"
+        migration_action = "map_slot_to_projection_key"
+    elif branch_shape == "sectioned-yjs-root":
+        classification = "legacy-sectioned-root"
+        migration_action = "map_sections_to_projection_keys"
+    elif normalized == root:
+        classification = "legacy-monolithic-root"
+        migration_action = "split_monolithic_root_to_projection_records"
+    else:
+        classification = "legacy-sectioned-root"
+        migration_action = "map_sections_to_projection_keys"
+
+    return {
+        "path": normalized,
+        "root": root,
+        "compatible": True,
+        "legacy_branch": True,
+        "classification": classification,
+        "read_policy": "transitional-read",
+        "write_policy": "projection-record-only",
+        "projection_record_required": True,
+        "projection_key": projection_key_token,
+        "migration_action": migration_action,
+    }
 
 
 def _iter_mappings(value: Any) -> Iterable[Mapping[str, Any]]:
@@ -224,6 +294,7 @@ def _root_summaries(
             {
                 "root": root,
                 "shape": shape,
+                "compatibility": legacy_projection_branch_compatibility(root, shape=shape),
                 "path_total": len(paths),
                 "paths": paths,
                 "manifest_paths": [path for path in paths if path in manifest_paths],
@@ -346,6 +417,18 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
     stream_receiver_total = sum(int(item.get("stream_receiver_total") or 0) for item in items)
     shared_bridge_total = sum(1 for item in items if item.get("shared_bridge"))
     skill_local_shim_total = sum(1 for item in items if int(item.get("shim_total") or 0) > 0)
+    legacy_compatible_root_total = sum(
+        1
+        for item in items
+        for root in item.get("roots", [])
+        if bool(_mapping(_mapping(root).get("compatibility")).get("legacy_branch"))
+    )
+    projection_record_cache_root_total = sum(
+        1
+        for item in items
+        for root in item.get("roots", [])
+        if _mapping(_mapping(root).get("compatibility")).get("classification") == "projection-record-cache"
+    )
     direct_write_skill_total = sum(
         1 for item in items if "direct_ctx_subnet_write" in set(item.get("shim_ids") or [])
     )
@@ -394,6 +477,8 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
         "stream_receiver_total": stream_receiver_total,
         "shared_bridge_total": shared_bridge_total,
         "skill_local_shim_total": skill_local_shim_total,
+        "legacy_compatible_root_total": legacy_compatible_root_total,
+        "projection_record_cache_root_total": projection_record_cache_root_total,
         "direct_write_skill_total": direct_write_skill_total,
         "fingerprint_shim_skill_total": fingerprint_shim_skill_total,
         "executor_shim_skill_total": executor_shim_skill_total,
@@ -555,6 +640,12 @@ def projection_migration_monolith_inventory(
         "monolithic_candidate_total": sum(1 for item in items if item.get("monolithic_candidate")),
         "shared_bridge_total": sum(1 for item in items if item.get("shared_bridge")),
         "skill_local_shim_total": sum(1 for item in items if int(item.get("shim_total") or 0) > 0),
+        "legacy_compatible_root_total": sum(
+            1
+            for item in items
+            for root in item.get("roots", [])
+            if bool(_mapping(_mapping(root).get("compatibility")).get("legacy_branch"))
+        ),
         "risk_counts": risk_counts,
         "shape_counts": dict(sorted(shape_counts.items())),
         "items": sorted(
@@ -645,6 +736,7 @@ def projection_migration_recommendations(
 
 __all__ = [
     "inspect_skill_projection_migration",
+    "legacy_projection_branch_compatibility",
     "projection_migration_metrics",
     "projection_migration_monolith_inventory",
     "projection_migration_recommendations",

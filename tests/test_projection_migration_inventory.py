@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from adaos.apps.api.auth import require_token
 from adaos.services.agent_context import get_ctx
 from adaos.services.projection_migration_inventory import (
+    legacy_projection_branch_compatibility,
     projection_migration_metrics,
     projection_migration_monolith_inventory,
     projection_migration_recommendations,
@@ -69,6 +70,36 @@ data_projections:
 
 def _static_skill_yaml() -> str:
     return "name: prompt_engineer_skill\nversion: 0.1\n"
+
+
+def test_legacy_projection_branch_compatibility_rules() -> None:
+    monolithic = legacy_projection_branch_compatibility(
+        "data/voice_chat",
+        shape="monolithic-yjs-root",
+        projection_key="projection:panel/voice_chat",
+    )
+    assert monolithic["compatible"] is True
+    assert monolithic["legacy_branch"] is True
+    assert monolithic["classification"] == "legacy-monolithic-root"
+    assert monolithic["write_policy"] == "projection-record-only"
+    assert monolithic["projection_record_required"] is True
+    assert monolithic["migration_action"] == "split_monolithic_root_to_projection_records"
+
+    single_slot = legacy_projection_branch_compatibility("y:data/adaos_connect/current", shape="single-yjs-slot")
+    assert single_slot["path"] == "data/adaos_connect/current"
+    assert single_slot["classification"] == "legacy-single-slot"
+    assert single_slot["migration_action"] == "map_slot_to_projection_key"
+
+    cache = legacy_projection_branch_compatibility("data/projectionRecords")
+    assert cache["legacy_branch"] is False
+    assert cache["classification"] == "projection-record-cache"
+    assert cache["write_policy"] == "core-owned-cache"
+    assert cache["projection_record_required"] is False
+
+    unsupported = legacy_projection_branch_compatibility("ui/current_scenario")
+    assert unsupported["compatible"] is False
+    assert unsupported["classification"] == "unsupported-yjs-path"
+    assert unsupported["write_policy"] == "reject"
 
 
 def test_projection_migration_inventory_identifies_monolithic_skill_publishers(tmp_path: Path) -> None:
@@ -147,10 +178,13 @@ def test_projection_migration_inventory_identifies_monolithic_skill_publishers(t
     assert inventory["monolithic_candidate_total"] == 2
     assert by_skill["voice_chat_skill"]["risk"] == "high"
     assert by_skill["voice_chat_skill"]["roots"][0]["shape"] == "monolithic-yjs-root"
+    assert by_skill["voice_chat_skill"]["roots"][0]["compatibility"]["classification"] == "legacy-monolithic-root"
     assert by_skill["infrascope_skill"]["risk"] == "medium"
     assert by_skill["infrascope_skill"]["shared_bridge"] == "status-card-adapter"
     assert by_skill["adaos_connect"]["roots"][0]["shape"] == "single-yjs-slot"
+    assert by_skill["adaos_connect"]["roots"][0]["compatibility"]["classification"] == "legacy-single-slot"
     assert by_skill["prompt_engineer_skill"]["monolithic_candidate"] is False
+    assert inventory["legacy_compatible_root_total"] == 3
 
 
 def test_projection_migration_inventory_reports_local_projection_shims(tmp_path: Path) -> None:
@@ -254,6 +288,8 @@ def project(payload, webspace_id):
     assert metrics["fingerprint_shim_skill_total"] == 1
     assert metrics["executor_shim_skill_total"] == 1
     assert metrics["local_shim_pressure_score"] == 7
+    assert metrics["legacy_compatible_root_total"] == 3
+    assert metrics["projection_record_cache_root_total"] == 0
     assert metrics["modern_surface_total"] == 3
     assert metrics["observed_surface_total"] == 5
     assert metrics["migration_readiness_ratio"] == 0.6
