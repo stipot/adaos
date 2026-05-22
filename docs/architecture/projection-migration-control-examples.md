@@ -76,7 +76,9 @@ Important fields:
 ### Manifest Target Contract
 
 For unit-level checks use `inspect_projection_manifest_entries(entries)` from
-`adaos.services.scenario.projection_registry`.
+`adaos.services.scenario.projection_registry`. The same counters are also
+surfaced through `GET /api/node/projection-migration/monolith-inventory` and
+`GET /api/node/projection-migration/metrics`.
 
 Important fields:
 
@@ -90,6 +92,15 @@ Important fields:
   core-owned
 - `findings[]`: warnings and errors for unsupported backends, missing
   scope/slot, invalid Yjs paths, legacy monolithic roots, and reserved cache
+  violations
+
+Swagger fields:
+
+- `items[].manifest_contract`: per-skill manifest contract report
+- `items[].projection_keyed_yjs_target_total`: per-skill keyed target count
+- `metrics.manifest_projection_key_coverage_ratio`: aggregate keyed-target
+  coverage
+- `metrics.reserved_cache_manifest_target_total`: aggregate reserved cache
   violations
 
 Risk weights:

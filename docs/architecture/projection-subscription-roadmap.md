@@ -292,6 +292,11 @@ Current status:
   `projection_key`, and the shared projection registry exposes an
   `adaos.data-projections.v1` manifest contract inspector for reserved cache
   targets, legacy monolithic roots, and projection-keyed Yjs targets
+- `/api/node/projection-migration/monolith-inventory` and
+  `/api/node/projection-migration/metrics` now surface manifest contract
+  counters, including `projection_keyed_yjs_target_total`,
+  `reserved_cache_manifest_target_total`, and
+  `manifest_projection_key_coverage_ratio`
 - migration notes are captured in `status-card-sdk-migration.md`; first real
   skill conversion remains pending
 
