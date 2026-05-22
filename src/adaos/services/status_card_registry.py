@@ -11,6 +11,8 @@ from adaos.domain import (
     is_status_card_stale,
     make_status_card,
     make_status_card_projection_record,
+    status_card_id_from_projection_key as _domain_status_card_id_from_projection_key,
+    status_card_projection_key as _domain_status_card_projection_key,
 )
 from adaos.services.projection_dispatcher import (
     ProjectionRefreshContext,
@@ -41,20 +43,11 @@ _STATS: dict[str, float | int | None] = dict(_DEFAULT_STATS)
 
 
 def status_card_projection_key(card_id: str) -> str:
-    token = str(card_id or "").strip()
-    if not token:
-        raise ValueError("card_id is required")
-    return f"{STATUS_CARD_PROJECTION_PREFIX}{token}"
+    return _domain_status_card_projection_key(card_id)
 
 
 def status_card_id_from_projection_key(projection_key: str) -> str:
-    token = str(projection_key or "").strip()
-    if not token.startswith(STATUS_CARD_PROJECTION_PREFIX):
-        raise ValueError("status-card projection key is required")
-    card_id = token[len(STATUS_CARD_PROJECTION_PREFIX) :].strip()
-    if not card_id:
-        raise ValueError("status-card id is required")
-    return card_id
+    return _domain_status_card_id_from_projection_key(projection_key)
 
 
 def _status_card_id_token(value: Any) -> str:

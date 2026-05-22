@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import time
 from typing import Any, Mapping
 
+from .projection_keys import status_card_projection_key
 from .projection_record import ProjectionRecord, ProjectionStatus, make_projection_record, projection_fingerprint
 
 
@@ -260,7 +261,7 @@ def make_status_card_projection_record(
     previous: Mapping[str, Any] | ProjectionRecord | None = None,
 ) -> ProjectionRecord:
     return make_projection_record(
-        projection_key=f"{STATUS_CARD_PROJECTION_KIND}:{card.id}",
+        projection_key=status_card_projection_key(card.id),
         kind=STATUS_CARD_PROJECTION_KIND,
         data=card.to_dict(),
         webspace_id=str(webspace_id or card.webspace_id or ""),
