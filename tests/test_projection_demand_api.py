@@ -101,6 +101,46 @@ def test_projection_demand_api_get_and_delete_snapshot() -> None:
     assert delete_resp.json()["snapshot"]["consumer_total"] == 0
 
 
+def test_projection_demand_api_keeps_webspace_snapshots_isolated() -> None:
+    client = _make_client()
+    for webspace_id in ["desktop", "dev"]:
+        client.post(
+            "/api/node/projection-demand/client",
+            json={
+                "client_id": f"browser-{webspace_id}",
+                "device_id": "desktop",
+                "session_id": "session-1",
+                "webspace_id": webspace_id,
+                "role": "operator",
+                "subscriptions": [
+                    {
+                        "projection_key": "status-card:runtime",
+                        "consumer_id": f"widget:{webspace_id}",
+                        "consumer_kind": "widget",
+                    }
+                ],
+            },
+        )
+
+    desktop_snapshot = client.get("/api/node/projection-demand", params={"webspace_id": "desktop"}).json()
+    dev_snapshot = client.get("/api/node/projection-demand", params={"webspace_id": "dev"}).json()
+    delete_resp = client.delete(
+        "/api/node/projection-demand/client/browser-desktop/session-1",
+        params={"webspace_id": "desktop"},
+    )
+    dev_after_delete = client.get("/api/node/projection-demand", params={"webspace_id": "dev"}).json()
+
+    assert desktop_snapshot["webspace_id"] == "desktop"
+    assert desktop_snapshot["consumer_total"] == 1
+    assert desktop_snapshot["records"][0]["webspace_id"] == "desktop"
+    assert dev_snapshot["webspace_id"] == "dev"
+    assert dev_snapshot["consumer_total"] == 1
+    assert dev_snapshot["records"][0]["webspace_id"] == "dev"
+    assert delete_resp.json()["snapshot"]["consumer_total"] == 0
+    assert dev_after_delete["consumer_total"] == 1
+    assert dev_after_delete["projections"][0]["consumers"][0]["consumer_id"] == "widget:dev"
+
+
 def test_projection_demand_api_touches_session_without_replacing_subscriptions() -> None:
     client = _make_client()
     client.post(

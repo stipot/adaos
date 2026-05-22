@@ -22,12 +22,13 @@ def _write_demand(
     webspace_id: str,
     projection_key: str,
     *,
+    client_id: str | None = None,
     consumer_id: str = "widget:runtime",
     session_id: str = "session-1",
 ) -> None:
     write_client_subscription_record(
         make_client_subscription_record(
-            client_id=f"browser-{webspace_id}",
+            client_id=client_id or f"browser-{webspace_id}",
             device_id="desktop",
             session_id=session_id,
             webspace_id=webspace_id,
@@ -111,6 +112,41 @@ def test_dispatcher_can_filter_projection_keys() -> None:
     assert [(item.webspace_id, item.projection_key) for item in contexts] == [
         ("desktop", "projection:hub/overview")
     ]
+
+
+def test_dispatcher_groups_multiple_clients_into_one_projection_context() -> None:
+    _write_demand(
+        "desktop",
+        "status-card:runtime",
+        client_id="browser-a",
+        consumer_id="widget:runtime",
+        session_id="session-1",
+    )
+    _write_demand(
+        "desktop",
+        "status-card:runtime",
+        client_id="browser-b",
+        consumer_id="panel:runtime",
+        session_id="session-2",
+    )
+    handled: list[tuple[str, int]] = []
+
+    def _handler(context):
+        handled.append((context.projection_key, len(context.consumers)))
+        return {"status": "ready", "data": {"consumer_total": len(context.consumers)}}
+
+    register_projection_refresh_handler("status-card:runtime", _handler)
+
+    event = Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0)
+    report = _run(dispatch_demanded_projection_refresh(event, now=20.0))
+
+    assert len(report.selected) == 1
+    assert [item.consumer_id for item in report.selected[0].consumers] == [
+        "panel:runtime",
+        "widget:runtime",
+    ]
+    assert handled == [("status-card:runtime", 2)]
+    assert report.refreshed[0].record["data"]["consumer_total"] == 2
 
 
 def test_dispatcher_records_ready_lifecycle_and_pressure_stats() -> None:
