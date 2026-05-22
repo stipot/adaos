@@ -135,9 +135,12 @@ def test_projection_records_yjs_cache_preserves_node_scope(monkeypatch) -> None:
     readback = asyncio.run(read_projection_records_yjs_cache(webspace_id="desktop"))
 
     payload = fake_doc.get_map("data")["projectionRecords"]
+    assert result["node_scoped_record_total"] == 1
     assert result["node_ids"] == ["node-a"]
+    assert payload["node_scoped_record_total"] == 1
     assert payload["node_ids"] == ["node-a"]
     assert payload["records"]["status-card:runtime"]["meta"]["node_id"] == "node-a"
+    assert readback["node_scoped_record_total"] == 1
     assert readback["node_ids"] == ["node-a"]
     assert readback["payload"]["records"]["status-card:runtime"]["meta"]["node_id"] == "node-a"
 
@@ -198,4 +201,5 @@ def test_read_projection_records_yjs_cache_handles_missing_cache(monkeypatch) ->
     assert result["cache_present"] is False
     assert result["yjs_path"] == "data/projectionRecords"
     assert result["record_total"] == 0
+    assert result["node_scoped_record_total"] == 0
     assert result["projection_keys"] == []

@@ -61,6 +61,19 @@ def _node_ids_from_records(records: Iterable[ProjectionRecord | Mapping[str, Any
     return sorted(node_ids)
 
 
+def _node_scoped_record_total(records: Iterable[ProjectionRecord | Mapping[str, Any]]) -> int:
+    total = 0
+    for item in records:
+        if isinstance(item, ProjectionRecord):
+            token = str(item.meta.node_id or "").strip()
+        else:
+            meta = item.get("meta") if isinstance(item.get("meta"), Mapping) else {}
+            token = str(meta.get("node_id") or "").strip()
+        if token:
+            total += 1
+    return total
+
+
 def build_projection_records_yjs_payload(
     *,
     webspace_id: str | None = None,
@@ -77,6 +90,7 @@ def build_projection_records_yjs_payload(
     )
     items = [record.to_dict() for record in records]
     by_key = {str(record.meta.projection_key): record.to_dict() for record in records}
+    node_scoped_record_total = _node_scoped_record_total(records)
     registry = projection_record_registry_snapshot(webspace_id=target_webspace_id)
     payload = {
         "schema": PROJECTION_RECORDS_YJS_SCHEMA,
@@ -84,6 +98,7 @@ def build_projection_records_yjs_payload(
         "yjs_path": PROJECTION_RECORDS_YJS_PATH,
         "registry_version": registry.get("registry_version"),
         "record_total": len(items),
+        "node_scoped_record_total": node_scoped_record_total,
         "ready_total": sum(1 for record in records if record.status == "ready"),
         "stale_total": sum(1 for record in records if record.status == "stale"),
         "error_total": sum(1 for record in records if record.status == "error"),
@@ -122,7 +137,13 @@ def _cache_payload_summary(payload: Mapping[str, Any], *, webspace_id: str) -> d
         projection_keys = sorted(str(key) for key in records)
     node_ids = payload.get("node_ids")
     if not isinstance(node_ids, list):
-        node_ids = _node_ids_from_records(dict(record) for record in records.values())
+        normalized_records = [dict(record) for record in records.values()]
+        node_ids = _node_ids_from_records(normalized_records)
+    else:
+        normalized_records = [dict(record) for record in records.values()]
+    node_scoped_record_total = payload.get("node_scoped_record_total")
+    if not isinstance(node_scoped_record_total, int):
+        node_scoped_record_total = _node_scoped_record_total(normalized_records)
     expected_fingerprint = projection_fingerprint(
         {
             "schema": payload.get("schema"),
@@ -141,6 +162,7 @@ def _cache_payload_summary(payload: Mapping[str, Any], *, webspace_id: str) -> d
         "schema": payload.get("schema"),
         "schema_ok": payload.get("schema") == PROJECTION_RECORDS_YJS_SCHEMA,
         "record_total": int(payload.get("record_total") or len(records)),
+        "node_scoped_record_total": int(node_scoped_record_total or 0),
         "projection_keys": list(projection_keys),
         "node_ids": list(node_ids),
         "registry_version": payload.get("registry_version"),
@@ -175,6 +197,7 @@ async def read_projection_records_yjs_cache(*, webspace_id: str | None = None) -
             "yjs_path": PROJECTION_RECORDS_YJS_PATH,
             "schema": PROJECTION_RECORDS_YJS_SCHEMA,
             "record_total": 0,
+            "node_scoped_record_total": 0,
             "projection_keys": [],
             "node_ids": [],
             "payload": None,
@@ -231,6 +254,7 @@ async def materialize_projection_records_to_yjs(
         "projection_keys": list(payload["projection_keys"]),
         "node_ids": list(payload["node_ids"]),
         "record_total": int(payload["record_total"]),
+        "node_scoped_record_total": int(payload["node_scoped_record_total"]),
         "registry_version": payload["registry_version"],
         "fingerprint": payload["fingerprint"],
         "written": bool(changed["value"]),
