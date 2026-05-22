@@ -52,6 +52,7 @@ data_projections:
   targets:
   - backend: yjs
     path: data/adaos_connect/current
+    projection_key: projection:panel/adaos_connect-current
 """
 
 
@@ -183,8 +184,12 @@ def test_projection_migration_inventory_identifies_monolithic_skill_publishers(t
     assert by_skill["infrascope_skill"]["shared_bridge"] == "status-card-adapter"
     assert by_skill["adaos_connect"]["roots"][0]["shape"] == "single-yjs-slot"
     assert by_skill["adaos_connect"]["roots"][0]["compatibility"]["classification"] == "legacy-single-slot"
+    assert by_skill["adaos_connect"]["projection_keyed_yjs_target_total"] == 1
+    assert by_skill["adaos_connect"]["manifest_contract"]["schema"] == "adaos.data-projections.v1"
+    assert by_skill["voice_chat_skill"]["legacy_monolithic_manifest_target_total"] == 1
     assert by_skill["prompt_engineer_skill"]["monolithic_candidate"] is False
     assert inventory["legacy_compatible_root_total"] == 3
+    assert inventory["projection_keyed_yjs_target_total"] == 1
 
 
 def test_projection_migration_inventory_reports_local_projection_shims(tmp_path: Path) -> None:
@@ -290,6 +295,11 @@ def project(payload, webspace_id):
     assert metrics["local_shim_pressure_score"] == 7
     assert metrics["legacy_compatible_root_total"] == 3
     assert metrics["projection_record_cache_root_total"] == 0
+    assert metrics["manifest_yjs_target_total"] == 3
+    assert metrics["projection_keyed_yjs_target_total"] == 1
+    assert metrics["reserved_cache_manifest_target_total"] == 0
+    assert metrics["legacy_monolithic_manifest_target_total"] == 2
+    assert metrics["manifest_projection_key_coverage_ratio"] == 0.3333
     assert metrics["modern_surface_total"] == 3
     assert metrics["observed_surface_total"] == 5
     assert metrics["migration_readiness_ratio"] == 0.6
@@ -299,6 +309,7 @@ def project(payload, webspace_id):
     assert {item["metric"] for item in report["metric_definitions"]} == {
         "legacy_pressure_score",
         "local_shim_pressure_score",
+        "manifest_projection_key_coverage_ratio",
         "migration_readiness_ratio",
         "monolith_exposure_ratio",
     }

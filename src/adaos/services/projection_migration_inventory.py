@@ -7,6 +7,8 @@ from typing import Any, Iterable, Mapping
 
 import yaml
 
+from adaos.services.scenario.projection_registry import inspect_projection_manifest_entries
+
 
 PROJECTION_RECORDS_COMPAT_BRANCH = "data/projectionRecords"
 
@@ -417,6 +419,16 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
     stream_receiver_total = sum(int(item.get("stream_receiver_total") or 0) for item in items)
     shared_bridge_total = sum(1 for item in items if item.get("shared_bridge"))
     skill_local_shim_total = sum(1 for item in items if int(item.get("shim_total") or 0) > 0)
+    manifest_yjs_target_total = sum(int(item.get("manifest_yjs_target_total") or 0) for item in items)
+    projection_keyed_yjs_target_total = sum(
+        int(item.get("projection_keyed_yjs_target_total") or 0) for item in items
+    )
+    reserved_cache_manifest_target_total = sum(
+        int(item.get("reserved_cache_manifest_target_total") or 0) for item in items
+    )
+    legacy_monolithic_manifest_target_total = sum(
+        int(item.get("legacy_monolithic_manifest_target_total") or 0) for item in items
+    )
     legacy_compatible_root_total = sum(
         1
         for item in items
@@ -460,6 +472,11 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
         if observed_surface_total
         else 0.0
     )
+    manifest_projection_key_coverage_ratio = (
+        round(projection_keyed_yjs_target_total / manifest_yjs_target_total, 4)
+        if manifest_yjs_target_total
+        else 1.0
+    )
     legacy_pressure_score = sum(
         _root_shape_total(item, "monolithic-yjs-root") * _RISK_WEIGHTS.get(str(item.get("risk")), 1)
         for item in items
@@ -479,6 +496,11 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
         "skill_local_shim_total": skill_local_shim_total,
         "legacy_compatible_root_total": legacy_compatible_root_total,
         "projection_record_cache_root_total": projection_record_cache_root_total,
+        "manifest_yjs_target_total": manifest_yjs_target_total,
+        "projection_keyed_yjs_target_total": projection_keyed_yjs_target_total,
+        "reserved_cache_manifest_target_total": reserved_cache_manifest_target_total,
+        "legacy_monolithic_manifest_target_total": legacy_monolithic_manifest_target_total,
+        "manifest_projection_key_coverage_ratio": manifest_projection_key_coverage_ratio,
         "direct_write_skill_total": direct_write_skill_total,
         "fingerprint_shim_skill_total": fingerprint_shim_skill_total,
         "executor_shim_skill_total": executor_shim_skill_total,
@@ -543,6 +565,12 @@ def _metric_definitions() -> list[dict[str, Any]]:
             "formula": "sum(local_shim * severity_weight)",
             "meaning": "Weighted backlog of per-skill projection shims that should move into the shared SDK.",
         },
+        {
+            "metric": "manifest_projection_key_coverage_ratio",
+            "direction": "higher_is_better",
+            "formula": "projection_keyed_yjs_target_total / manifest_yjs_target_total",
+            "meaning": "Share of manifest-declared Yjs targets already tied to canonical projection_key values.",
+        },
     ]
 
 
@@ -563,6 +591,7 @@ def inspect_skill_projection_migration(skill_dir: Path) -> dict[str, Any]:
     webui = _read_json(skill_dir / "webui.json")
     skill_id = str(manifest.get("name") or manifest.get("id") or skill_dir.name).strip() or skill_dir.name
     manifest_paths = _extract_manifest_projection_paths(manifest)
+    manifest_contract = inspect_projection_manifest_entries(manifest.get("data_projections") or [])
     webui_paths = _extract_webui_y_paths(webui)
     default_paths = _extract_ydoc_default_paths(webui)
     stream_receivers = _extract_stream_receivers(webui)
@@ -601,6 +630,18 @@ def inspect_skill_projection_migration(skill_dir: Path) -> dict[str, Any]:
         "widget_total": len(widgets),
         "modal_total": _count_registry_modals(webui),
         "manifest_yjs_paths": manifest_paths,
+        "manifest_contract": manifest_contract,
+        "manifest_finding_total": len(manifest_contract.get("findings", [])),
+        "manifest_yjs_target_total": int(manifest_contract.get("yjs_target_total") or 0),
+        "projection_keyed_yjs_target_total": int(
+            manifest_contract.get("yjs_target_with_projection_key_total") or 0
+        ),
+        "reserved_cache_manifest_target_total": int(
+            manifest_contract.get("reserved_cache_target_total") or 0
+        ),
+        "legacy_monolithic_manifest_target_total": int(
+            manifest_contract.get("legacy_monolithic_target_total") or 0
+        ),
         "webui_y_paths": webui_paths,
         "ydoc_default_paths": default_paths,
         "stream_receivers": stream_receivers,
@@ -640,11 +681,18 @@ def projection_migration_monolith_inventory(
         "monolithic_candidate_total": sum(1 for item in items if item.get("monolithic_candidate")),
         "shared_bridge_total": sum(1 for item in items if item.get("shared_bridge")),
         "skill_local_shim_total": sum(1 for item in items if int(item.get("shim_total") or 0) > 0),
+        "manifest_finding_total": sum(int(item.get("manifest_finding_total") or 0) for item in items),
         "legacy_compatible_root_total": sum(
             1
             for item in items
             for root in item.get("roots", [])
             if bool(_mapping(_mapping(root).get("compatibility")).get("legacy_branch"))
+        ),
+        "projection_keyed_yjs_target_total": sum(
+            int(item.get("projection_keyed_yjs_target_total") or 0) for item in items
+        ),
+        "reserved_cache_manifest_target_total": sum(
+            int(item.get("reserved_cache_manifest_target_total") or 0) for item in items
         ),
         "risk_counts": risk_counts,
         "shape_counts": dict(sorted(shape_counts.items())),
