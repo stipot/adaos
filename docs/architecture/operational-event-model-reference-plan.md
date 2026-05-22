@@ -334,6 +334,9 @@ Progress:
   sectioned roots remain transitional read surfaces, but their write policy is
   `projection-record-only`; the shared `data/projectionRecords` branch is
   classified as the canonical core-owned cache
+- `registry.named_entities` is now a self-describing read-only compatibility
+  reference with schema, Yjs path, owner, write policy, privacy metadata, and
+  stable summary fingerprinting
 
 Exit criteria:
 
@@ -454,7 +457,7 @@ Use this checklist for every implementation slice touching the event model.
 | Communication prerequisites | Closed for current transport scope | Complete |
 | Event taxonomy | Stable vocabulary | Complete |
 | Shared event envelope | Helpers and compatibility rules | Helper code added; producer migration remains |
-| Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
+| Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; `registry.named_entities` now exposes read-only compatibility metadata; consumer migration remains |
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
 | Projection record ABI | Canonical record shape | Helper code, deterministic projection-key helpers, shared materialized registry, status-card bridge, diagnostics correlation, `data/projectionRecords` Yjs materialization/readback, and diagnostics cache correlation added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |

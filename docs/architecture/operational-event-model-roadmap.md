@@ -258,8 +258,9 @@ Current checkpoint as of 2026-05-15:
   stream routes, and persisted `home_scenario_ref` metadata rather than by
   making the webspace container node-owned
 - the compact named-entity registry path is implemented as
-  `registry.named_entities` and should be treated as the current read-only
-  compatibility projection
+  `registry.named_entities` and now carries schema, path, read-only access
+  metadata, write policy, and privacy limits for the current compatibility
+  projection
 - the general projection record shape, client subscription shape, and
   top-level node-owned envelope remain the blocking ABI work before broad
   dispatcher/client migration

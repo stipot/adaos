@@ -179,7 +179,7 @@ Current status:
 - [ ] `yjs.reuse_cached_views`: reuse cached payloads when switching back to recently materialized views
 - [ ] `yjs.reduce_broad_observers`: avoid broad `observeDeep(data)` patterns where a stable nested projection path is available
 - [x] `yjs.legacy_compat_rules`: document the compatibility rules for legacy plain-JSON projection branches during migration
-- [ ] `yjs.named_entity_registry_reference`: use `registry.named_entities` as an implemented read-only compatibility reference for projection fingerprinting and privacy limits
+- [x] `yjs.named_entity_registry_reference`: use `registry.named_entities` as an implemented read-only compatibility reference for projection fingerprinting and privacy limits
 
 Current status:
 
@@ -195,6 +195,9 @@ Current status:
 - control metrics now expose `legacy_compatible_root_total` and
   `projection_record_cache_root_total` so branch compatibility can be tracked
   during rollout
+- `registry.named_entities` now carries `schema`, `yjs_path`, read-only
+  access metadata, owner, write policy, and privacy limits while preserving
+  the compact fingerprinted entity descriptor payload
 
 ### 7. Early Pilot Sequence
 
