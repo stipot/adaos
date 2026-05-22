@@ -259,7 +259,7 @@ Current status:
 - [x] `rollout.monolith_inventory`: identify other browser-facing skills that currently publish monolithic Yjs JSON subtrees
 - [ ] `rollout.migrate_to_shared_contract`: migrate them onto the shared projection/subscription contract
 - [x] `rollout.shared_helpers`: provide a common helper layer so each skill does not reimplement subscription parsing and dispatch logic
-- [ ] `rollout.manifest_rules`: document how scenario manifests and skill manifests declare projection roots without inventing incompatible shapes
+- [x] `rollout.manifest_rules`: document how scenario manifests and skill manifests declare projection roots without inventing incompatible shapes
 
 Current status:
 
@@ -288,6 +288,10 @@ Current status:
   runtime lifecycle, desktop shell, notifications, and UI runtime diagnostics
 - helpers preserve current skill ownership as `skill:<name>` and support stream
   details through `details_ref`
+- `data_projections` targets in `skill.yaml` and `scenario.yaml` can now carry
+  `projection_key`, and the shared projection registry exposes an
+  `adaos.data-projections.v1` manifest contract inspector for reserved cache
+  targets, legacy monolithic roots, and projection-keyed Yjs targets
 - migration notes are captured in `status-card-sdk-migration.md`; first real
   skill conversion remains pending
 

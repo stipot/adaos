@@ -73,6 +73,25 @@ Important fields:
 - `items[].actions`: monolith and shim actions, including the affected roots
   and SDK replacement hints
 
+### Manifest Target Contract
+
+For unit-level checks use `inspect_projection_manifest_entries(entries)` from
+`adaos.services.scenario.projection_registry`.
+
+Important fields:
+
+- `schema`: expected to be `adaos.data-projections.v1`
+- `yjs_target_with_projection_key_total`: Yjs targets that already declare a
+  canonical `projection_key`
+- `legacy_monolithic_target_total`: direct `data/<skill>` targets that still
+  need a narrower projection path
+- `reserved_cache_target_total`: direct manifest targets to
+  `data/projectionRecords`; this must stay `0` because that cache is
+  core-owned
+- `findings[]`: warnings and errors for unsupported backends, missing
+  scope/slot, invalid Yjs paths, legacy monolithic roots, and reserved cache
+  violations
+
 Risk weights:
 
 | Risk | Weight |
@@ -96,6 +115,8 @@ Record:
 - `local_shim_pressure_score`
 - `legacy_compatible_root_total`
 - `projection_record_cache_root_total`
+- `yjs_target_with_projection_key_total` in manifest inspection
+- `reserved_cache_target_total` in manifest inspection
 - `top_monolithic_candidates`
 - `items[].recommended_next_step` from the recommendations endpoint
 
