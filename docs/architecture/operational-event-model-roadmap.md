@@ -434,6 +434,9 @@ Progress:
 - projection records now normalize MVP access metadata for `shared`, `owner`,
   `guest`, and `dev`; tests prove owner/guest metadata can differ while the
   payload fingerprint remains shared
+- platform-emitter status-card tests now cover runtime lifecycle, desktop
+  shell, notifications, and UI runtime diagnostics through the same
+  `status-card:*` ProjectionRecord ABI
 
 ## Pilot Priority
 

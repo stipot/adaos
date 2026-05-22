@@ -323,6 +323,9 @@ Progress:
   for `shared`, `owner`, `guest`, and `dev`, and tests prove owner/guest
   display or action metadata can differ without creating separate payload
   branches
+- the cleanup test matrix now checks platform emitters by proving runtime,
+  desktop shell, notifications, and UI runtime diagnostics all materialize
+  through the shared `status-card:*` ProjectionRecord ABI
 
 Exit criteria:
 

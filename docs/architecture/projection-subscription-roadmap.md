@@ -257,6 +257,8 @@ Current status:
   coalesced refreshes, and overlapping refresh pressure
 - `ProjectionRecord` normalizes MVP access metadata with `shared`, `owner`,
   `guest`, and `dev` audiences while keeping owner and guest payloads shared
+- platform emitters now have a shared status-card projection test covering
+  runtime lifecycle, desktop shell, notifications, and UI runtime diagnostics
 - helpers preserve current skill ownership as `skill:<name>` and support stream
   details through `details_ref`
 - migration notes are captured in `status-card-sdk-migration.md`; first real
@@ -269,7 +271,7 @@ Current status:
 - [x] `cleanup.operator_projection_diagnostics`: add operator diagnostics for active projections per webspace
 - [x] `cleanup.test_multi_webspace_and_consumers`: add tests for multi-webspace demand routing and multiple simultaneous consumers
 - [x] `cleanup.test_access_metadata_and_dev`: add tests for guest-visible access metadata and `dev` audience handling
-- [ ] `cleanup.test_platform_emitters`: add tests for platform-emitted diagnostics and error projections
+- [x] `cleanup.test_platform_emitters`: add tests for platform-emitted diagnostics and error projections
 
 ## Priority Candidates and Critical Assessment
 
