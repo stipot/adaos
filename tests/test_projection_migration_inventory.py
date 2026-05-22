@@ -376,3 +376,30 @@ def test_projection_migration_metrics_api_uses_workspace_skills() -> None:
     assert payload["ok"] is True
     assert payload["metrics"]["monolithic_candidate_total"] == 1
     assert payload["metric_definitions"][0]["metric"] == "monolith_exposure_ratio"
+
+
+def test_projection_migration_recommendations_api_uses_workspace_skills() -> None:
+    ctx = get_ctx()
+    root = Path(ctx.paths.skills_dir())
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+        handler_text="""
+from adaos.sdk.data import ctx_subnet
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("voice_chat.state", payload, webspace_id=webspace_id)
+""",
+    )
+    client = _make_api_client()
+
+    response = client.get("/api/node/projection-migration/recommendations?limit=1")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["recommendation_total"] == 1
+    assert payload["items"][0]["skill_id"] == "voice_chat_skill"
+    assert payload["items"][0]["actions"][0]["category"] == "monolith"
