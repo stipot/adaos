@@ -249,6 +249,8 @@ Current status:
   monolith exposure, migration readiness, and weighted legacy pressure; the
   repeatable check procedure is captured in
   [Projection Migration Control Examples](projection-migration-control-examples.md)
+- `/api/node/projection-migration/recommendations` now turns the same evidence
+  into a prioritized migration backlog with concrete next actions per skill
 - `adaos.sdk.status` provides first shared helpers for publishing status-card
   projections from skills and platform code
 - `adaos.sdk.data.projections` now keeps diagnostics for dirty-event drops,

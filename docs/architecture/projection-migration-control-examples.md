@@ -45,6 +45,24 @@ The response aggregates the inventory into diploma-friendly control metrics:
 | `legacy_pressure_score` | lower is better | `sum(monolithic_roots * risk_weight)` | Weighted backlog of monolithic publishers |
 | `local_shim_pressure_score` | lower is better | `sum(local_shim * severity_weight)` | Weighted backlog of skill-local projection shims that should move into the shared SDK |
 
+### Migration Recommendations
+
+Use:
+
+```text
+GET /api/node/projection-migration/recommendations
+```
+
+The response turns inventory and metrics into an ordered migration backlog.
+Important fields:
+
+- `items[].priority_score`: combined priority from risk, monolithic roots,
+  missing bridge coverage, and local shim pressure
+- `items[].recommended_next_step`: the next concrete migration step for the
+  skill
+- `items[].actions`: monolith and shim actions, including the affected roots
+  and SDK replacement hints
+
 Risk weights:
 
 | Risk | Weight |
@@ -67,6 +85,7 @@ Record:
 - `legacy_pressure_score`
 - `local_shim_pressure_score`
 - `top_monolithic_candidates`
+- `items[].recommended_next_step` from the recommendations endpoint
 
 Expected direction:
 
@@ -108,7 +127,9 @@ unchanged refreshes.
 2. Authorize requests with `x-adaos-token: dev-local-token`.
 3. Execute `GET /api/node/projection-migration/metrics`.
 4. Save the `metrics` block as the current control snapshot.
-5. Execute `GET /api/node/projection-migration/monolith-inventory` when a
+5. Execute `GET /api/node/projection-migration/recommendations` to choose the
+   next skill migration target.
+6. Execute `GET /api/node/projection-migration/monolith-inventory` when a
    detailed per-skill explanation is needed.
 
 These checks do not require the production web UI. They are API-level control

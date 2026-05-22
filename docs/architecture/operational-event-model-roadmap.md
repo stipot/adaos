@@ -426,6 +426,9 @@ Progress:
 - migration control metrics are available through
   `/api/node/projection-migration/metrics` and documented in
   [Projection Migration Control Examples](projection-migration-control-examples.md)
+- prioritized rollout recommendations are available through
+  `/api/node/projection-migration/recommendations`, so follow-up skill
+  migrations can be selected from measured risk instead of manual inspection
 
 ## Pilot Priority
 
