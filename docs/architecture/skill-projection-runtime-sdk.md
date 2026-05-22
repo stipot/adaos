@@ -241,8 +241,14 @@ section builders are split out.
 - [x] `sdk.architecture_doc`: publish this target architecture
 - [x] `sdk.boundary_docs_linked`: link this document from adjacent projection
   and event-model roadmaps
-- [ ] `sdk.current_shims_inventory`: list skill-local projection shims that the
+- [x] `sdk.current_shims_inventory`: list skill-local projection shims that the
   SDK must replace
+
+Current shim inventory is reported by
+`/api/node/projection-migration/monolith-inventory` through `shim_findings`,
+`shim_ids`, `shim_total`, and `sdk_runtime_present`. The detector highlights
+direct `ctx_subnet.set*` writes, local fingerprint caches, local executor
+bridges, and skill-local `data_projections` loaders.
 
 ### 1. Minimal Core Primitive
 

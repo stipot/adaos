@@ -22,6 +22,11 @@ receivers, and shared bridges. Important fields:
 - `risk_counts`: high, medium, and low migration risk buckets
 - `items[].roots[].shape`: `monolithic-yjs-root`, `sectioned-yjs-root`, or
   `single-yjs-slot`
+- `items[].shim_findings`: skill-local projection shims that should move into
+  the shared SDK, including direct `ctx_subnet.set*` writes, local fingerprint
+  caches, local executor bridges, and local `data_projections` loaders
+- `items[].sdk_runtime_present`: whether the skill already imports or creates
+  the shared projection/stream runtime
 
 ### Migration Metrics
 
@@ -38,6 +43,7 @@ The response aggregates the inventory into diploma-friendly control metrics:
 | `monolith_exposure_ratio` | lower is better | `monolithic_root_total / observed_surface_total` | Share of observed projection surfaces that still depend on direct monolithic Yjs roots |
 | `migration_readiness_ratio` | higher is better | `modern_surface_total / observed_surface_total` | Share already represented by sectioned/single-slot Yjs, stream receivers, or shared bridges |
 | `legacy_pressure_score` | lower is better | `sum(monolithic_roots * risk_weight)` | Weighted backlog of monolithic publishers |
+| `local_shim_pressure_score` | lower is better | `sum(local_shim * severity_weight)` | Weighted backlog of skill-local projection shims that should move into the shared SDK |
 
 Risk weights:
 
@@ -59,6 +65,7 @@ Record:
 - `monolith_exposure_ratio`
 - `migration_readiness_ratio`
 - `legacy_pressure_score`
+- `local_shim_pressure_score`
 - `top_monolithic_candidates`
 
 Expected direction:
@@ -69,6 +76,9 @@ Expected direction:
   streams, status cards, and shared dispatcher paths.
 - `legacy_pressure_score` decreases when high-risk monolithic publishers are
   migrated first.
+- `local_shim_pressure_score` decreases when direct skill-owned writes,
+  fingerprint maps, and executor bridges are replaced by shared SDK runtime
+  helpers.
 
 ## Runtime Write Suppression
 

@@ -242,6 +242,9 @@ Current status:
 - `/api/node/projection-migration/monolith-inventory` now reports direct
   `data/<skill>` Yjs roots, smaller single-slot paths, stream receivers, and
   shared bridge hints for workspace skills
+- the same inventory now reports `shim_findings` for direct skill-local Yjs
+  writes, local fingerprint caches, executor bridges, and per-skill projection
+  manifest loaders that should be replaced by shared SDK helpers
 - `/api/node/projection-migration/metrics` now exposes control metrics for
   monolith exposure, migration readiness, and weighted legacy pressure; the
   repeatable check procedure is captured in
