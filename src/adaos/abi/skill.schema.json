@@ -284,6 +284,7 @@
                 },
                 "webspace_id": { "type": "string" },
                 "path": { "type": "string" },
+                "projection_key": { "type": "string" },
                 "table": { "type": "string" },
                 "column": { "type": "string" }
               },
