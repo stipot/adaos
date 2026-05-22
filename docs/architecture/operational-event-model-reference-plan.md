@@ -326,6 +326,9 @@ Progress:
 - the cleanup test matrix now checks platform emitters by proving runtime,
   desktop shell, notifications, and UI runtime diagnostics all materialize
   through the shared `status-card:*` ProjectionRecord ABI
+- shared `data/projectionRecords` cache summaries now expose `node_ids` while
+  preserving each record's `meta.node_id` through Yjs materialization and
+  readback
 
 Exit criteria:
 
@@ -450,7 +453,7 @@ Use this checklist for every implementation slice touching the event model.
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
 | Projection record ABI | Canonical record shape | Helper code, shared materialized registry, status-card bridge, diagnostics correlation, `data/projectionRecords` Yjs materialization/readback, and diagnostics cache correlation added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
-| Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
+| Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata plus `data/projectionRecords.node_ids` readback coverage; top-level envelope remains |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, session touch, and multi-webspace API isolation tests added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, and optional Infrascope demanded-card refresh |

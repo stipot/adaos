@@ -263,6 +263,9 @@ Current checkpoint as of 2026-05-15:
 - the general projection record shape, client subscription shape, and
   top-level node-owned envelope remain the blocking ABI work before broad
   dispatcher/client migration
+- `data/projectionRecords` now exposes a derived `node_ids` summary and
+  preserves each record's `meta.node_id` through materialize/readback checks;
+  the top-level node-owned envelope is still a follow-up compatibility break
 
 Primary sources:
 
