@@ -149,6 +149,24 @@ def test_projection_runtime_refresh_dirty_uses_slot_events() -> None:
     assert result.sections == ("browsers.summary",)
     assert result.results[0].written is True
     assert subnet.calls == [("browsers.summary", {"topic": "browser.session.changed"}, "desktop")]
+    diagnostics = runtime.diagnostics_snapshot()
+    assert diagnostics["dirty_event_total"] == 1
+    assert diagnostics["dirty_dropped_total"] == 0
+    assert diagnostics["by_topic"]["browser.session.changed"]["last_sections"] == ["browsers.summary"]
+
+
+def test_projection_runtime_records_dropped_dirty_events() -> None:
+    runtime = ProjectionRuntime("browsers_skill")
+
+    result = asyncio.run(runtime.refresh_dirty("skills.registry.changed", webspace_id="desktop"))
+
+    assert result.reason == "no_dirty_sections"
+    diagnostics = runtime.diagnostics_snapshot()
+    assert diagnostics["dirty_event_total"] == 1
+    assert diagnostics["dirty_dropped_total"] == 1
+    assert diagnostics["refresh_dropped_total"] == 1
+    assert diagnostics["by_topic"]["skills.registry.changed"]["dropped_total"] == 1
+    assert diagnostics["last_pressure"]["kind"] == "refresh_dropped"
 
 
 def test_projection_runtime_coalesces_concurrent_refreshes() -> None:
@@ -179,6 +197,42 @@ def test_projection_runtime_coalesces_concurrent_refreshes() -> None:
     assert build_calls == 1
     assert subnet.calls == [("browsers.summary", {"build_calls": 1}, "desktop")]
     assert {first.coalesced, second.coalesced} == {False, True}
+
+
+def test_projection_runtime_records_superseded_refresh_pressure() -> None:
+    subnet = _FakeSubnet()
+
+    async def _run() -> dict[str, object]:
+        async def _slow_build(_context):
+            await asyncio.sleep(0.02)
+            return {"section": "summary"}
+
+        runtime = ProjectionRuntime(
+            "browsers_skill",
+            ctx_subnet=subnet,
+            projections=[
+                ProjectionSlot("browsers.summary", build=_slow_build),
+                ProjectionSlot("browsers.devices", build=lambda _context: {"section": "devices"}),
+            ],
+        )
+        first_task = asyncio.create_task(runtime.refresh_sections(["browsers.summary"], webspace_id="desktop"))
+        await asyncio.sleep(0)
+        second = await runtime.refresh_sections(["browsers.summary", "browsers.devices"], webspace_id="desktop")
+        first = await first_task
+        return {
+            "first": first,
+            "second": second,
+            "diagnostics": runtime.diagnostics_snapshot(),
+        }
+
+    result = asyncio.run(_run())
+    diagnostics = result["diagnostics"]
+
+    assert result["first"].coalesced is False
+    assert result["second"].coalesced is False
+    assert diagnostics["refresh_superseded_total"] == 1
+    assert diagnostics["last_pressure"]["kind"] == "refresh_superseded"
+    assert diagnostics["last_pressure"]["pending_sections"] == [["browsers.summary"]]
 
 
 def test_section_cache_expires_and_invalidates_by_webspace() -> None:

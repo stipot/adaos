@@ -146,8 +146,14 @@ class ProjectionDiagnostics:
     errored_total: int = 0
     last_result: ProjectionWriteResult | None = None
     by_slot: dict[str, dict[str, Any]] = field(default_factory=dict)
+    by_topic: dict[str, dict[str, Any]] = field(default_factory=dict)
+    last_pressure: dict[str, Any] | None = None
+    dirty_event_total: int = 0
+    dirty_dropped_total: int = 0
     refresh_started_total: int = 0
     refresh_coalesced_total: int = 0
+    refresh_superseded_total: int = 0
+    refresh_dropped_total: int = 0
 
     def record(self, result: ProjectionWriteResult) -> None:
         self.last_result = result
@@ -183,6 +189,72 @@ class ProjectionDiagnostics:
             self.skipped_unchanged_total += 1
             slot_state["skipped_unchanged_total"] = int(slot_state["skipped_unchanged_total"]) + 1
 
+    def record_dirty_event(self, *, topic: str, webspace_id: str, sections: Iterable[str]) -> None:
+        topic_key = str(topic or "").strip() or "<unknown>"
+        section_list = sorted({_section_name(section) for section in sections if str(section or "").strip()})
+        self.dirty_event_total += 1
+        topic_state = self.by_topic.setdefault(
+            topic_key,
+            {
+                "event_total": 0,
+                "dropped_total": 0,
+                "last_webspace_id": None,
+                "last_sections": [],
+            },
+        )
+        topic_state["event_total"] = int(topic_state["event_total"]) + 1
+        topic_state["last_webspace_id"] = webspace_id
+        topic_state["last_sections"] = section_list
+        if not section_list:
+            self.dirty_dropped_total += 1
+            topic_state["dropped_total"] = int(topic_state["dropped_total"]) + 1
+        self.last_pressure = {
+            "kind": "dirty_event",
+            "topic": topic_key,
+            "webspace_id": webspace_id,
+            "sections": section_list,
+            "dropped": not section_list,
+        }
+
+    def record_refresh_coalesced(self, *, webspace_id: str, sections: Iterable[str]) -> None:
+        section_list = sorted({_section_name(section) for section in sections if str(section or "").strip()})
+        self.refresh_coalesced_total += 1
+        self.last_pressure = {
+            "kind": "refresh_coalesced",
+            "webspace_id": webspace_id,
+            "sections": section_list,
+        }
+
+    def record_refresh_superseded(
+        self,
+        *,
+        webspace_id: str,
+        sections: Iterable[str],
+        pending_sections: Iterable[Iterable[str]],
+    ) -> None:
+        section_list = sorted({_section_name(section) for section in sections if str(section or "").strip()})
+        pending = [
+            sorted({_section_name(section) for section in item if str(section or "").strip()})
+            for item in pending_sections
+        ]
+        self.refresh_superseded_total += 1
+        self.last_pressure = {
+            "kind": "refresh_superseded",
+            "webspace_id": webspace_id,
+            "sections": section_list,
+            "pending_sections": pending,
+        }
+
+    def record_refresh_dropped(self, *, webspace_id: str, sections: Iterable[str], reason: str) -> None:
+        section_list = sorted({_section_name(section) for section in sections if str(section or "").strip()})
+        self.refresh_dropped_total += 1
+        self.last_pressure = {
+            "kind": "refresh_dropped",
+            "webspace_id": webspace_id,
+            "sections": section_list,
+            "reason": str(reason or "dropped"),
+        }
+
     def snapshot(self) -> dict[str, Any]:
         return {
             "applied_total": self.applied_total,
@@ -192,8 +264,14 @@ class ProjectionDiagnostics:
             "errored_total": self.errored_total,
             "last_result": self.last_result.as_dict() if self.last_result else None,
             "by_slot": json.loads(json.dumps(self.by_slot, sort_keys=True)),
+            "by_topic": json.loads(json.dumps(self.by_topic, sort_keys=True)),
+            "last_pressure": json.loads(json.dumps(self.last_pressure, sort_keys=True)) if self.last_pressure else None,
+            "dirty_event_total": self.dirty_event_total,
+            "dirty_dropped_total": self.dirty_dropped_total,
             "refresh_started_total": self.refresh_started_total,
             "refresh_coalesced_total": self.refresh_coalesced_total,
+            "refresh_superseded_total": self.refresh_superseded_total,
+            "refresh_dropped_total": self.refresh_dropped_total,
         }
 
 
@@ -521,8 +599,15 @@ class ProjectionRuntime:
         context: ProjectionContext | None = None,
         reason: str | None = None,
     ) -> ProjectionRefreshResult:
+        dirty_sections = self.dirty_for(topic)
+        with self._lock:
+            self._diagnostics.record_dirty_event(
+                topic=topic,
+                webspace_id=_webspace_token(webspace_id),
+                sections=dirty_sections,
+            )
         return await self.refresh_sections(
-            self.dirty_for(topic),
+            dirty_sections,
             webspace_id=webspace_id,
             force=force,
             context=context
@@ -547,6 +632,12 @@ class ProjectionRuntime:
         ws_id = _webspace_token(webspace_id)
         section_names = tuple(sorted({_section_name(section) for section in sections if str(section or "").strip()}))
         if not section_names:
+            with self._lock:
+                self._diagnostics.record_refresh_dropped(
+                    webspace_id=ws_id,
+                    sections=(),
+                    reason="no_dirty_sections",
+                )
             return ProjectionRefreshResult(
                 skill_id=self.skill_id,
                 webspace_id=ws_id,
@@ -561,9 +652,22 @@ class ProjectionRuntime:
         with self._lock:
             current = self._pending_refresh.get(key)
             if current is not None and not current.done():
-                self._diagnostics.refresh_coalesced_total += 1
+                self._diagnostics.record_refresh_coalesced(webspace_id=ws_id, sections=section_names)
                 reused_task = current
             else:
+                overlapping_pending = [
+                    pending_sections
+                    for (pending_ws, pending_sections), pending_task in self._pending_refresh.items()
+                    if pending_ws == ws_id
+                    and not pending_task.done()
+                    and bool(set(pending_sections).intersection(section_names))
+                ]
+                if overlapping_pending:
+                    self._diagnostics.record_refresh_superseded(
+                        webspace_id=ws_id,
+                        sections=section_names,
+                        pending_sections=overlapping_pending,
+                    )
                 self._diagnostics.refresh_started_total += 1
                 task = asyncio.create_task(
                     self._refresh_sections_now(
