@@ -429,6 +429,8 @@ Progress:
 - prioritized rollout recommendations are available through
   `/api/node/projection-migration/recommendations`, so follow-up skill
   migrations can be selected from measured risk instead of manual inspection
+- the test matrix now covers multi-webspace projection-demand API isolation and
+  dispatcher grouping for multiple consumers of the same projection
 
 ## Pilot Priority
 

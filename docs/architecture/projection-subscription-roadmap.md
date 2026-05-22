@@ -265,7 +265,7 @@ Current status:
 - [ ] `cleanup.remove_monolith_paths`: remove monolithic snapshot paths where the new projection contract fully replaces them
 - [ ] `cleanup.remove_inline_debounce`: remove event-specific inline debounce logic that the dispatcher now supersedes
 - [x] `cleanup.operator_projection_diagnostics`: add operator diagnostics for active projections per webspace
-- [ ] `cleanup.test_multi_webspace_and_consumers`: add tests for multi-webspace demand routing and multiple simultaneous consumers
+- [x] `cleanup.test_multi_webspace_and_consumers`: add tests for multi-webspace demand routing and multiple simultaneous consumers
 - [ ] `cleanup.test_access_metadata_and_dev`: add tests for guest-visible access metadata and `dev` audience handling
 - [ ] `cleanup.test_platform_emitters`: add tests for platform-emitted diagnostics and error projections
 
