@@ -275,7 +275,7 @@ section builders are split out.
 - [x] `sdk.section_cache`: add bounded section cache with TTL and invalidation
 - [x] `sdk.projection_slot_rate_limit`: support per-slot projection write
   throttling and diagnostics
-- [ ] `sdk.event_pressure_counters`: preserve coalesced/superseded/dropped
+- [x] `sdk.event_pressure_counters`: preserve coalesced/superseded/dropped
   evidence
 - [ ] `sdk.restore_active_demand`: restore active projection/stream demand on
   startup where available
@@ -320,7 +320,8 @@ section builders are split out.
 - [ ] `cleanup.remove_monolith_paths`: remove legacy monolithic projection paths
   after client compatibility is migrated
 - [ ] `cleanup.operator_dashboard`: expose top noisy slots, skipped writes,
-  pressure blocks, and active stream receivers
+  pressure blocks, dirty-event drops, overlapping refresh pressure, and active
+  stream receivers
 
 ## Acceptance Criteria
 
@@ -330,6 +331,6 @@ The SDK is ready for broad rollout when:
 - `infrastate_skill` no longer publishes one large default Yjs snapshot
 - unchanged refreshes do not write Yjs payloads
 - stream requests build only the requested receiver payload by default
-- diagnostics attribute projection pressure to skill, webspace, slot, and
-  reason
+- diagnostics attribute projection pressure to skill, webspace, slot, topic,
+  section set, and reason
 - stand soak shows no steady RSS growth from idle projection refreshes

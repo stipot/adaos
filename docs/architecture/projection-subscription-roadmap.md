@@ -241,6 +241,8 @@ Current status:
   shared bridge hints for workspace skills
 - `adaos.sdk.status` provides first shared helpers for publishing status-card
   projections from skills and platform code
+- `adaos.sdk.data.projections` now keeps diagnostics for dirty-event drops,
+  coalesced refreshes, and overlapping refresh pressure
 - helpers preserve current skill ownership as `skill:<name>` and support stream
   details through `details_ref`
 - migration notes are captured in `status-card-sdk-migration.md`; first real
