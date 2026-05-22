@@ -249,6 +249,92 @@ def _root_shape_total(item: Mapping[str, Any], shape: str) -> int:
     return sum(1 for root in item.get("roots", []) if _mapping(root).get("shape") == shape)
 
 
+_RISK_WEIGHTS = {"high": 3, "medium": 2, "low": 1}
+_SHIM_WEIGHTS = {"high": 3, "medium": 2, "low": 1}
+
+
+def _item_shim_pressure(item: Mapping[str, Any]) -> int:
+    return sum(
+        _SHIM_WEIGHTS.get(str(_mapping(finding).get("severity")), 1)
+        for finding in item.get("shim_findings", [])
+    )
+
+
+def _recommendation_actions(item: Mapping[str, Any]) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    skill_id = str(item.get("skill_id") or "")
+    if item.get("monolithic_candidate"):
+        if item.get("shared_bridge"):
+            action_id = "split_monolithic_root_behind_shared_bridge"
+            summary = "Split the existing monolithic Yjs root while keeping the shared bridge as compatibility cover."
+        elif int(item.get("stream_receiver_total") or 0) > 0:
+            action_id = "split_monolithic_root_to_slots_and_streams"
+            summary = "Move compact durable data to ProjectionSlot entries and heavy panes to existing stream receivers."
+        else:
+            action_id = "introduce_projection_slots_or_status_bridge"
+            summary = "Introduce a shared projection/status bridge before removing the direct monolithic Yjs root."
+        actions.append(
+            {
+                "id": action_id,
+                "category": "monolith",
+                "summary": summary,
+                "affected_roots": [
+                    _mapping(root).get("root")
+                    for root in item.get("roots", [])
+                    if _mapping(root).get("shape") == "monolithic-yjs-root"
+                ],
+            }
+        )
+    for finding in item.get("shim_findings", []):
+        data = _mapping(finding)
+        actions.append(
+            {
+                "id": f"replace_{data.get('id')}",
+                "category": "shim",
+                "summary": data.get("replacement"),
+                "finding": data.get("id"),
+                "severity": data.get("severity"),
+            }
+        )
+    if not actions and item.get("sdk_runtime_present"):
+        actions.append(
+            {
+                "id": "keep_sdk_runtime_reference",
+                "category": "reference",
+                "summary": f"Keep {skill_id} as an SDK-runtime reference and monitor diagnostics during rollout.",
+            }
+        )
+    return actions
+
+
+def _recommendation_for_item(item: Mapping[str, Any]) -> dict[str, Any] | None:
+    actions = _recommendation_actions(item)
+    needs_work = bool(item.get("monolithic_candidate")) or int(item.get("shim_total") or 0) > 0
+    if not needs_work and not item.get("sdk_runtime_present"):
+        return None
+    risk = str(item.get("risk") or "low")
+    monolithic_root_total = int(item.get("monolithic_root_total") or 0)
+    shim_pressure = _item_shim_pressure(item)
+    priority_score = (
+        _RISK_WEIGHTS.get(risk, 1) * 100
+        + monolithic_root_total * 20
+        + shim_pressure * 10
+        + (0 if item.get("shared_bridge") else 10 if monolithic_root_total else 0)
+    )
+    return {
+        "skill_id": str(item.get("skill_id") or ""),
+        "risk": risk,
+        "priority_score": priority_score,
+        "monolithic_root_total": monolithic_root_total,
+        "shim_total": int(item.get("shim_total") or 0),
+        "shim_pressure_score": shim_pressure,
+        "shared_bridge": item.get("shared_bridge"),
+        "sdk_runtime_present": bool(item.get("sdk_runtime_present")),
+        "recommended_next_step": actions[0]["id"] if actions else "observe",
+        "actions": actions,
+    }
+
+
 def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
     risk_counts = {
         level: sum(1 for item in items if item.get("risk") == level)
@@ -291,17 +377,11 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
         if observed_surface_total
         else 0.0
     )
-    risk_weights = {"high": 3, "medium": 2, "low": 1}
     legacy_pressure_score = sum(
-        _root_shape_total(item, "monolithic-yjs-root") * risk_weights.get(str(item.get("risk")), 1)
+        _root_shape_total(item, "monolithic-yjs-root") * _RISK_WEIGHTS.get(str(item.get("risk")), 1)
         for item in items
     )
-    shim_weights = {"high": 3, "medium": 2, "low": 1}
-    local_shim_pressure_score = sum(
-        shim_weights.get(str(_mapping(finding).get("severity")), 1)
-        for item in items
-        for finding in item.get("shim_findings", [])
-    )
+    local_shim_pressure_score = sum(_item_shim_pressure(item) for item in items)
     modern_coverage_score = modern_surface_total + shared_bridge_total
     return {
         "skill_total": len(items),
@@ -527,8 +607,45 @@ def projection_migration_metrics(
     }
 
 
+def projection_migration_recommendations(
+    *,
+    skills_root: str | Path,
+    include_non_browser: bool = False,
+    limit: int = 10,
+    now: float | None = None,
+) -> dict[str, Any]:
+    inventory = projection_migration_monolith_inventory(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        now=now,
+    )
+    recommendations = [
+        recommendation
+        for item in inventory.get("items", [])
+        for recommendation in [_recommendation_for_item(_mapping(item))]
+        if recommendation is not None
+    ]
+    recommendations.sort(
+        key=lambda item: (
+            -int(item.get("priority_score") or 0),
+            str(item.get("skill_id") or ""),
+        )
+    )
+    if limit >= 0:
+        recommendations = recommendations[: int(limit)]
+    return {
+        "ok": True,
+        "skills_root": inventory["skills_root"],
+        "include_non_browser": bool(include_non_browser),
+        "recommendation_total": len(recommendations),
+        "items": recommendations,
+        "updated_at": inventory["updated_at"],
+    }
+
+
 __all__ = [
     "inspect_skill_projection_migration",
     "projection_migration_metrics",
     "projection_migration_monolith_inventory",
+    "projection_migration_recommendations",
 ]

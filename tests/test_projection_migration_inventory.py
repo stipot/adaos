@@ -13,6 +13,7 @@ from adaos.services.agent_context import get_ctx
 from adaos.services.projection_migration_inventory import (
     projection_migration_metrics,
     projection_migration_monolith_inventory,
+    projection_migration_recommendations,
 )
 
 
@@ -265,6 +266,44 @@ def project(payload, webspace_id):
         "migration_readiness_ratio",
         "monolith_exposure_ratio",
     }
+
+
+def test_projection_migration_recommendations_prioritize_risky_work(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+        handler_text="""
+from adaos.sdk.data import ctx_subnet
+
+_projection_fingerprints: dict[str, str] = {}
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("voice_chat.state", payload, webspace_id=webspace_id)
+""",
+    )
+    _write_skill(
+        root,
+        "infrascope_skill",
+        skill_yaml=_infrascope_skill_yaml(),
+        webui={"webio": {"receivers": {"infrascope.inventory.*": {"mode": "replace"}}}},
+    )
+
+    report = projection_migration_recommendations(
+        skills_root=root,
+        include_non_browser=True,
+        now=100.0,
+    )
+
+    assert report["ok"] is True
+    assert report["recommendation_total"] == 2
+    assert report["items"][0]["skill_id"] == "voice_chat_skill"
+    assert report["items"][0]["recommended_next_step"] == "introduce_projection_slots_or_status_bridge"
+    assert "replace_direct_ctx_subnet_write" in {action["id"] for action in report["items"][0]["actions"]}
+    assert report["items"][1]["skill_id"] == "infrascope_skill"
+    assert report["items"][1]["recommended_next_step"] == "split_monolithic_root_behind_shared_bridge"
 
 
 def _make_api_client() -> TestClient:
