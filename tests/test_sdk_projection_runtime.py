@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from adaos.sdk.data.projections import (
     DirtyRouter,
@@ -235,6 +236,95 @@ def test_projection_runtime_records_superseded_refresh_pressure() -> None:
     assert diagnostics["last_pressure"]["pending_sections"] == [["browsers.summary"]]
 
 
+def test_projection_runtime_restores_active_demand_from_consumers() -> None:
+    runtime = ProjectionRuntime(
+        "infrastate_skill",
+        projections=[
+            ProjectionSlot("summary"),
+            ProjectionSlot("details"),
+        ],
+    )
+    consumers = [
+        SimpleNamespace(
+            webspace_id="desktop",
+            projection_key="infrastate.summary",
+            consumer_id="widget-summary",
+            consumer_kind="widget",
+            visibility="visible",
+            stale=False,
+        ),
+        {
+            "webspace_id": "desktop",
+            "projection_key": "infrastate.details",
+            "consumer_id": "hidden-panel",
+            "consumer_kind": "panel",
+            "visibility": "hidden",
+        },
+        {
+            "webspace_id": "desktop",
+            "projection_key": "infrastate.details",
+            "consumer_id": "stale-panel",
+            "consumer_kind": "panel",
+            "stale": True,
+        },
+        {
+            "webspace_id": "ops",
+            "projection_key": "infrastate.summary",
+            "consumer_id": "other-webspace",
+            "consumer_kind": "widget",
+        },
+        {
+            "webspace_id": "desktop",
+            "projection_key": "infrastate.missing",
+            "consumer_id": "missing-slot",
+            "consumer_kind": "modal",
+        },
+    ]
+
+    report = runtime.restore_active_demand(
+        consumers,
+        webspace_id="desktop",
+        projection_to_slot={
+            "infrastate.summary": "summary",
+            "infrastate.details": "details",
+            "infrastate.missing": "missing",
+        },
+    )
+
+    assert report["restored_total"] == 1
+    assert report["active_projection_demand_total"] == 1
+    assert report["active_slots"] == ["summary"]
+    assert {item["reason"] for item in report["skipped"]} == {
+        "hidden",
+        "stale",
+        "webspace_mismatch",
+        "slot_unregistered",
+    }
+    assert runtime.active_projection_demand_snapshot() == [
+        {
+            "consumer_ids": ["widget-summary"],
+            "consumer_kinds": ["widget"],
+            "consumer_total": 1,
+            "projection_key": "infrastate.summary",
+            "slot": "summary",
+            "webspace_id": "desktop",
+        }
+    ]
+    diagnostics = runtime.diagnostics_snapshot()
+    assert diagnostics["active_projection_demand_total"] == 1
+
+    runtime.restore_active_demand(
+        consumers[:1],
+        webspace_id="desktop",
+        projection_to_slot={"infrastate.summary": "summary"},
+    )
+    assert runtime.active_projection_demand_snapshot()[0]["consumer_total"] == 1
+
+    runtime.reset(webspace_id="desktop", slot="summary")
+
+    assert runtime.active_projection_demand_snapshot() == []
+
+
 def test_section_cache_expires_and_invalidates_by_webspace() -> None:
     clock = [10.0]
     cache = SectionCache(default_ttl_s=5.0, max_entries=4, clock=lambda: clock[0])
@@ -347,3 +437,60 @@ def test_stream_runtime_handles_subscription_changed_unsubscribed() -> None:
 
     assert len(calls) == 1
     assert runtime.active_receivers_snapshot() == []
+
+
+def test_stream_runtime_restores_active_demand_and_optionally_publishes() -> None:
+    calls: list[tuple[str, object, dict]] = []
+
+    def _publish(receiver, data, *, ts=None, _meta=None):  # noqa: ANN001
+        calls.append((receiver, data, dict(_meta or {})))
+        return {"ok": True}
+
+    runtime = StreamRuntime(
+        "browsers_skill",
+        receivers=[
+            StreamReceiver(
+                "devices",
+                build=lambda context: {
+                    "receiver": context.receiver,
+                    "webspace": context.webspace_id,
+                    "reason": context.reason,
+                },
+            )
+        ],
+        stream_publish=_publish,
+    )
+    consumers = [
+        {
+            "webspace_id": "desktop",
+            "projection_key": "browsers.devices",
+            "consumer_id": "device-panel",
+            "consumer_kind": "panel",
+        },
+        {
+            "webspace_id": "desktop",
+            "projection_key": "browsers.missing",
+            "consumer_id": "missing-panel",
+            "consumer_kind": "panel",
+        },
+    ]
+
+    report = runtime.restore_active_demand(
+        consumers,
+        webspace_id="desktop",
+        receiver_prefix="browsers.",
+        publish_on_restore=True,
+    )
+
+    assert report["restored_total"] == 1
+    assert report["skipped_total"] == 1
+    assert report["skipped"][0]["reason"] == "receiver_unregistered"
+    assert runtime.active_receivers_snapshot() == [{"webspace_id": "desktop", "receiver": "devices"}]
+    assert calls == [
+        (
+            "devices",
+            {"receiver": "devices", "webspace": "desktop", "reason": "restore_active_demand"},
+            {"webspace_id": "desktop"},
+        )
+    ]
+    assert report["publish_results"][0]["published"] is True

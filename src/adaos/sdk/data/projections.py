@@ -558,6 +558,7 @@ class ProjectionRuntime:
         self._fingerprints: dict[tuple[str, str], str] = {}
         self._last_write_at: dict[tuple[str, str], float] = {}
         self._pending_refresh: dict[tuple[str, tuple[str, ...]], asyncio.Task[ProjectionRefreshResult]] = {}
+        self._active_projection_demand: dict[tuple[str, str], dict[str, Any]] = {}
         self._projections: dict[str, ProjectionSlot] = {}
         self._router = router or DirtyRouter()
         self.section_cache = section_cache or SectionCache()
@@ -579,6 +580,138 @@ class ProjectionRuntime:
         with self._lock:
             self._ctx_subnet = ctx_subnet
         return self
+
+    def active_projection_demand_snapshot(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                json.loads(json.dumps(value, sort_keys=True))
+                for _key, value in sorted(self._active_projection_demand.items())
+            ]
+
+    def forget_projection_demand(
+        self,
+        *,
+        webspace_id: str | None = None,
+        slot: ProjectionSlot | str | None = None,
+    ) -> int:
+        ws_id = _webspace_token(webspace_id) if webspace_id is not None else None
+        slot_name = _slot_name(slot) if slot is not None else None
+        removed = 0
+        with self._lock:
+            for key in list(self._active_projection_demand):
+                key_ws, key_slot = key
+                if ws_id is not None and key_ws != ws_id:
+                    continue
+                if slot_name is not None and key_slot != slot_name:
+                    continue
+                self._active_projection_demand.pop(key, None)
+                removed += 1
+        return removed
+
+    def restore_active_demand(
+        self,
+        consumers: Iterable[Any],
+        *,
+        webspace_id: str | None = None,
+        include_hidden: bool = False,
+        include_stale: bool = False,
+        projection_prefix: str | None = None,
+        projection_to_slot: Callable[[str], str | None] | Mapping[str, str] | None = None,
+    ) -> dict[str, Any]:
+        ws_filter = _webspace_token(webspace_id) if webspace_id is not None else None
+        restored: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+
+        with self._lock:
+            registered_slots = set(self._projections)
+
+        for consumer in consumers:
+            projection_key = _demand_projection_key(consumer)
+            consumer_ws = _demand_webspace(consumer)
+            base_entry = _demand_report_entry(consumer, projection_key=projection_key, webspace_id=consumer_ws)
+            if not projection_key:
+                skipped.append({**base_entry, "reason": "projection_key_missing"})
+                continue
+            if ws_filter is not None and consumer_ws != ws_filter:
+                skipped.append({**base_entry, "reason": "webspace_mismatch"})
+                continue
+            if projection_prefix and not projection_key.startswith(str(projection_prefix)):
+                skipped.append({**base_entry, "reason": "projection_prefix_mismatch"})
+                continue
+            if not include_hidden and _demand_visibility(consumer) == "hidden":
+                skipped.append({**base_entry, "reason": "hidden"})
+                continue
+            if not include_stale and _demand_bool(consumer, "stale"):
+                skipped.append({**base_entry, "reason": "stale"})
+                continue
+
+            slot_name = _map_demand_surface(
+                projection_key,
+                mapper=projection_to_slot,
+                prefix=projection_prefix,
+            )
+            if not slot_name:
+                skipped.append({**base_entry, "reason": "slot_mapping_empty"})
+                continue
+            if slot_name not in registered_slots:
+                skipped.append({**base_entry, "slot": slot_name, "reason": "slot_unregistered"})
+                continue
+
+            restored_entry = {**base_entry, "slot": slot_name}
+            restored.append(restored_entry)
+            self._remember_projection_demand(
+                slot_name=slot_name,
+                webspace_id=consumer_ws,
+                projection_key=projection_key,
+                consumer_id=str(base_entry["consumer_id"]),
+                consumer_kind=str(base_entry["consumer_kind"]),
+            )
+
+        with self._lock:
+            active_projection_demand = self.active_projection_demand_snapshot()
+        return {
+            "ok": True,
+            "skill_id": self.skill_id,
+            "runtime": "projection",
+            "restored_total": len(restored),
+            "skipped_total": len(skipped),
+            "active_projection_demand_total": len(active_projection_demand),
+            "active_slots": sorted({entry["slot"] for entry in restored if entry.get("slot")}),
+            "restored": restored,
+            "skipped": skipped,
+            "active_projection_demand": active_projection_demand,
+        }
+
+    def _remember_projection_demand(
+        self,
+        *,
+        slot_name: str,
+        webspace_id: str,
+        projection_key: str,
+        consumer_id: str,
+        consumer_kind: str,
+    ) -> None:
+        key = (_webspace_token(webspace_id), _slot_name(slot_name))
+        with self._lock:
+            entry = self._active_projection_demand.setdefault(
+                key,
+                {
+                    "webspace_id": key[0],
+                    "slot": key[1],
+                    "projection_key": projection_key,
+                    "consumer_total": 0,
+                    "consumer_ids": [],
+                    "consumer_kinds": [],
+                },
+            )
+            entry["projection_key"] = projection_key
+            consumer_ids = set(entry.get("consumer_ids") or [])
+            consumer_ids.add(str(consumer_id or "unknown"))
+            entry["consumer_ids"] = sorted(consumer_ids)
+            consumer_kinds = set(entry.get("consumer_kinds") or [])
+            consumer_kinds.add(str(consumer_kind or "unknown"))
+            entry["consumer_kinds"] = sorted(consumer_kinds)
+            entry["consumer_total"] = len(consumer_ids)
 
     def dirty_for(self, topic: str) -> set[str]:
         dirty = set(self._router.dirty_for(topic))
@@ -883,9 +1016,10 @@ class ProjectionRuntime:
             if ws_id is None and slot_name is None:
                 self._fingerprints.clear()
                 self._last_write_at.clear()
+                self._active_projection_demand.clear()
                 self._diagnostics = ProjectionDiagnostics()
                 return
-            for key in set(self._fingerprints) | set(self._last_write_at):
+            for key in set(self._fingerprints) | set(self._last_write_at) | set(self._active_projection_demand):
                 key_ws, key_slot = key
                 if ws_id is not None and key_ws != ws_id:
                     continue
@@ -893,6 +1027,7 @@ class ProjectionRuntime:
                     continue
                 self._fingerprints.pop(key, None)
                 self._last_write_at.pop(key, None)
+                self._active_projection_demand.pop(key, None)
 
     def diagnostics_snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -901,6 +1036,8 @@ class ProjectionRuntime:
             payload["fingerprint_entries"] = len(self._fingerprints)
             payload["last_write_entries"] = len(self._last_write_at)
             payload["pending_refresh_entries"] = sum(1 for task in self._pending_refresh.values() if not task.done())
+            payload["active_projection_demand_total"] = len(self._active_projection_demand)
+            payload["active_projection_demand"] = self.active_projection_demand_snapshot()
             payload["registered_projections"] = sorted(self._projections)
             payload["dirty_routes"] = self._router.snapshot()
             payload["ts"] = time.time()
@@ -954,6 +1091,91 @@ class StreamRuntime:
                 {"webspace_id": webspace_id, "receiver": receiver}
                 for webspace_id, receiver in sorted(self._active_receivers)
             ]
+
+    def restore_active_demand(
+        self,
+        consumers: Iterable[Any],
+        *,
+        webspace_id: str | None = None,
+        include_hidden: bool = False,
+        include_stale: bool = False,
+        receiver_prefix: str | None = None,
+        projection_to_receiver: Callable[[str], str | None] | Mapping[str, str] | None = None,
+        publish_on_restore: bool = False,
+    ) -> dict[str, Any]:
+        ws_filter = _webspace_token(webspace_id) if webspace_id is not None else None
+        restored: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        publish_results: list[dict[str, Any] | None] = []
+        published_keys: set[tuple[str, str]] = set()
+
+        with self._lock:
+            registered_receivers = set(self._receivers)
+
+        for consumer in consumers:
+            projection_key = _demand_projection_key(consumer)
+            consumer_ws = _demand_webspace(consumer)
+            base_entry = _demand_report_entry(consumer, projection_key=projection_key, webspace_id=consumer_ws)
+            if not projection_key:
+                skipped.append({**base_entry, "reason": "projection_key_missing"})
+                continue
+            if ws_filter is not None and consumer_ws != ws_filter:
+                skipped.append({**base_entry, "reason": "webspace_mismatch"})
+                continue
+            if receiver_prefix and not projection_key.startswith(str(receiver_prefix)):
+                skipped.append({**base_entry, "reason": "receiver_prefix_mismatch"})
+                continue
+            if not include_hidden and _demand_visibility(consumer) == "hidden":
+                skipped.append({**base_entry, "reason": "hidden"})
+                continue
+            if not include_stale and _demand_bool(consumer, "stale"):
+                skipped.append({**base_entry, "reason": "stale"})
+                continue
+
+            receiver_name = _map_demand_surface(
+                projection_key,
+                mapper=projection_to_receiver,
+                prefix=receiver_prefix,
+            )
+            if not receiver_name:
+                skipped.append({**base_entry, "reason": "receiver_mapping_empty"})
+                continue
+            if receiver_name not in registered_receivers:
+                skipped.append({**base_entry, "receiver": receiver_name, "reason": "receiver_unregistered"})
+                continue
+
+            restored_entry = {**base_entry, "receiver": receiver_name}
+            restored.append(restored_entry)
+            self.remember_receiver(receiver_name, webspace_id=consumer_ws)
+            publish_key = (consumer_ws, receiver_name)
+            if publish_on_restore and publish_key not in published_keys:
+                published_keys.add(publish_key)
+                result = self.publish_receiver_snapshot(
+                    receiver_name,
+                    webspace_id=consumer_ws,
+                    force=True,
+                    context=ProjectionContext(
+                        skill_id=self.skill_id,
+                        webspace_id=consumer_ws,
+                        receiver=receiver_name,
+                        reason="restore_active_demand",
+                    ),
+                )
+                publish_results.append(result.as_dict() if result else None)
+
+        active_receivers = self.active_receivers_snapshot()
+        return {
+            "ok": True,
+            "skill_id": self.skill_id,
+            "runtime": "stream",
+            "restored_total": len(restored),
+            "skipped_total": len(skipped),
+            "active_receiver_total": len(active_receivers),
+            "active_receivers": active_receivers,
+            "restored": restored,
+            "skipped": skipped,
+            "publish_results": publish_results,
+        }
 
     def reset(
         self,
@@ -1252,6 +1474,59 @@ def _webspace_from_payload(payload: Any) -> str:
             if token:
                 return token
     return "default"
+
+
+def _demand_value(consumer: Any, name: str, default: Any = None) -> Any:
+    if isinstance(consumer, Mapping):
+        return consumer.get(name, default)
+    return getattr(consumer, name, default)
+
+
+def _demand_projection_key(consumer: Any) -> str:
+    return str(_demand_value(consumer, "projection_key", "") or "").strip()
+
+
+def _demand_webspace(consumer: Any) -> str:
+    return _webspace_token(str(_demand_value(consumer, "webspace_id", "") or "").strip() or None)
+
+
+def _demand_visibility(consumer: Any) -> str:
+    return str(_demand_value(consumer, "visibility", "visible") or "visible").strip().lower() or "visible"
+
+
+def _demand_bool(consumer: Any, name: str) -> bool:
+    value = _demand_value(consumer, name, False)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _demand_report_entry(consumer: Any, *, projection_key: str, webspace_id: str) -> dict[str, Any]:
+    return {
+        "webspace_id": webspace_id,
+        "projection_key": projection_key,
+        "consumer_id": str(_demand_value(consumer, "consumer_id", "") or "").strip() or "unknown",
+        "consumer_kind": str(_demand_value(consumer, "consumer_kind", "") or "").strip() or "unknown",
+        "visibility": _demand_visibility(consumer),
+        "stale": _demand_bool(consumer, "stale"),
+    }
+
+
+def _map_demand_surface(
+    projection_key: str,
+    *,
+    mapper: Callable[[str], str | None] | Mapping[str, str] | None,
+    prefix: str | None,
+) -> str:
+    if callable(mapper):
+        raw = mapper(projection_key)
+    elif isinstance(mapper, Mapping):
+        raw = mapper.get(projection_key)
+    elif prefix:
+        raw = projection_key[len(str(prefix)) :].lstrip(".:/")
+    else:
+        raw = projection_key
+    return str(raw or "").strip()
 
 
 async def _call_build(build: BuildFn, context: ProjectionContext) -> Any:
