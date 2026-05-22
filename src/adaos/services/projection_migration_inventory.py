@@ -178,6 +178,113 @@ def _migration_risk(*, roots: list[Mapping[str, Any]], stream_receivers: list[st
     return "high"
 
 
+def _root_shape_total(item: Mapping[str, Any], shape: str) -> int:
+    return sum(1 for root in item.get("roots", []) if _mapping(root).get("shape") == shape)
+
+
+def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
+    risk_counts = {
+        level: sum(1 for item in items if item.get("risk") == level)
+        for level in ("high", "medium", "low")
+    }
+    monolithic_root_total = sum(_root_shape_total(item, "monolithic-yjs-root") for item in items)
+    sectioned_yjs_root_total = sum(_root_shape_total(item, "sectioned-yjs-root") for item in items)
+    single_yjs_slot_total = sum(_root_shape_total(item, "single-yjs-slot") for item in items)
+    stream_receiver_total = sum(int(item.get("stream_receiver_total") or 0) for item in items)
+    shared_bridge_total = sum(1 for item in items if item.get("shared_bridge"))
+    browser_surface_total = sum(
+        int(item.get("app_total") or 0) + int(item.get("widget_total") or 0) + int(item.get("modal_total") or 0)
+        for item in items
+    )
+    modern_surface_total = (
+        sectioned_yjs_root_total
+        + single_yjs_slot_total
+        + stream_receiver_total
+        + shared_bridge_total
+    )
+    observed_surface_total = monolithic_root_total + modern_surface_total
+    migration_readiness_ratio = (
+        round(modern_surface_total / observed_surface_total, 4)
+        if observed_surface_total
+        else 1.0
+    )
+    monolith_exposure_ratio = (
+        round(monolithic_root_total / observed_surface_total, 4)
+        if observed_surface_total
+        else 0.0
+    )
+    risk_weights = {"high": 3, "medium": 2, "low": 1}
+    legacy_pressure_score = sum(
+        _root_shape_total(item, "monolithic-yjs-root") * risk_weights.get(str(item.get("risk")), 1)
+        for item in items
+    )
+    modern_coverage_score = modern_surface_total + shared_bridge_total
+    return {
+        "skill_total": len(items),
+        "browser_facing_skill_total": sum(1 for item in items if item.get("browser_facing")),
+        "browser_surface_total": browser_surface_total,
+        "monolithic_candidate_total": sum(1 for item in items if item.get("monolithic_candidate")),
+        "monolithic_root_total": monolithic_root_total,
+        "sectioned_yjs_root_total": sectioned_yjs_root_total,
+        "single_yjs_slot_total": single_yjs_slot_total,
+        "stream_receiver_total": stream_receiver_total,
+        "shared_bridge_total": shared_bridge_total,
+        "modern_surface_total": modern_surface_total,
+        "observed_surface_total": observed_surface_total,
+        "migration_readiness_ratio": migration_readiness_ratio,
+        "monolith_exposure_ratio": monolith_exposure_ratio,
+        "legacy_pressure_score": legacy_pressure_score,
+        "modern_coverage_score": modern_coverage_score,
+        "risk_counts": risk_counts,
+    }
+
+
+def _top_monolithic_candidates(items: list[Mapping[str, Any]], *, limit: int = 5) -> list[dict[str, Any]]:
+    risk_order = {"high": 0, "medium": 1, "low": 2}
+    candidates = [
+        {
+            "skill_id": str(item.get("skill_id") or ""),
+            "risk": str(item.get("risk") or "unknown"),
+            "monolithic_root_total": int(item.get("monolithic_root_total") or 0),
+            "shared_bridge": item.get("shared_bridge"),
+            "stream_receiver_total": int(item.get("stream_receiver_total") or 0),
+        }
+        for item in items
+        if item.get("monolithic_candidate")
+    ]
+    return sorted(
+        candidates,
+        key=lambda item: (
+            risk_order.get(str(item.get("risk")), 99),
+            -int(item.get("monolithic_root_total") or 0),
+            str(item.get("skill_id") or ""),
+        ),
+    )[: max(0, int(limit))]
+
+
+def _metric_definitions() -> list[dict[str, Any]]:
+    return [
+        {
+            "metric": "monolith_exposure_ratio",
+            "direction": "lower_is_better",
+            "formula": "monolithic_root_total / observed_surface_total",
+            "meaning": "Share of browser-facing projection surfaces that still depend on direct monolithic Yjs roots.",
+        },
+        {
+            "metric": "migration_readiness_ratio",
+            "direction": "higher_is_better",
+            "formula": "modern_surface_total / observed_surface_total",
+            "meaning": "Share of projection surfaces already represented by sectioned/single-slot Yjs, stream receivers, or shared bridges.",
+        },
+        {
+            "metric": "legacy_pressure_score",
+            "direction": "lower_is_better",
+            "formula": "sum(monolithic_roots * risk_weight)",
+            "meaning": "Weighted backlog of monolithic publishers; high-risk skills count more than transitional skills.",
+        },
+    ]
+
+
 def _iter_skill_dirs(skills_root: Path) -> Iterable[Path]:
     if not skills_root.exists():
         return []
@@ -275,7 +382,50 @@ def projection_migration_monolith_inventory(
     }
 
 
+def projection_migration_metrics(
+    *,
+    skills_root: str | Path,
+    include_non_browser: bool = False,
+    top_limit: int = 5,
+    now: float | None = None,
+) -> dict[str, Any]:
+    inventory = projection_migration_monolith_inventory(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        now=now,
+    )
+    items = [item for item in inventory.get("items", []) if isinstance(item, Mapping)]
+    metrics = _migration_metric_summary(items)
+    return {
+        "ok": True,
+        "skills_root": inventory["skills_root"],
+        "include_non_browser": bool(include_non_browser),
+        "metrics": metrics,
+        "metric_definitions": _metric_definitions(),
+        "top_monolithic_candidates": _top_monolithic_candidates(items, limit=top_limit),
+        "control_examples": [
+            {
+                "id": "monolith_inventory",
+                "endpoint": "/api/node/projection-migration/monolith-inventory",
+                "checks": ["monolithic_candidate_total", "risk_counts", "items[].roots[].shape"],
+            },
+            {
+                "id": "migration_metrics",
+                "endpoint": "/api/node/projection-migration/metrics",
+                "checks": ["monolith_exposure_ratio", "migration_readiness_ratio", "legacy_pressure_score"],
+            },
+            {
+                "id": "runtime_write_suppression",
+                "source": "ProjectionRuntime.diagnostics_snapshot()",
+                "checks": ["applied_total", "skipped_unchanged_total", "dirty_dropped_total"],
+            },
+        ],
+        "updated_at": inventory["updated_at"],
+    }
+
+
 __all__ = [
     "inspect_skill_projection_migration",
+    "projection_migration_metrics",
     "projection_migration_monolith_inventory",
 ]

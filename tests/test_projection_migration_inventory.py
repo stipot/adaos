@@ -10,7 +10,10 @@ from fastapi.testclient import TestClient
 
 from adaos.apps.api.auth import require_token
 from adaos.services.agent_context import get_ctx
-from adaos.services.projection_migration_inventory import projection_migration_monolith_inventory
+from adaos.services.projection_migration_inventory import (
+    projection_migration_metrics,
+    projection_migration_monolith_inventory,
+)
 
 
 def _write_skill(root: Path, name: str, *, skill_yaml: str, webui: dict) -> None:
@@ -145,6 +148,54 @@ def test_projection_migration_inventory_identifies_monolithic_skill_publishers(t
     assert by_skill["prompt_engineer_skill"]["monolithic_candidate"] is False
 
 
+def test_projection_migration_metrics_exposes_control_ratios(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}], "ydoc_defaults": {"data/voice_chat": {"messages": []}}},
+    )
+    _write_skill(
+        root,
+        "adaos_connect",
+        skill_yaml=_single_slot_skill_yaml(),
+        webui={"apps": [{"id": "adaos_connect_app"}]},
+    )
+    _write_skill(
+        root,
+        "infrascope_skill",
+        skill_yaml=_infrascope_skill_yaml(),
+        webui={"webio": {"receivers": {"infrascope.inventory.*": {"mode": "replace"}}}},
+    )
+
+    report = projection_migration_metrics(
+        skills_root=root,
+        include_non_browser=True,
+        now=100.0,
+    )
+    metrics = report["metrics"]
+
+    assert report["ok"] is True
+    assert metrics["skill_total"] == 3
+    assert metrics["monolithic_candidate_total"] == 2
+    assert metrics["monolithic_root_total"] == 2
+    assert metrics["single_yjs_slot_total"] == 1
+    assert metrics["stream_receiver_total"] == 1
+    assert metrics["shared_bridge_total"] == 1
+    assert metrics["modern_surface_total"] == 3
+    assert metrics["observed_surface_total"] == 5
+    assert metrics["migration_readiness_ratio"] == 0.6
+    assert metrics["monolith_exposure_ratio"] == 0.4
+    assert metrics["legacy_pressure_score"] == 5
+    assert report["top_monolithic_candidates"][0]["skill_id"] == "voice_chat_skill"
+    assert {item["metric"] for item in report["metric_definitions"]} == {
+        "legacy_pressure_score",
+        "migration_readiness_ratio",
+        "monolith_exposure_ratio",
+    }
+
+
 def _make_api_client() -> TestClient:
     sys.modules.setdefault("nats", types.SimpleNamespace())
     fake_y_py = types.SimpleNamespace(
@@ -195,3 +246,23 @@ def test_projection_migration_inventory_api_uses_workspace_skills() -> None:
     assert payload["ok"] is True
     assert payload["monolithic_candidate_total"] == 1
     assert payload["items"][0]["skill_id"] == "voice_chat_skill"
+
+
+def test_projection_migration_metrics_api_uses_workspace_skills() -> None:
+    ctx = get_ctx()
+    root = Path(ctx.paths.skills_dir())
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+    )
+    client = _make_api_client()
+
+    response = client.get("/api/node/projection-migration/metrics")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["metrics"]["monolithic_candidate_total"] == 1
+    assert payload["metric_definitions"][0]["metric"] == "monolith_exposure_ratio"

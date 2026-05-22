@@ -73,7 +73,10 @@ from adaos.services.projection_record_yjs import (
     normalize_projection_record_keys,
     read_projection_records_yjs_cache,
 )
-from adaos.services.projection_migration_inventory import projection_migration_monolith_inventory
+from adaos.services.projection_migration_inventory import (
+    projection_migration_metrics,
+    projection_migration_monolith_inventory,
+)
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
@@ -2400,6 +2403,20 @@ async def node_projection_migration_monolith_inventory(include_non_browser: bool
     return projection_migration_monolith_inventory(
         skills_root=skills_root,
         include_non_browser=include_non_browser,
+    )
+
+
+@router.get("/projection-migration/metrics", dependencies=[Depends(require_token)])
+async def node_projection_migration_metrics(
+    include_non_browser: bool = False,
+    top_limit: int = 5,
+) -> dict[str, Any]:
+    ctx = get_ctx()
+    skills_root = Path(ctx.paths.skills_dir())
+    return projection_migration_metrics(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        top_limit=top_limit,
     )
 
 
