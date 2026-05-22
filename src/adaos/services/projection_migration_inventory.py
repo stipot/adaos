@@ -133,6 +133,73 @@ def _shared_bridge(skill_id: str, handler_text: str) -> str | None:
     return None
 
 
+def _text_contains_any(text: str, needles: Iterable[str]) -> bool:
+    return any(needle in text for needle in needles)
+
+
+def _shim_finding(
+    *,
+    finding_id: str,
+    severity: str,
+    evidence: str,
+    replacement: str,
+) -> dict[str, Any]:
+    return {
+        "id": finding_id,
+        "severity": severity,
+        "evidence": evidence,
+        "replacement": replacement,
+    }
+
+
+def _local_shim_findings(handler_text: str) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    if _text_contains_any(handler_text, ("ctx_subnet.set(", "ctx_subnet.set_async(")):
+        findings.append(
+            _shim_finding(
+                finding_id="direct_ctx_subnet_write",
+                severity="high",
+                evidence="ctx_subnet.set*",
+                replacement="ProjectionRuntime.set_if_changed or declared ProjectionSlot refresh",
+            )
+        )
+    if _text_contains_any(handler_text, ("_fingerprints", "fingerprints: dict", "fingerprint_cache")):
+        findings.append(
+            _shim_finding(
+                finding_id="local_fingerprint_cache",
+                severity="medium",
+                evidence="local fingerprint dict/cache",
+                replacement="ProjectionRuntime/StreamRuntime diagnostics and fingerprint state",
+            )
+        )
+    if _text_contains_any(handler_text, ("ThreadPoolExecutor", "run_in_executor")):
+        findings.append(
+            _shim_finding(
+                finding_id="local_executor_bridge",
+                severity="medium",
+                evidence="ThreadPoolExecutor/run_in_executor",
+                replacement="shared SDK refresh bridge or native async builder",
+            )
+        )
+    if _text_contains_any(handler_text, ("_ensure_skill_data_projections", "_load_skill_data_projections")):
+        findings.append(
+            _shim_finding(
+                finding_id="local_data_projection_loader",
+                severity="low",
+                evidence="skill-local data_projections loader",
+                replacement="shared projection manifest loader",
+            )
+        )
+    return findings
+
+
+def _sdk_runtime_present(handler_text: str) -> bool:
+    return _text_contains_any(
+        handler_text,
+        ("ProjectionRuntime(", "StreamRuntime(", "get_projection_runtime(", "get_stream_runtime("),
+    )
+
+
 def _root_summaries(
     *,
     manifest_paths: list[str],
@@ -192,6 +259,17 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
     single_yjs_slot_total = sum(_root_shape_total(item, "single-yjs-slot") for item in items)
     stream_receiver_total = sum(int(item.get("stream_receiver_total") or 0) for item in items)
     shared_bridge_total = sum(1 for item in items if item.get("shared_bridge"))
+    skill_local_shim_total = sum(1 for item in items if int(item.get("shim_total") or 0) > 0)
+    direct_write_skill_total = sum(
+        1 for item in items if "direct_ctx_subnet_write" in set(item.get("shim_ids") or [])
+    )
+    fingerprint_shim_skill_total = sum(
+        1 for item in items if "local_fingerprint_cache" in set(item.get("shim_ids") or [])
+    )
+    executor_shim_skill_total = sum(
+        1 for item in items if "local_executor_bridge" in set(item.get("shim_ids") or [])
+    )
+    sdk_runtime_skill_total = sum(1 for item in items if item.get("sdk_runtime_present"))
     browser_surface_total = sum(
         int(item.get("app_total") or 0) + int(item.get("widget_total") or 0) + int(item.get("modal_total") or 0)
         for item in items
@@ -218,6 +296,12 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
         _root_shape_total(item, "monolithic-yjs-root") * risk_weights.get(str(item.get("risk")), 1)
         for item in items
     )
+    shim_weights = {"high": 3, "medium": 2, "low": 1}
+    local_shim_pressure_score = sum(
+        shim_weights.get(str(_mapping(finding).get("severity")), 1)
+        for item in items
+        for finding in item.get("shim_findings", [])
+    )
     modern_coverage_score = modern_surface_total + shared_bridge_total
     return {
         "skill_total": len(items),
@@ -229,11 +313,17 @@ def _migration_metric_summary(items: list[Mapping[str, Any]]) -> dict[str, Any]:
         "single_yjs_slot_total": single_yjs_slot_total,
         "stream_receiver_total": stream_receiver_total,
         "shared_bridge_total": shared_bridge_total,
+        "skill_local_shim_total": skill_local_shim_total,
+        "direct_write_skill_total": direct_write_skill_total,
+        "fingerprint_shim_skill_total": fingerprint_shim_skill_total,
+        "executor_shim_skill_total": executor_shim_skill_total,
+        "sdk_runtime_skill_total": sdk_runtime_skill_total,
         "modern_surface_total": modern_surface_total,
         "observed_surface_total": observed_surface_total,
         "migration_readiness_ratio": migration_readiness_ratio,
         "monolith_exposure_ratio": monolith_exposure_ratio,
         "legacy_pressure_score": legacy_pressure_score,
+        "local_shim_pressure_score": local_shim_pressure_score,
         "modern_coverage_score": modern_coverage_score,
         "risk_counts": risk_counts,
     }
@@ -282,6 +372,12 @@ def _metric_definitions() -> list[dict[str, Any]]:
             "formula": "sum(monolithic_roots * risk_weight)",
             "meaning": "Weighted backlog of monolithic publishers; high-risk skills count more than transitional skills.",
         },
+        {
+            "metric": "local_shim_pressure_score",
+            "direction": "lower_is_better",
+            "formula": "sum(local_shim * severity_weight)",
+            "meaning": "Weighted backlog of per-skill projection shims that should move into the shared SDK.",
+        },
     ]
 
 
@@ -312,6 +408,8 @@ def inspect_skill_projection_migration(skill_dir: Path) -> dict[str, Any]:
     )
     handler = _handler_text(skill_dir)
     shared_bridge = _shared_bridge(skill_id, handler)
+    shim_findings = _local_shim_findings(handler)
+    shim_ids = sorted(str(finding.get("id")) for finding in shim_findings)
     apps = webui.get("apps") if isinstance(webui.get("apps"), list) else []
     widgets = webui.get("widgets") if isinstance(webui.get("widgets"), list) else []
     browser_facing = bool(apps or widgets or _count_registry_modals(webui) or stream_receivers or webui_paths)
@@ -323,6 +421,10 @@ def inspect_skill_projection_migration(skill_dir: Path) -> dict[str, Any]:
         "path": str(skill_dir),
         "browser_facing": browser_facing,
         "shared_bridge": shared_bridge,
+        "sdk_runtime_present": _sdk_runtime_present(handler),
+        "shim_total": len(shim_findings),
+        "shim_ids": shim_ids,
+        "shim_findings": shim_findings,
         "risk": risk,
         "monolithic_candidate": bool(monolithic_roots),
         "monolithic_root_total": len(monolithic_roots),
@@ -372,6 +474,7 @@ def projection_migration_monolith_inventory(
         "browser_facing_total": sum(1 for item in items if item.get("browser_facing")),
         "monolithic_candidate_total": sum(1 for item in items if item.get("monolithic_candidate")),
         "shared_bridge_total": sum(1 for item in items if item.get("shared_bridge")),
+        "skill_local_shim_total": sum(1 for item in items if int(item.get("shim_total") or 0) > 0),
         "risk_counts": risk_counts,
         "shape_counts": dict(sorted(shape_counts.items())),
         "items": sorted(

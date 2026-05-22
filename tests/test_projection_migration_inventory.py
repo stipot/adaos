@@ -16,11 +16,15 @@ from adaos.services.projection_migration_inventory import (
 )
 
 
-def _write_skill(root: Path, name: str, *, skill_yaml: str, webui: dict) -> None:
+def _write_skill(root: Path, name: str, *, skill_yaml: str, webui: dict, handler_text: str | None = None) -> None:
     skill_dir = root / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "skill.yaml").write_text(skill_yaml, encoding="utf-8")
     (skill_dir / "webui.json").write_text(json.dumps(webui), encoding="utf-8")
+    if handler_text is not None:
+        handler_path = skill_dir / "handlers" / "main.py"
+        handler_path.parent.mkdir(parents=True, exist_ok=True)
+        handler_path.write_text(handler_text, encoding="utf-8")
 
 
 def _voice_skill_yaml() -> str:
@@ -148,6 +152,57 @@ def test_projection_migration_inventory_identifies_monolithic_skill_publishers(t
     assert by_skill["prompt_engineer_skill"]["monolithic_candidate"] is False
 
 
+def test_projection_migration_inventory_reports_local_projection_shims(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    _write_skill(
+        root,
+        "legacy_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "legacy_app"}]},
+        handler_text="""
+from concurrent.futures import ThreadPoolExecutor
+from adaos.sdk.data import ctx_subnet
+
+_projection_fingerprints: dict[str, str] = {}
+_PROJECTION_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+def _ensure_skill_data_projections():
+    pass
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("legacy.snapshot", payload, webspace_id=webspace_id)
+""",
+    )
+    _write_skill(
+        root,
+        "sdk_skill",
+        skill_yaml=_single_slot_skill_yaml(),
+        webui={"apps": [{"id": "sdk_app"}]},
+        handler_text="""
+from adaos.sdk.data import ProjectionRuntime, ProjectionSlot
+
+runtime = ProjectionRuntime("sdk_skill", projections=[ProjectionSlot("sdk.summary")])
+""",
+    )
+
+    inventory = projection_migration_monolith_inventory(skills_root=root, include_non_browser=True, now=100.0)
+    by_skill = {item["skill_id"]: item for item in inventory["items"]}
+    legacy = by_skill["voice_chat_skill"]
+    sdk = by_skill["adaos_connect"]
+
+    assert legacy["shim_total"] == 4
+    assert legacy["shim_ids"] == [
+        "direct_ctx_subnet_write",
+        "local_data_projection_loader",
+        "local_executor_bridge",
+        "local_fingerprint_cache",
+    ]
+    assert legacy["sdk_runtime_present"] is False
+    assert sdk["shim_total"] == 0
+    assert sdk["sdk_runtime_present"] is True
+    assert inventory["skill_local_shim_total"] == 1
+
+
 def test_projection_migration_metrics_exposes_control_ratios(tmp_path: Path) -> None:
     root = tmp_path / "skills"
     _write_skill(
@@ -167,6 +222,16 @@ def test_projection_migration_metrics_exposes_control_ratios(tmp_path: Path) -> 
         "infrascope_skill",
         skill_yaml=_infrascope_skill_yaml(),
         webui={"webio": {"receivers": {"infrascope.inventory.*": {"mode": "replace"}}}},
+        handler_text="""
+from concurrent.futures import ThreadPoolExecutor
+from adaos.sdk.data import ctx_subnet
+
+_last_projected_fingerprints: dict[str, str] = {}
+_PROJECTION_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+def project(payload, webspace_id):
+    ctx_subnet.set("infrascope.snapshot", payload, webspace_id=webspace_id)
+""",
     )
 
     report = projection_migration_metrics(
@@ -183,6 +248,11 @@ def test_projection_migration_metrics_exposes_control_ratios(tmp_path: Path) -> 
     assert metrics["single_yjs_slot_total"] == 1
     assert metrics["stream_receiver_total"] == 1
     assert metrics["shared_bridge_total"] == 1
+    assert metrics["skill_local_shim_total"] == 1
+    assert metrics["direct_write_skill_total"] == 1
+    assert metrics["fingerprint_shim_skill_total"] == 1
+    assert metrics["executor_shim_skill_total"] == 1
+    assert metrics["local_shim_pressure_score"] == 7
     assert metrics["modern_surface_total"] == 3
     assert metrics["observed_surface_total"] == 5
     assert metrics["migration_readiness_ratio"] == 0.6
@@ -191,6 +261,7 @@ def test_projection_migration_metrics_exposes_control_ratios(tmp_path: Path) -> 
     assert report["top_monolithic_candidates"][0]["skill_id"] == "voice_chat_skill"
     assert {item["metric"] for item in report["metric_definitions"]} == {
         "legacy_pressure_score",
+        "local_shim_pressure_score",
         "migration_readiness_ratio",
         "monolith_exposure_ratio",
     }
