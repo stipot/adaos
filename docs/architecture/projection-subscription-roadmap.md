@@ -111,7 +111,7 @@ Current status:
 ### 3. Projection ABI
 
 - [x] `abi.projection_record_shape`: define the canonical projection record shape: `status`, `data`, `meta`, `error`
-- [ ] `abi.projection_keys_fixed`: define deterministic `projection_key` rules for page, widget, modal, panel, platform-emitted, and node-scoped projections
+- [x] `abi.projection_keys_fixed`: define deterministic `projection_key` rules for page, widget, modal, panel, platform-emitted, and node-scoped projections
 - [x] `abi.client_subscription_shape`: define the browser-written client subscription record shape
 - [ ] `abi.node_aware_yjs_envelope`: define the node-scoped top-level Yjs envelope so shared subnet state can preserve multiple node emitters
 - [x] `abi.pinned_consumer_semantics`: define `pinned` consumer semantics
@@ -140,6 +140,9 @@ Current status:
 - shared `data/projectionRecords` Yjs cache now preserves `meta.node_id` and
   reports `node_ids` plus `node_scoped_record_total` so operator diagnostics
   can see node-scoped projection records without parsing every payload entry
+- `adaos.domain.projection_keys` now fixes deterministic helpers for
+  `status-card:<id>`, `projection:<surface>/<id>`, and
+  `projection:node/<node_id>/<projection_key>` forms
 - a server-side browser demand registry, full-overwrite API, and browser-state
   mapper are implemented
 - direct Angular client hookup remains pending because the client submodule is

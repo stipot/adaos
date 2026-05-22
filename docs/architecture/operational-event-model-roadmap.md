@@ -267,6 +267,9 @@ Current checkpoint as of 2026-05-15:
   `node_scoped_record_total` and preserves each record's `meta.node_id`
   through materialize/readback checks; the top-level node-owned envelope is
   still a follow-up compatibility break
+- deterministic projection-key helpers now cover status cards, browser
+  surfaces (`page`, `widget`, `modal`, `panel`), and node-scoped wrappers,
+  so compatibility-era surfaces can converge on one key vocabulary
 
 Primary sources:
 
