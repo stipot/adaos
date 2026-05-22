@@ -50,11 +50,18 @@ def setup_function() -> None:
     clear_projection_demand_registry()
 
 
-def _record(projection_key: str, *, webspace_id: str = "desktop", summary: str = "ok") -> dict[str, Any]:
+def _record(
+    projection_key: str,
+    *,
+    webspace_id: str = "desktop",
+    summary: str = "ok",
+    node_id: str | None = None,
+) -> dict[str, Any]:
     return make_projection_record(
         projection_key=projection_key,
         kind="status-card",
         webspace_id=webspace_id,
+        node_id=node_id,
         data={"summary": summary},
         source="test",
         source_authority="test-suite",
@@ -113,6 +120,26 @@ def test_materialize_projection_records_to_yjs_can_filter_demanded_records(monke
     assert result["record_total"] == 1
     assert result["projection_keys"] == ["status-card:desktop-shell"]
     assert set(payload["records"]) == {"status-card:desktop-shell"}
+
+
+def test_projection_records_yjs_cache_preserves_node_scope(monkeypatch) -> None:
+    fake_doc = _FakeDoc()
+    from adaos.services import projection_record_yjs
+
+    monkeypatch.setattr(projection_record_yjs, "mutate_live_room", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(projection_record_yjs, "async_get_ydoc", lambda *_args, **_kwargs: _FakeAsyncDocContext(fake_doc))
+    monkeypatch.setattr(projection_record_yjs, "async_read_ydoc", lambda *_args, **_kwargs: _FakeAsyncDocContext(fake_doc))
+    write_projection_record(_record("status-card:runtime", summary="Runtime ready", node_id="node-a"))
+
+    result = asyncio.run(materialize_projection_records_to_yjs(webspace_id="desktop", now=20.0))
+    readback = asyncio.run(read_projection_records_yjs_cache(webspace_id="desktop"))
+
+    payload = fake_doc.get_map("data")["projectionRecords"]
+    assert result["node_ids"] == ["node-a"]
+    assert payload["node_ids"] == ["node-a"]
+    assert payload["records"]["status-card:runtime"]["meta"]["node_id"] == "node-a"
+    assert readback["node_ids"] == ["node-a"]
+    assert readback["payload"]["records"]["status-card:runtime"]["meta"]["node_id"] == "node-a"
 
 
 def test_materialize_projection_records_to_yjs_uses_live_room_when_available(monkeypatch) -> None:

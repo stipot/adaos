@@ -48,6 +48,19 @@ def _select_records(
     return records
 
 
+def _node_ids_from_records(records: Iterable[ProjectionRecord | Mapping[str, Any]]) -> list[str]:
+    node_ids: set[str] = set()
+    for item in records:
+        if isinstance(item, ProjectionRecord):
+            token = str(item.meta.node_id or "").strip()
+        else:
+            meta = item.get("meta") if isinstance(item.get("meta"), Mapping) else {}
+            token = str(meta.get("node_id") or "").strip()
+        if token:
+            node_ids.add(token)
+    return sorted(node_ids)
+
+
 def build_projection_records_yjs_payload(
     *,
     webspace_id: str | None = None,
@@ -77,6 +90,7 @@ def build_projection_records_yjs_payload(
         "unavailable_total": sum(1 for record in records if record.status == "unavailable"),
         "demanded_only": bool(demanded_only),
         "projection_keys": sorted(by_key),
+        "node_ids": _node_ids_from_records(records),
         "records": by_key,
         "items": items,
         "updated_at": ts,
@@ -106,6 +120,9 @@ def _cache_payload_summary(payload: Mapping[str, Any], *, webspace_id: str) -> d
     projection_keys = payload.get("projection_keys")
     if not isinstance(projection_keys, list):
         projection_keys = sorted(str(key) for key in records)
+    node_ids = payload.get("node_ids")
+    if not isinstance(node_ids, list):
+        node_ids = _node_ids_from_records(dict(record) for record in records.values())
     expected_fingerprint = projection_fingerprint(
         {
             "schema": payload.get("schema"),
@@ -125,6 +142,7 @@ def _cache_payload_summary(payload: Mapping[str, Any], *, webspace_id: str) -> d
         "schema_ok": payload.get("schema") == PROJECTION_RECORDS_YJS_SCHEMA,
         "record_total": int(payload.get("record_total") or len(records)),
         "projection_keys": list(projection_keys),
+        "node_ids": list(node_ids),
         "registry_version": payload.get("registry_version"),
         "fingerprint": fingerprint or None,
         "fingerprint_ok": bool(fingerprint) and fingerprint == expected_fingerprint,
@@ -158,6 +176,7 @@ async def read_projection_records_yjs_cache(*, webspace_id: str | None = None) -
             "schema": PROJECTION_RECORDS_YJS_SCHEMA,
             "record_total": 0,
             "projection_keys": [],
+            "node_ids": [],
             "payload": None,
         }
     return _cache_payload_summary(payload, webspace_id=target_webspace_id)
@@ -210,6 +229,7 @@ async def materialize_projection_records_to_yjs(
         "schema": PROJECTION_RECORDS_YJS_SCHEMA,
         "demanded_only": bool(demanded_only),
         "projection_keys": list(payload["projection_keys"]),
+        "node_ids": list(payload["node_ids"]),
         "record_total": int(payload["record_total"]),
         "registry_version": payload["registry_version"],
         "fingerprint": payload["fingerprint"],
