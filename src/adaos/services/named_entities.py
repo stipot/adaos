@@ -20,6 +20,8 @@ ENTITY_ALIAS_CONFLICT_DETECTED = "entity.alias.conflict.detected"
 ENTITY_REGISTRY_CHANGED = "entity.registry.changed"
 ENTITY_RESOLUTION_AMBIGUOUS = "entity.resolution.ambiguous"
 ENTITY_RESOLUTION_FAILED = "entity.resolution.failed"
+NAMED_ENTITY_REGISTRY_SCHEMA = "adaos.named-entity-registry.v1"
+NAMED_ENTITY_REGISTRY_YJS_PATH = "registry.named_entities"
 
 ENTITY_EVENT_TOPICS: tuple[str, ...] = (
     ENTITY_OBSERVED,
@@ -1877,6 +1879,29 @@ def _registry_conflicts(records: Iterable[NamedEntityRecord]) -> list[dict[str, 
     return conflicts
 
 
+def named_entity_registry_access_metadata() -> dict[str, Any]:
+    return {
+        "read_only": True,
+        "owner": "core:named_entities",
+        "write_policy": "governed-alias-tools-only",
+        "privacy": {
+            "payload_class": "compact_descriptor",
+            "contains_secret_data": False,
+            "contains_skill_payload": False,
+            "exposed_fields": [
+                "canonical_ref",
+                "kind",
+                "display_label",
+                "labels",
+                "status",
+                "scope",
+                "source",
+                "fingerprint",
+            ],
+        },
+    }
+
+
 def compact_registry_payload(
     *,
     kind: str | None = None,
@@ -1903,8 +1928,11 @@ def compact_registry_payload(
         json.dumps(items, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
     ).hexdigest()
     return {
+        "schema": NAMED_ENTITY_REGISTRY_SCHEMA,
         "version": 1,
         "webspace_id": webspace,
+        "yjs_path": NAMED_ENTITY_REGISTRY_YJS_PATH,
+        "access": named_entity_registry_access_metadata(),
         "items": items,
         "summary": {
             "count": len(items),
@@ -1958,6 +1986,8 @@ __all__ = [
     "ENTITY_EVENT_TOPICS",
     "ENTITY_OBSERVED",
     "ENTITY_REGISTRY_CHANGED",
+    "NAMED_ENTITY_REGISTRY_SCHEMA",
+    "NAMED_ENTITY_REGISTRY_YJS_PATH",
     "ENTITY_RESOLUTION_AMBIGUOUS",
     "ENTITY_RESOLUTION_FAILED",
     "EntityAliasAction",
@@ -1979,6 +2009,7 @@ __all__ = [
     "device_entity_lifecycle_event_envelopes",
     "entity_event_payload",
     "get_named_entity_service",
+    "named_entity_registry_access_metadata",
     "list_entities",
     "normalize_entity_label",
     "propose_alias_deprecate",

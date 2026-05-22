@@ -314,8 +314,15 @@ def test_compact_registry_payload_is_ui_safe_and_fingerprinted() -> None:
 
     payload = named_entities.compact_registry_payload(service=service, webspace_id="desktop")
 
+    assert payload["schema"] == named_entities.NAMED_ENTITY_REGISTRY_SCHEMA
     assert payload["version"] == 1
     assert payload["webspace_id"] == "desktop"
+    assert payload["yjs_path"] == named_entities.NAMED_ENTITY_REGISTRY_YJS_PATH
+    assert payload["access"]["read_only"] is True
+    assert payload["access"]["owner"] == "core:named_entities"
+    assert payload["access"]["write_policy"] == "governed-alias-tools-only"
+    assert payload["access"]["privacy"]["contains_secret_data"] is False
+    assert payload["access"]["privacy"]["contains_skill_payload"] is False
     assert payload["items"] == [
         {
             "canonical_ref": "skill:browsers_skill",
@@ -752,6 +759,9 @@ async def test_project_named_entity_registry_writes_compact_yjs_branch(monkeypat
 
         async with async_get_ydoc(webspace_id, read_only=True, load_mark_roots=["registry"]) as ydoc:
             current = ydoc.get_map("registry").get("named_entities")
+        assert current["schema"] == named_entities.NAMED_ENTITY_REGISTRY_SCHEMA
+        assert current["yjs_path"] == named_entities.NAMED_ENTITY_REGISTRY_YJS_PATH
+        assert current["access"]["read_only"] is True
         assert current["summary"]["fingerprint"] == payload["summary"]["fingerprint"]
         assert current["items"][0]["canonical_ref"] == "skill:browsers_skill"
     finally:
