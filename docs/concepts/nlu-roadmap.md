@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **88%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **89%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -56,6 +56,8 @@ but the productionization checklist remains mostly open.
   status evidence.
 - [x] Add named-entity canonicalization statistics: hit/miss/ambiguity counts
   and unresolved spans.
+- [x] Voice chat desktop widget can show a non-dispatching Neural NLU probe
+  result (`intent`, `via`, confidence, and slots) in node-scoped chat history.
 
 ## Human Verification Gates
 

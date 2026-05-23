@@ -847,6 +847,84 @@ class RouterService:
             except Exception:
                 pass
 
+        def _voice_intent_demo_enabled() -> bool:
+            return str(os.getenv("ADAOS_VOICE_CHAT_INTENT_DEMO") or "1").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+
+        def _voice_intent_locale(meta: dict[str, Any]) -> str:
+            for key in ("locale", "request_locale", "language", "lang"):
+                value = meta.get(key)
+                if isinstance(value, str) and value.strip():
+                    raw = value.strip()
+                    return raw.split("-", 1)[0].split("_", 1)[0] or raw
+            return "ru"
+
+        def _format_voice_intent_demo(result: dict[str, Any]) -> str:
+            accepted = bool(result.get("accepted"))
+            intent = str(result.get("intent") or "not_obtained")
+            via = str(result.get("via") or "neural")
+            parts = [
+                f"Intent detector: {intent}",
+                f"via={via}",
+                f"accepted={str(accepted).lower()}",
+            ]
+            confidence = result.get("confidence")
+            if isinstance(confidence, (int, float)):
+                parts.append(f"confidence={confidence:.3f}")
+            slots = result.get("slots")
+            if isinstance(slots, dict) and slots:
+                parts.append("slots=" + json.dumps(slots, ensure_ascii=False, sort_keys=True, default=str))
+            reason = result.get("reason")
+            if isinstance(reason, str) and reason.strip() and not accepted:
+                parts.append(f"reason={reason.strip()}")
+            return " | ".join(parts)
+
+        async def _append_voice_intent_demo(
+            webspace_id: str,
+            text: str,
+            meta: dict[str, Any],
+            target_node_id: str | None,
+        ) -> None:
+            if not _voice_intent_demo_enabled():
+                return
+            locale = _voice_intent_locale(meta)
+            request_id = str(meta.get("message_id") or meta.get("id") or _make_id("intent"))
+            demo_meta = {
+                **meta,
+                "webspace_id": webspace_id,
+                "route_id": "voice_chat",
+                "voice_chat_intent_demo": True,
+            }
+            try:
+                from adaos.services.nlu import neural_service_bridge
+
+                result = await neural_service_bridge.parse_text(
+                    text,
+                    webspace_id=webspace_id,
+                    request_id=request_id,
+                    meta=demo_meta,
+                    locale=locale,
+                    preferred_locales=[locale],
+                    record_usage_stats=False,
+                )
+                msg_text = _format_voice_intent_demo(result if isinstance(result, dict) else {})
+            except Exception as exc:
+                msg_text = f"Intent detector unavailable: {type(exc).__name__}: {exc}"
+            await _append_voice_chat_message(
+                webspace_id,
+                {
+                    "id": _make_id("intent"),
+                    "from": "hub",
+                    "text": msg_text,
+                    "ts": time.time(),
+                },
+                target_node_id,
+            )
+
         async def _ensure_tts_state(webspace_id: str) -> None:
             def _mutator(data_map: Any, txn: Any) -> None:
                 current = data_map.get("tts")
@@ -1711,6 +1789,13 @@ class RouterService:
                 )
             except Exception:
                 pass
+            try:
+                await _append_voice_intent_demo(ws, text, meta, target_node_id)
+            except Exception:
+                logging.getLogger("adaos.router.voice_chat").warning(
+                    "voice.chat intent demo failed",
+                    exc_info=True,
+                )
             try:
                 await _ensure_tts_state(ws)
             except Exception:

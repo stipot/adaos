@@ -146,6 +146,7 @@ async def test_voice_chat_user_defaults_history_to_local_node_when_target_missin
     doc = _Doc()
     bus = LocalEventBus()
     seen_nlu: list[Event] = []
+    monkeypatch.setenv("ADAOS_VOICE_CHAT_INTENT_DEMO", "0")
     monkeypatch.setattr(router_service_module, "get_ctx", lambda: SimpleNamespace(config=SimpleNamespace(node_id="hub-node")))
     monkeypatch.setattr(router_service_module, "load_rules", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(router_service_module, "watch_rules", lambda *_args, **_kwargs: (lambda: None))
@@ -174,6 +175,97 @@ async def test_voice_chat_user_defaults_history_to_local_node_when_target_missin
     assert messages[0]["text"] == "weather in Moscow"
     assert seen_nlu
     assert seen_nlu[0].payload["_meta"]["target_node_id"] == "hub-node"
+
+
+async def test_voice_chat_user_appends_neural_intent_demo(monkeypatch) -> None:
+    class _Txn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    class _Map(dict):
+        def set(self, txn, key, value):  # noqa: ARG002
+            self[key] = value
+
+        def to_json(self):
+            return dict(self)
+
+    class _Doc:
+        def __init__(self) -> None:
+            self._maps = {"data": _Map()}
+
+        def get_map(self, name: str):
+            return self._maps.setdefault(name, _Map())
+
+        def begin_transaction(self):
+            return _Txn()
+
+    class _AsyncDoc:
+        async def __aenter__(self):
+            return doc
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    class _MetaCtx:
+        async def __aenter__(self):
+            return {}
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    async def _fake_parse_text(text: str, **kwargs):
+        calls.append((text, kwargs))
+        return {
+            "ok": True,
+            "accepted": True,
+            "intent": "weather.get",
+            "via": "neural",
+            "confidence": 0.91,
+            "slots": {"city": "Moscow"},
+        }
+
+    doc = _Doc()
+    bus = LocalEventBus()
+    calls: list[tuple[str, dict[str, object]]] = []
+    from adaos.services.nlu import neural_service_bridge
+
+    monkeypatch.setenv("ADAOS_VOICE_CHAT_INTENT_DEMO", "1")
+    monkeypatch.setattr(neural_service_bridge, "parse_text", _fake_parse_text)
+    monkeypatch.setattr(router_service_module, "get_ctx", lambda: SimpleNamespace(config=SimpleNamespace(node_id="hub-node")))
+    monkeypatch.setattr(router_service_module, "load_rules", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(router_service_module, "watch_rules", lambda *_args, **_kwargs: (lambda: None))
+    monkeypatch.setattr(router_service_module, "async_get_ydoc", lambda *_args, **_kwargs: _AsyncDoc())
+    monkeypatch.setattr(router_service_module, "ystore_write_metadata", lambda **_kwargs: _MetaCtx())
+
+    router = RouterService(eventbus=bus, base_dir=Path("."))
+    await router.start()
+
+    bus.publish(
+        Event(
+            type="voice.chat.user",
+            source="test",
+            ts=1.0,
+            payload={
+                "text": "weather in Moscow",
+                "webspace_id": "desktop",
+                "_meta": {"route_id": "voice_chat"},
+            },
+        )
+    )
+    await bus.wait_for_idle(timeout=1.0)
+
+    messages = doc.get_map("data")["nodes"]["hub-node"]["voice_chat"]["messages"]
+    assert messages[0]["from"] == "user"
+    assert messages[1]["from"] == "hub"
+    assert "Intent detector: weather.get" in messages[1]["text"]
+    assert "via=neural" in messages[1]["text"]
+    assert calls
+    assert calls[0][0] == "weather in Moscow"
+    assert calls[0][1]["webspace_id"] == "desktop"
+    assert calls[0][1]["meta"]["voice_chat_intent_demo"] is True
 
 
 async def test_io_out_chat_append_writes_node_scoped_history_without_crashing(monkeypatch) -> None:

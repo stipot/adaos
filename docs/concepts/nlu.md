@@ -69,6 +69,11 @@ Implemented now:
   canonicalization payload, confidence gates, and usage-stat path as runtime
   dispatch:
   - `adaos interpreter neural-probe "какая погода в москве" --locale ru`
+- Voice chat desktop demo path: `voice.chat.user` still publishes the normal
+  `nlp.intent.detect.request`, and the router also appends a node-scoped
+  `Intent detector: ... | via=neural | ...` probe message into
+  `data/nodes/<node_id>/voice_chat` so the web desktop widget can show whether
+  the neural detector is reachable.
 - Machine-readable Neural NLU readiness check for artifacts, service
   discovery, optional `/health`, model load, and active index backend:
   - `adaos interpreter neural-readiness --start --stop-after`
@@ -133,6 +138,10 @@ long-term fallback.
 
 1. UI / Telegram / Voice publishes:
    - `nlp.intent.detect.request { text, webspace_id, request_id, _meta... }`
+   - For the `voice_chat` route, the router additionally runs a non-dispatching
+     Neural NLU probe for browser demonstration and appends the result to the
+     node-scoped voice chat history. This does not replace the normal pipeline
+     or dispatcher path.
 2. Named-entity canonicalization resolves runtime names and aliases before
    model-specific interpretation becomes final:
    - device/browser/node/webspace/scenario/skill/app/modal aliases are resolved

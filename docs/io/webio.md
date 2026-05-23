@@ -520,6 +520,11 @@ For `voice.chat.*` the runtime should also preserve `target_node_id`
 end-to-end so a member-targeted browser session cannot leak requests into the
 hub or another member's chat flow.
 
+The `voice_chat_skill` desktop widget observes the node-scoped
+`data/voice_chat` branch. For NLU demonstration, `voice.chat.user` appends the
+user message and a non-dispatching Neural NLU probe summary into that same
+history, while the normal `nlp.intent.detect.request` pipeline still runs.
+
 For browser observability, `voice.chat.user` command acknowledgement must be
 treated only as "the runtime accepted the command", not as "the chat history is
 already materialized in the browser". Member-owned chat flows add one more hop
