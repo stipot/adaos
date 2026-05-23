@@ -75,6 +75,7 @@ async def test_voice_chat_not_obtained_uses_skill_fallback(monkeypatch) -> None:
             skill_ctx=_SkillCtx(),
         ),
     )
+    monkeypatch.setenv("ADAOS_VOICE_CHAT_INTENT_DEMO", "0")
     monkeypatch.setattr(router_service_module, "load_rules", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(router_service_module, "watch_rules", lambda *_args, **_kwargs: (lambda: None))
     monkeypatch.setattr(
@@ -100,6 +101,48 @@ async def test_voice_chat_not_obtained_uses_skill_fallback(monkeypatch) -> None:
 
     await bus.wait_for_idle(timeout=1.0)
     assert calls == [("какая погода в москве", {"route_id": "voice_chat", "webspace_id": "default"})]
+async def test_voice_chat_not_obtained_skips_skill_fallback_during_intent_demo(monkeypatch) -> None:
+    bus = LocalEventBus()
+    calls: list[object] = []
+
+    monkeypatch.setenv("ADAOS_VOICE_CHAT_INTENT_DEMO", "1")
+    monkeypatch.setattr(
+        router_service_module,
+        "get_ctx",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                node_id="member-local",
+                root_settings=SimpleNamespace(llm=SimpleNamespace(allow_nlu_teacher=False)),
+            ),
+        ),
+    )
+    monkeypatch.setattr(router_service_module, "load_rules", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(router_service_module, "watch_rules", lambda *_args, **_kwargs: (lambda: None))
+    monkeypatch.setattr(
+        router_service_module,
+        "execute_tool",
+        lambda *_args, **_kwargs: calls.append(object()) or {"ok": True},
+    )
+    router = RouterService(eventbus=bus, base_dir=Path("."))
+    await router.start()
+
+    bus.publish(
+        Event(
+            type="nlp.intent.not_obtained",
+            source="test",
+            ts=1.0,
+            payload={
+                "text": "weather in Moscow",
+                "reason": "no_intent_mapping",
+                "_meta": {"route_id": "voice_chat", "webspace_id": "default"},
+            },
+        )
+    )
+
+    await bus.wait_for_idle(timeout=1.0)
+    assert calls == []
+
+
 def test_voice_chat_data_path_is_node_scoped() -> None:
     assert node_scope_data_path("data/voice_chat", "member-1") == "data/nodes/member-1/voice_chat"
 

@@ -523,7 +523,10 @@ hub or another member's chat flow.
 The `voice_chat_skill` desktop widget observes the node-scoped
 `data/voice_chat` branch. For NLU demonstration, `voice.chat.user` appends the
 user message and a non-dispatching Neural NLU probe summary into that same
-history, while the normal `nlp.intent.detect.request` pipeline still runs.
+history, while the normal `nlp.intent.detect.request` pipeline still runs. When
+`ADAOS_VOICE_CHAT_INTENT_DEMO=1`, voice-chat `nlp.intent.not_obtained` display
+fallback is suppressed so old skill-specific fallback handlers do not obscure
+the detector result.
 
 For browser observability, `voice.chat.user` command acknowledgement must be
 treated only as "the runtime accepted the command", not as "the chat history is

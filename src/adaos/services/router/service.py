@@ -1821,6 +1821,8 @@ class RouterService:
             if not isinstance(text, str) or not text.strip():
                 text = ""
             if route_id.strip() == "voice_chat" and text:
+                if _voice_intent_demo_enabled():
+                    return
                 try:
                     result = await asyncio.to_thread(_call_voice_chat_tool, text, meta)
                 except Exception:
