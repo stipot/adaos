@@ -128,6 +128,8 @@ Important fields:
   baseline policy, comparison rules, and formulas
 - `control_snapshot`: compact evidence block for saving one control run in a
   diploma before/after table
+- `plan_review`: current alignment with slices 1-6 of
+  `operational-event-model-reference-plan.md`
 - `demo_script`: short explanation block for presenting the acceptance result
 - `progress`: compact progress summary for the server MVP and the larger
   end-to-end plan
@@ -178,6 +180,11 @@ The `control_snapshot` block is the shortest payload to save after a control
 run. It repeats the readiness result, server/full-plan progress, and key
 metrics in one place so the evidence can be copied into a before/after table
 without manually merging `metrics`, `progress`, and `checks`.
+
+The `plan_review` block maps the same acceptance result back to the six slices
+of the reference plan. It is the quickest way to explain which slices are
+server-ready, which are pilot-ready, and which still have client or cleanup
+follow-up work.
 
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit

@@ -364,6 +364,9 @@ Progress:
 - `acceptance-summary` exposes `control_snapshot`: a compact evidence block
   with readiness result, progress percentages, and key metrics for one saved
   control run
+- `acceptance-summary` exposes `plan_review`, which maps the current result
+  back to slices 1-6 and separates server-ready work from client hookup,
+  Infrascope split, node-envelope, and cleanup follow-ups
 - `acceptance-summary` exposes `demo_script` with a short expected result,
   current result, conclusion, and limitation text for a manual demo or
   presentation
