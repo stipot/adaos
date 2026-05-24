@@ -1058,6 +1058,37 @@ def _acceptance_demo_script(*, status: str, fail_total: int, warn_total: int) ->
     }
 
 
+def _acceptance_defense_summary(
+    *,
+    status: str,
+    metrics: Mapping[str, Any],
+    progress: Mapping[str, Any],
+    risk_register: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "thesis": "The implemented server-side migration MVP makes the operational event model observable, measurable, and repeatable.",
+        "proof_points": [
+            "Projection migration inventory finds legacy Yjs roots, manifest targets, shared bridges, and skill-local shims.",
+            "Acceptance summary combines pass/warn/fail checks, control metrics, plan review, completion gates, and risk register.",
+            "Swagger and curl examples make the same control run repeatable during a demo or diploma review.",
+        ],
+        "metrics_to_quote": {
+            "server_mvp_status": status,
+            "server_mvp_percent": progress.get("server_mvp_percent"),
+            "full_plan_estimate_percent": progress.get("full_plan_estimate_percent"),
+            "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
+            "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
+            "legacy_pressure_score": metrics.get("legacy_pressure_score"),
+        },
+        "limitations": [
+            item.get("risk")
+            for item in risk_register.get("risks", [])
+            if isinstance(item, Mapping) and item.get("risk")
+        ],
+        "closing_statement": "The MVP is ready for server-side demonstration when server_mvp_ready=true and fail_total=0; warning-level items are tracked as follow-up risks.",
+    }
+
+
 def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[str, Any]) -> dict[str, Any]:
     total = len(checks)
     pass_total = sum(1 for item in checks if item.get("status") == "pass")
@@ -1527,6 +1558,7 @@ def projection_migration_acceptance_summary(
         fail_total=fail_total,
         warn_total=warn_total,
     )
+    risk_register = _acceptance_risk_register(completion_gates=completion_gates, checks=checks)
     return {
         "ok": server_mvp_ready,
         "status": status,
@@ -1546,6 +1578,12 @@ def projection_migration_acceptance_summary(
         "evidence_rows": _acceptance_evidence_rows(metrics),
         "measurement_model": _acceptance_measurement_model(metrics),
         "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
+        "defense_summary": _acceptance_defense_summary(
+            status=status,
+            metrics=metrics,
+            progress=progress,
+            risk_register=risk_register,
+        ),
         "progress": progress,
         "control_snapshot": _acceptance_control_snapshot(
             status=status,
@@ -1562,7 +1600,7 @@ def projection_migration_acceptance_summary(
             progress=progress,
         ),
         "completion_gates": completion_gates,
-        "risk_register": _acceptance_risk_register(completion_gates=completion_gates, checks=checks),
+        "risk_register": risk_register,
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),
