@@ -297,6 +297,9 @@ Current status:
   counters, including `projection_keyed_yjs_target_total`,
   `reserved_cache_manifest_target_total`, and
   `manifest_projection_key_coverage_ratio`
+- `/api/node/projection-migration/acceptance-summary` aggregates inventory,
+  metrics, manifest guardrails, shared-bridge presence, and ranked backlog
+  into `pass`/`warn`/`fail` checks for the server-side MVP
 - migration notes are captured in `status-card-sdk-migration.md`; first real
   skill conversion remains pending
 

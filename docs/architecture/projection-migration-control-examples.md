@@ -103,6 +103,28 @@ Swagger fields:
 - `metrics.reserved_cache_manifest_target_total`: aggregate reserved cache
   violations
 
+### Acceptance Summary
+
+Use:
+
+```text
+GET /api/node/projection-migration/acceptance-summary
+```
+
+The response aggregates the migration evidence into diploma-oriented checks.
+Important fields:
+
+- `server_mvp_ready`: `true` when no blocking `fail` checks are present
+- `status`: `ready`, `ready_with_followups`, or `blocked`
+- `checks[].status`: per-check `pass`, `warn`, or `fail`
+- `checks[].evidence`: metric-backed proof for the check
+- `checks[].followup`: explicit remaining work when a warning or failure is
+  not part of the server-side MVP
+
+This endpoint is intentionally not a claim that the full AdaOS client and all
+skills are migrated. It is a compact acceptance report for the server-side
+operational event model MVP.
+
 Risk weights:
 
 | Risk | Weight |
@@ -128,6 +150,7 @@ Record:
 - `projection_record_cache_root_total`
 - `yjs_target_with_projection_key_total` in manifest inspection
 - `reserved_cache_target_total` in manifest inspection
+- `server_mvp_ready` and `checks[].status` from the acceptance summary
 - `top_monolithic_candidates`
 - `items[].recommended_next_step` from the recommendations endpoint
 
@@ -175,6 +198,8 @@ unchanged refreshes.
    next skill migration target.
 6. Execute `GET /api/node/projection-migration/monolith-inventory` when a
    detailed per-skill explanation is needed.
+7. Execute `GET /api/node/projection-migration/acceptance-summary` when a
+   compact diploma/demo readiness report is needed.
 
 These checks do not require the production web UI. They are API-level control
 examples for the migration and can be repeated after each skill migration.

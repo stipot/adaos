@@ -345,6 +345,10 @@ Progress:
 - projection migration inventory and metrics now expose manifest contract
   evidence through the API, including keyed-target coverage and reserved
   `data/projectionRecords` target violations
+- `/api/node/projection-migration/acceptance-summary` provides a compact
+  server-side MVP readiness report with `pass`/`warn`/`fail` checks over
+  inventory, metrics, manifest guardrails, shared bridge evidence, and ranked
+  migration backlog
 
 Exit criteria:
 
@@ -472,7 +476,7 @@ Use this checklist for every implementation slice touching the event model.
 | Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata plus `data/projectionRecords.node_ids`, `node_scoped_record_total`, and legacy branch compatibility classification; top-level envelope remains |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, session touch, and multi-webspace API isolation tests added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |
-| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, and optional Infrascope demanded-card refresh |
+| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, and optional Infrascope demanded-card refresh; `/api/node/projection-migration/acceptance-summary` gives a compact MVP readiness report |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime lifecycle, UI runtime diagnostics, toast notifications, and desktop shell snapshots publish platform status cards through the shared ABI |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
