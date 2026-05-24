@@ -124,6 +124,7 @@ Important fields:
   migration MVP
 - `evidence_rows[]`: compact metric table with value, direction, meaning, and
   diploma usage notes
+- `demo_script`: short explanation block for presenting the acceptance result
 - `checks[].status`: per-check `pass`, `warn`, or `fail`
 - `checks[].evidence`: metric-backed proof for the check
 - `checks[].followup`: explicit remaining work when a warning or failure is
@@ -159,6 +160,10 @@ The `evidence_rows` array is the shortest table to cite in a report:
 - `legacy_pressure_score`: remaining weighted migration backlog.
 - `reserved_cache_manifest_target_total`: must remain zero to prove the
   core-owned cache is protected.
+
+The `demo_script` block is the shortest narrative to say during a manual demo:
+it includes the expected result, current result, conclusion, and explicit
+limitations.
 
 Risk weights:
 
