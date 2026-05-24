@@ -395,6 +395,9 @@ async def publish(payload, webspace_id):
     assert summary["swagger_verification"]["endpoint"] == "/api/node/projection-migration/acceptance-summary"
     assert "server_mvp_ready=true" in summary["swagger_verification"]["expected_ok"]
     assert "risk_register.risks" in summary["swagger_verification"]["inspect_fields"]
+    assert summary["request_examples"]["base_url"] == "http://127.0.0.1:8777"
+    assert summary["request_examples"]["examples"][0]["id"] == "acceptance_summary"
+    assert "x-adaos-token: dev-local-token" in summary["request_examples"]["examples"][0]["curl"]
     evidence_by_metric = {item["metric"]: item for item in summary["evidence_rows"]}
     assert evidence_by_metric["monolith_exposure_ratio"]["direction"] == "lower_is_better"
     assert evidence_by_metric["reserved_cache_manifest_target_total"]["direction"] == "must_be_zero"
@@ -568,6 +571,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     ]
     assert payload["swagger_verification"]["headers"]["x-adaos-token"] == "dev-local-token"
     assert "ready_with_followups" in payload["swagger_verification"]["acceptable_warning"]
+    assert payload["request_examples"]["examples"][1]["id"] == "migration_metrics"
+    assert payload["request_examples"]["examples"][2]["url"].endswith("/api/node/projection-migration/recommendations")
     assert {item["metric"] for item in payload["evidence_rows"]} >= {
         "monolith_exposure_ratio",
         "migration_readiness_ratio",

@@ -892,6 +892,39 @@ def _acceptance_swagger_verification() -> dict[str, Any]:
     }
 
 
+def _acceptance_request_examples() -> dict[str, Any]:
+    base_url = "http://127.0.0.1:8777"
+    headers = {"Accept": "application/json", "x-adaos-token": "dev-local-token"}
+    return {
+        "base_url": base_url,
+        "headers": headers,
+        "examples": [
+            {
+                "id": "acceptance_summary",
+                "purpose": "Read the compact server-side MVP readiness report.",
+                "url": f"{base_url}/api/node/projection-migration/acceptance-summary",
+                "curl": "curl -X GET \"http://127.0.0.1:8777/api/node/projection-migration/acceptance-summary\" -H \"Accept: application/json\" -H \"x-adaos-token: dev-local-token\"",
+                "expect": ["server_mvp_ready=true", "fail_total=0"],
+            },
+            {
+                "id": "migration_metrics",
+                "purpose": "Read the metric block used for before/after comparison.",
+                "url": f"{base_url}/api/node/projection-migration/metrics",
+                "curl": "curl -X GET \"http://127.0.0.1:8777/api/node/projection-migration/metrics\" -H \"Accept: application/json\" -H \"x-adaos-token: dev-local-token\"",
+                "expect": ["metrics.migration_readiness_ratio", "metrics.monolith_exposure_ratio"],
+            },
+            {
+                "id": "migration_recommendations",
+                "purpose": "Read the prioritized follow-up backlog.",
+                "url": f"{base_url}/api/node/projection-migration/recommendations",
+                "curl": "curl -X GET \"http://127.0.0.1:8777/api/node/projection-migration/recommendations\" -H \"Accept: application/json\" -H \"x-adaos-token: dev-local-token\"",
+                "expect": ["items[].recommended_next_step"],
+            },
+        ],
+        "note": "Run these commands only after starting adaos api serve.",
+    }
+
+
 def _acceptance_evidence_rows(metrics: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -1473,6 +1506,7 @@ def projection_migration_acceptance_summary(
         },
         "manual_steps": _acceptance_manual_steps(),
         "swagger_verification": _acceptance_swagger_verification(),
+        "request_examples": _acceptance_request_examples(),
         "evidence_rows": _acceptance_evidence_rows(metrics),
         "measurement_model": _acceptance_measurement_model(metrics),
         "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
