@@ -355,6 +355,9 @@ Progress:
 - the same summary now exposes ordered `manual_steps` for checking
   `acceptance-summary`, `metrics`, `monolith-inventory`, and
   `recommendations` during a diploma/demo run
+- `acceptance-summary` also exposes `evidence_rows`: a compact table of
+  report-ready metrics with value, expected direction, meaning, and diploma
+  usage notes
 
 Exit criteria:
 

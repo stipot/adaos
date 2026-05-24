@@ -122,6 +122,8 @@ Important fields:
   Swagger check
 - `manual_steps[]`: ordered Swagger/API checks for validating the server-side
   migration MVP
+- `evidence_rows[]`: compact metric table with value, direction, meaning, and
+  diploma usage notes
 - `checks[].status`: per-check `pass`, `warn`, or `fail`
 - `checks[].evidence`: metric-backed proof for the check
 - `checks[].followup`: explicit remaining work when a warning or failure is
@@ -146,6 +148,17 @@ The `manual_steps` array should be followed in order:
 2. `metrics`: inspect aggregate migration ratios.
 3. `monolith-inventory`: inspect per-skill roots and compatibility metadata.
 4. `recommendations`: inspect prioritized follow-up work.
+
+The `evidence_rows` array is the shortest table to cite in a report:
+
+- `monolith_exposure_ratio`: remaining dependence on monolithic Yjs roots.
+- `migration_readiness_ratio`: share of surfaces already covered by the new
+  model.
+- `manifest_projection_key_coverage_ratio`: manifest alignment with
+  canonical projection keys.
+- `legacy_pressure_score`: remaining weighted migration backlog.
+- `reserved_cache_manifest_target_total`: must remain zero to prove the
+  core-owned cache is protected.
 
 Risk weights:
 
