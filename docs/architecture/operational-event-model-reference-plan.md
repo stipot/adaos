@@ -352,6 +352,9 @@ Progress:
 - the acceptance summary now includes `interpretation` and `manual_review`
   blocks so a manual Swagger check explains what `ready_with_followups` means
   and which fields should be inspected first
+- the same summary now exposes ordered `manual_steps` for checking
+  `acceptance-summary`, `metrics`, `monolith-inventory`, and
+  `recommendations` during a diploma/demo run
 
 Exit criteria:
 

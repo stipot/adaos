@@ -120,6 +120,8 @@ Important fields:
 - `interpretation.next_action`: what to do with the report result
 - `manual_review.inspect_first`: fields to inspect first during a manual
   Swagger check
+- `manual_steps[]`: ordered Swagger/API checks for validating the server-side
+  migration MVP
 - `checks[].status`: per-check `pass`, `warn`, or `fail`
 - `checks[].evidence`: metric-backed proof for the check
 - `checks[].followup`: explicit remaining work when a warning or failure is
@@ -137,6 +139,13 @@ For a normal diploma MVP demo, the expected result is:
 
 `ready_with_followups` is acceptable when the warning checks explicitly name
 remaining client hookup, skill migration, or legacy cleanup work.
+
+The `manual_steps` array should be followed in order:
+
+1. `acceptance-summary`: confirm readiness and read the interpretation.
+2. `metrics`: inspect aggregate migration ratios.
+3. `monolith-inventory`: inspect per-skill roots and compatibility metadata.
+4. `recommendations`: inspect prioritized follow-up work.
 
 Risk weights:
 
