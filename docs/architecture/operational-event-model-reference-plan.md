@@ -361,6 +361,9 @@ Progress:
 - `acceptance-summary` exposes `measurement_model` with repeatable
   before/after comparison rows, baseline policy, current metric values, and
   comparison rules for chapter 3 control examples
+- `acceptance-summary` exposes `control_snapshot`: a compact evidence block
+  with readiness result, progress percentages, and key metrics for one saved
+  control run
 - `acceptance-summary` exposes `demo_script` with a short expected result,
   current result, conclusion, and limitation text for a manual demo or
   presentation
