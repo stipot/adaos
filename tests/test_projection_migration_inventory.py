@@ -398,6 +398,9 @@ async def publish(payload, webspace_id):
     assert summary["request_examples"]["base_url"] == "http://127.0.0.1:8777"
     assert summary["request_examples"]["examples"][0]["id"] == "acceptance_summary"
     assert "x-adaos-token: dev-local-token" in summary["request_examples"]["examples"][0]["curl"]
+    assert summary["traceability_matrix"][0]["plan_item"] == "Slice 2 Browser Demand Runtime"
+    assert "completion_gates" in summary["traceability_matrix"][-1]["api_fields"][0]
+    assert "chapter 3" in summary["traceability_matrix"][3]["vkr_use"]
     evidence_by_metric = {item["metric"]: item for item in summary["evidence_rows"]}
     assert evidence_by_metric["monolith_exposure_ratio"]["direction"] == "lower_is_better"
     assert evidence_by_metric["reserved_cache_manifest_target_total"]["direction"] == "must_be_zero"
@@ -573,6 +576,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert "ready_with_followups" in payload["swagger_verification"]["acceptable_warning"]
     assert payload["request_examples"]["examples"][1]["id"] == "migration_metrics"
     assert payload["request_examples"]["examples"][2]["url"].endswith("/api/node/projection-migration/recommendations")
+    assert payload["traceability_matrix"][-1]["plan_item"] == "Completion Definition"
+    assert "request_examples" in payload["traceability_matrix"][-1]["api_fields"]
     assert {item["metric"] for item in payload["evidence_rows"]} >= {
         "monolith_exposure_ratio",
         "migration_readiness_ratio",

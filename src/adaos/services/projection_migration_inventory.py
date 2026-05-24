@@ -925,6 +925,41 @@ def _acceptance_request_examples() -> dict[str, Any]:
     }
 
 
+def _acceptance_traceability_matrix() -> list[dict[str, Any]]:
+    return [
+        {
+            "plan_item": "Slice 2 Browser Demand Runtime",
+            "api_fields": ["plan_review.slices[1]", "completion_gates.gates[browser_multi_demand]"],
+            "vkr_use": "Explain why server demand is ready while direct browser hookup remains a follow-up.",
+            "verification": "Check plan_review.slices where name is Browser Demand Runtime and read remaining[].",
+        },
+        {
+            "plan_item": "Slice 3 Shared Dispatcher",
+            "api_fields": ["plan_review.slices[2]", "completion_gates.gates[dispatcher_no_cross_webspace_churn]"],
+            "vkr_use": "Show that demanded refresh and no-cross-webspace behavior are covered by the server MVP.",
+            "verification": "Confirm dispatcher_no_cross_webspace_churn has status=pass.",
+        },
+        {
+            "plan_item": "Slice 5 Heavy Skill Pilot",
+            "api_fields": ["plan_review.slices[4]", "completion_gates.gates[heavy_pilot_shared_abi]"],
+            "vkr_use": "Connect Infrascope status-card migration to the heavy skill pilot requirement.",
+            "verification": "Confirm heavy_pilot_shared_abi has status=pass and risk_register names remaining split work.",
+        },
+        {
+            "plan_item": "Slice 6 Cross-Skill Rollout",
+            "api_fields": ["measurement_model", "control_snapshot", "risk_register"],
+            "vkr_use": "Use metrics, snapshots, and risks as chapter 3 control evidence.",
+            "verification": "Save control_snapshot and compare measurement_model rows against a baseline.",
+        },
+        {
+            "plan_item": "Completion Definition",
+            "api_fields": ["completion_gates", "swagger_verification", "request_examples"],
+            "vkr_use": "Show which completion gates pass and how the result can be manually repeated.",
+            "verification": "Run request_examples.acceptance_summary after adaos api serve and inspect completion_gates.",
+        },
+    ]
+
+
 def _acceptance_evidence_rows(metrics: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -1507,6 +1542,7 @@ def projection_migration_acceptance_summary(
         "manual_steps": _acceptance_manual_steps(),
         "swagger_verification": _acceptance_swagger_verification(),
         "request_examples": _acceptance_request_examples(),
+        "traceability_matrix": _acceptance_traceability_matrix(),
         "evidence_rows": _acceptance_evidence_rows(metrics),
         "measurement_model": _acceptance_measurement_model(metrics),
         "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
