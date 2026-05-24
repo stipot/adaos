@@ -125,6 +125,8 @@ Important fields:
 - `evidence_rows[]`: compact metric table with value, direction, meaning, and
   diploma usage notes
 - `demo_script`: short explanation block for presenting the acceptance result
+- `progress`: compact progress summary for the server MVP and the larger
+  end-to-end plan
 - `checks[].status`: per-check `pass`, `warn`, or `fail`
 - `checks[].evidence`: metric-backed proof for the check
 - `checks[].followup`: explicit remaining work when a warning or failure is
@@ -164,6 +166,24 @@ The `evidence_rows` array is the shortest table to cite in a report:
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit
 limitations.
+
+The `progress` block separates two numbers:
+
+- `server_mvp_percent`: weighted progress for the implemented server-side
+  acceptance checks.
+- `full_plan_estimate_percent`: conservative estimate for the wider AdaOS
+  roadmap, including client adapter, full Infrascope split, node top-level Yjs
+  envelope, and legacy cleanup.
+- `completed_groups[]`: already implemented server-side migration groups.
+- `remaining_groups[]`: explicit groups that keep the full-plan estimate below
+  the server MVP number.
+- `headline_metrics`: report-friendly ratios such as
+  `migration_readiness_ratio`, `legacy_pressure_score`, and
+  `manifest_projection_key_coverage_ratio`.
+
+For diploma reporting, use `server_mvp_percent` to describe the current
+implemented backend scope and `full_plan_estimate_percent` to explain why the
+whole AdaOS migration is not presented as finished yet.
 
 Risk weights:
 

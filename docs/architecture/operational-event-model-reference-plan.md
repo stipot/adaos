@@ -361,6 +361,11 @@ Progress:
 - `acceptance-summary` exposes `demo_script` with a short expected result,
   current result, conclusion, and limitation text for a manual demo or
   presentation
+- `acceptance-summary` exposes a `progress` block that separates weighted
+  server-side MVP progress from the wider full-plan estimate and names the
+  remaining work groups; the block also carries `completed_groups`,
+  `remaining_groups`, and `headline_metrics` so the current status can be
+  checked without interpreting every low-level metric by hand
 
 Exit criteria:
 
