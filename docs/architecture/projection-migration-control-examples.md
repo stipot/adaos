@@ -132,6 +132,8 @@ Important fields:
   `operational-event-model-reference-plan.md`
 - `completion_gates`: checklist derived from the plan completion definition,
   with pass/warn/fail status for each gate
+- `risk_register`: risk/limitation register generated from warning gates and
+  remaining acceptance checks
 - `demo_script`: short explanation block for presenting the acceptance result
 - `progress`: compact progress summary for the server MVP and the larger
   end-to-end plan
@@ -192,6 +194,11 @@ The `completion_gates` block converts the plan's Completion Definition into a
 checklist. `pass` gates are already covered by the server-side MVP, while
 `warn` gates name follow-up work such as direct browser hookup, named-entity
 consumer invalidation, and full event producer/client test migration.
+
+The `risk_register` block turns those warnings into demo-ready risk statements.
+Each row names a risk, impact, mitigation, and verification step. It is useful
+for the diploma limitations section because it keeps the MVP claim honest while
+still showing that remaining work is controlled.
 
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit

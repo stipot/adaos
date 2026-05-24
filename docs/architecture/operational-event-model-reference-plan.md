@@ -370,6 +370,9 @@ Progress:
 - `acceptance-summary` exposes `completion_gates`, a pass/warn/fail checklist
   derived from this Completion Definition so server-ready gates and remaining
   follow-ups can be read directly from Swagger
+- `acceptance-summary` exposes `risk_register`, generated from warning gates
+  and acceptance checks, with risk, impact, mitigation, and verification text
+  for diploma limitations and demo notes
 - `acceptance-summary` exposes `demo_script` with a short expected result,
   current result, conclusion, and limitation text for a manual demo or
   presentation
