@@ -358,6 +358,9 @@ Progress:
 - `acceptance-summary` also exposes `evidence_rows`: a compact table of
   report-ready metrics with value, expected direction, meaning, and diploma
   usage notes
+- `acceptance-summary` exposes `measurement_model` with repeatable
+  before/after comparison rows, baseline policy, current metric values, and
+  comparison rules for chapter 3 control examples
 - `acceptance-summary` exposes `demo_script` with a short expected result,
   current result, conclusion, and limitation text for a manual demo or
   presentation

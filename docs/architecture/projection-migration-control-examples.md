@@ -124,6 +124,8 @@ Important fields:
   migration MVP
 - `evidence_rows[]`: compact metric table with value, direction, meaning, and
   diploma usage notes
+- `measurement_model`: before/after measurement rows with current values,
+  baseline policy, comparison rules, and formulas
 - `demo_script`: short explanation block for presenting the acceptance result
 - `progress`: compact progress summary for the server MVP and the larger
   end-to-end plan
@@ -162,6 +164,13 @@ The `evidence_rows` array is the shortest table to cite in a report:
 - `legacy_pressure_score`: remaining weighted migration backlog.
 - `reserved_cache_manifest_target_total`: must remain zero to prove the
   core-owned cache is protected.
+
+The `measurement_model` block is the repeatable measurement method for chapter
+3. Use `rows[].current_value` as the current control run, store a baseline from
+the original branch or first saved snapshot, and compare the values with
+`rows[].comparison_rule`. Higher-is-better metrics use
+`current_value > baseline_value`; lower-is-better metrics use
+`current_value < baseline_value`.
 
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit
