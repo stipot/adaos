@@ -392,6 +392,9 @@ async def publish(payload, webspace_id):
     assert summary["manual_steps"][0]["endpoint"] == "/api/node/projection-migration/acceptance-summary"
     assert summary["manual_steps"][1]["endpoint"] == "/api/node/projection-migration/metrics"
     assert "metrics.migration_readiness_ratio" in summary["manual_steps"][1]["look_at"]
+    assert summary["swagger_verification"]["endpoint"] == "/api/node/projection-migration/acceptance-summary"
+    assert "server_mvp_ready=true" in summary["swagger_verification"]["expected_ok"]
+    assert "risk_register.risks" in summary["swagger_verification"]["inspect_fields"]
     evidence_by_metric = {item["metric"]: item for item in summary["evidence_rows"]}
     assert evidence_by_metric["monolith_exposure_ratio"]["direction"] == "lower_is_better"
     assert evidence_by_metric["reserved_cache_manifest_target_total"]["direction"] == "must_be_zero"
@@ -563,6 +566,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
         "/api/node/projection-migration/monolith-inventory",
         "/api/node/projection-migration/recommendations",
     ]
+    assert payload["swagger_verification"]["headers"]["x-adaos-token"] == "dev-local-token"
+    assert "ready_with_followups" in payload["swagger_verification"]["acceptable_warning"]
     assert {item["metric"] for item in payload["evidence_rows"]} >= {
         "monolith_exposure_ratio",
         "migration_readiness_ratio",

@@ -868,6 +868,30 @@ def _acceptance_manual_steps() -> list[dict[str, Any]]:
     ]
 
 
+def _acceptance_swagger_verification() -> dict[str, Any]:
+    return {
+        "title": "Manual Swagger verification for the server-side migration MVP",
+        "endpoint": "/api/node/projection-migration/acceptance-summary",
+        "method": "GET",
+        "headers": {"x-adaos-token": "dev-local-token"},
+        "expected_ok": [
+            "server_mvp_ready=true",
+            "fail_total=0",
+            "status is ready or ready_with_followups",
+        ],
+        "inspect_fields": [
+            "interpretation.meaning",
+            "progress.server_mvp_percent",
+            "progress.full_plan_estimate_percent",
+            "control_snapshot.result",
+            "completion_gates.status",
+            "risk_register.risks",
+        ],
+        "acceptable_warning": "ready_with_followups is acceptable when risk_register and completion_gates describe the follow-up work.",
+        "failure_action": "If fail_total is greater than zero, inspect checks[] with status=fail before using the result as evidence.",
+    }
+
+
 def _acceptance_evidence_rows(metrics: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -1448,6 +1472,7 @@ def projection_migration_acceptance_summary(
             "swagger_hint": "Open /api/node/projection-migration/acceptance-summary and read interpretation.meaning first.",
         },
         "manual_steps": _acceptance_manual_steps(),
+        "swagger_verification": _acceptance_swagger_verification(),
         "evidence_rows": _acceptance_evidence_rows(metrics),
         "measurement_model": _acceptance_measurement_model(metrics),
         "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
