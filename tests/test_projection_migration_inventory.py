@@ -396,6 +396,11 @@ async def publish(payload, webspace_id):
     assert evidence_by_metric["monolith_exposure_ratio"]["direction"] == "lower_is_better"
     assert evidence_by_metric["reserved_cache_manifest_target_total"]["direction"] == "must_be_zero"
     assert "ProjectionRecord ABI" in evidence_by_metric["manifest_projection_key_coverage_ratio"]["vkr_use"]
+    measurement_by_metric = {item["metric"]: item for item in summary["measurement_model"]["rows"]}
+    assert measurement_by_metric["migration_readiness_ratio"]["comparison_rule"] == "current_value > baseline_value"
+    assert measurement_by_metric["monolith_exposure_ratio"]["comparison_rule"] == "current_value < baseline_value"
+    assert measurement_by_metric["migration_readiness_ratio"]["current_value"] == 0.5
+    assert "legacy_pressure_score" in summary["measurement_model"]["primary_metrics"]
     assert summary["demo_script"]["current_result"] == "Current status is ready_with_followups; fail_total=0, warn_total=1."
     assert "ready for demonstration" in summary["demo_script"]["conclusion"]
     assert summary["progress"]["server_mvp_percent"] == 91.7
@@ -541,6 +546,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
         "migration_readiness_ratio",
         "reserved_cache_manifest_target_total",
     }
+    assert payload["measurement_model"]["endpoint"] == "/api/node/projection-migration/metrics"
+    assert payload["measurement_model"]["rows"][0]["baseline_source"]
     assert payload["demo_script"]["expected_result"] == "The demo is acceptable when server_mvp_ready=true and fail_total=0."
     assert payload["progress"]["server_mvp_percent"] >= 80.0
     assert "migration_readiness_ratio" in payload["progress"]["headline_metrics"]

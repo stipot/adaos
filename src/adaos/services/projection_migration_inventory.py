@@ -908,6 +908,45 @@ def _acceptance_evidence_rows(metrics: Mapping[str, Any]) -> list[dict[str, Any]
     ]
 
 
+def _acceptance_measurement_model(metrics: Mapping[str, Any]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for definition in _metric_definitions():
+        metric = str(definition.get("metric") or "").strip()
+        direction = str(definition.get("direction") or "").strip()
+        if direction == "higher_is_better":
+            comparison_rule = "current_value > baseline_value"
+            interpretation = "Improvement is recorded when the current value is higher than the baseline snapshot."
+        elif direction == "lower_is_better":
+            comparison_rule = "current_value < baseline_value"
+            interpretation = "Improvement is recorded when the current value is lower than the baseline snapshot."
+        else:
+            comparison_rule = "current_value == target_value"
+            interpretation = "Improvement is recorded when the current value reaches the required target."
+        rows.append(
+            {
+                "metric": metric,
+                "direction": direction,
+                "current_value": metrics.get(metric),
+                "baseline_source": "Run the same endpoint on the pre-migration branch or use the first saved control snapshot.",
+                "comparison_rule": comparison_rule,
+                "formula": definition.get("formula"),
+                "interpretation": interpretation,
+            }
+        )
+    return {
+        "purpose": "Defines repeatable before/after metrics for diploma control examples.",
+        "endpoint": "/api/node/projection-migration/metrics",
+        "baseline_policy": "Use a saved metrics snapshot from the original branch or the earliest recorded control run.",
+        "rows": rows,
+        "primary_metrics": [
+            "migration_readiness_ratio",
+            "monolith_exposure_ratio",
+            "legacy_pressure_score",
+            "local_shim_pressure_score",
+        ],
+    }
+
+
 def _acceptance_demo_script(*, status: str, fail_total: int, warn_total: int) -> dict[str, Any]:
     if status == "blocked":
         conclusion = "Server-side migration MVP is not ready for demonstration until fail checks are resolved."
@@ -1139,6 +1178,7 @@ def projection_migration_acceptance_summary(
         },
         "manual_steps": _acceptance_manual_steps(),
         "evidence_rows": _acceptance_evidence_rows(metrics),
+        "measurement_model": _acceptance_measurement_model(metrics),
         "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
         "progress": _acceptance_progress(checks=checks, metrics=metrics),
         "skills_root": metrics_report["skills_root"],
