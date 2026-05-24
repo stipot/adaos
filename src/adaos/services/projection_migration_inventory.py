@@ -825,6 +825,49 @@ def _acceptance_interpretation(*, status: str, fail_total: int, warn_total: int)
     }
 
 
+def _acceptance_manual_steps() -> list[dict[str, Any]]:
+    return [
+        {
+            "step": 1,
+            "title": "Open the compact readiness report",
+            "endpoint": "/api/node/projection-migration/acceptance-summary",
+            "expected": ["server_mvp_ready=true", "fail_total=0"],
+            "look_at": ["interpretation.meaning", "manual_review.inspect_first", "checks[].status"],
+        },
+        {
+            "step": 2,
+            "title": "Inspect aggregate migration metrics",
+            "endpoint": "/api/node/projection-migration/metrics",
+            "expected": ["metric_definitions contains control ratios"],
+            "look_at": [
+                "metrics.monolith_exposure_ratio",
+                "metrics.migration_readiness_ratio",
+                "metrics.manifest_projection_key_coverage_ratio",
+                "metrics.legacy_pressure_score",
+            ],
+        },
+        {
+            "step": 3,
+            "title": "Inspect per-skill migration evidence",
+            "endpoint": "/api/node/projection-migration/monolith-inventory",
+            "expected": ["items[].roots[].compatibility is present"],
+            "look_at": [
+                "items[].skill_id",
+                "items[].roots[].shape",
+                "items[].roots[].compatibility",
+                "items[].manifest_contract",
+            ],
+        },
+        {
+            "step": 4,
+            "title": "Inspect prioritized follow-up work",
+            "endpoint": "/api/node/projection-migration/recommendations",
+            "expected": ["items[].recommended_next_step is present for remaining work"],
+            "look_at": ["items[].priority_score", "items[].actions", "items[].recommended_next_step"],
+        },
+    ]
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -948,6 +991,7 @@ def projection_migration_acceptance_summary(
             "inspect_first": ["status", "server_mvp_ready", "fail_total", "warn_total", "checks"],
             "swagger_hint": "Open /api/node/projection-migration/acceptance-summary and read interpretation.meaning first.",
         },
+        "manual_steps": _acceptance_manual_steps(),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),

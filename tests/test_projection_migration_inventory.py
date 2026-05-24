@@ -389,6 +389,9 @@ async def publish(payload, webspace_id):
     assert "demonstrable" in summary["interpretation"]["meaning"]
     assert summary["manual_review"]["expected_for_demo"] == "server_mvp_ready=true and fail_total=0"
     assert "checks" in summary["manual_review"]["inspect_first"]
+    assert summary["manual_steps"][0]["endpoint"] == "/api/node/projection-migration/acceptance-summary"
+    assert summary["manual_steps"][1]["endpoint"] == "/api/node/projection-migration/metrics"
+    assert "metrics.migration_readiness_ratio" in summary["manual_steps"][1]["look_at"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -514,6 +517,12 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert payload["scope"] == "server-side operational event model MVP"
     assert payload["manual_review"]["acceptable_warning_status"] == "ready_with_followups"
     assert payload["interpretation"]["how_to_read"][0].startswith("server_mvp_ready=true")
+    assert [item["endpoint"] for item in payload["manual_steps"]] == [
+        "/api/node/projection-migration/acceptance-summary",
+        "/api/node/projection-migration/metrics",
+        "/api/node/projection-migration/monolith-inventory",
+        "/api/node/projection-migration/recommendations",
+    ]
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",
