@@ -358,6 +358,9 @@ Progress:
 - `acceptance-summary` exposes `swagger_verification`, a compact single-endpoint
   checklist with expected success markers, fields to inspect, and a failure
   action for manual Swagger checks
+- `acceptance-summary` exposes `request_examples` with curl-ready calls for
+  `acceptance-summary`, `metrics`, and `recommendations` so control runs can be
+  repeated from a terminal after `adaos api serve`
 - `acceptance-summary` also exposes `evidence_rows`: a compact table of
   report-ready metrics with value, expected direction, meaning, and diploma
   usage notes

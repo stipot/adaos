@@ -124,6 +124,8 @@ Important fields:
   migration MVP
 - `swagger_verification`: single-endpoint Swagger checklist for the compact
   acceptance response
+- `request_examples`: terminal request examples for repeating the same checks
+  with curl after `adaos api serve` is running
 - `evidence_rows[]`: compact metric table with value, direction, meaning, and
   diploma usage notes
 - `measurement_model`: before/after measurement rows with current values,
@@ -168,6 +170,10 @@ The `swagger_verification` block is the fastest manual check when only one
 endpoint is opened. It names the required header, the expected success markers,
 the fields to inspect, and the action to take if `fail_total` is greater than
 zero.
+
+The `request_examples` block contains repeatable terminal checks for
+`acceptance-summary`, `metrics`, and `recommendations`. Use it when Swagger UI
+is not convenient or when a control run needs to be repeated from a script.
 
 The `evidence_rows` array is the shortest table to cite in a report:
 
