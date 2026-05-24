@@ -426,6 +426,12 @@ async def publish(payload, webspace_id):
         "browser_multi_demand",
         "heavy_pilot_shared_abi",
     }
+    assert summary["risk_register"]["status"] == "watch"
+    assert summary["risk_register"]["risk_total"] == 4
+    assert {item["id"] for item in summary["risk_register"]["risks"]} >= {
+        "risk.browser_multi_demand",
+        "risk.legacy_projection_backlog",
+    }
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -575,6 +581,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert payload["plan_review"]["slices"][1]["name"] == "Browser Demand Runtime"
     assert payload["completion_gates"]["server_mvp_ready"] is True
     assert payload["completion_gates"]["warn_total"] >= 1
+    assert payload["risk_register"]["risk_total"] >= 3
+    assert payload["risk_register"]["risks"][0]["mitigation"]
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",

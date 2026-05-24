@@ -1252,6 +1252,71 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
     }
 
 
+def _acceptance_risk_register(
+    *,
+    completion_gates: Mapping[str, Any],
+    checks: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    risks: list[dict[str, Any]] = []
+    gate_risk_map = {
+        "browser_multi_demand": {
+            "risk": "Browser UI may keep reading legacy branches while the server-side ProjectionRecord cache is ready.",
+            "impact": "The API can demonstrate the model, but the visible web UI may not prove full client migration yet.",
+            "mitigation": "Finish direct browser adapter hookup and verify widgets against data/projectionRecords.",
+            "verification": "Run the web UI and confirm status widgets render from ProjectionRecord-backed data.",
+        },
+        "named_entity_invalidation": {
+            "risk": "Named-entity consumers may still rely on reload-only compatibility behavior.",
+            "impact": "Entity metadata is available, but reactive invalidation remains incomplete for some consumers.",
+            "mitigation": "Move consumers from read-only registry lookup to lifecycle-aware invalidation.",
+            "verification": "Trigger named-entity lifecycle changes and confirm affected consumers update without a full reload.",
+        },
+        "acceptance_test_coverage": {
+            "risk": "Some full-plan tests require browser client and producer migration that are outside this checkout.",
+            "impact": "Server-side MVP tests are strong, while full end-to-end assurance still needs client-side coverage.",
+            "mitigation": "Add browser client tests after the adapter is available and migrate remaining event producers.",
+            "verification": "Run client integration tests plus the projection/status-card server regression suite.",
+        },
+    }
+    for gate in completion_gates.get("gates") or []:
+        if not isinstance(gate, Mapping) or gate.get("status") != "warn":
+            continue
+        gate_id = str(gate.get("id") or "")
+        template = gate_risk_map.get(gate_id)
+        if not template:
+            continue
+        risks.append(
+            {
+                "id": f"risk.{gate_id}",
+                "source": "completion_gates",
+                "severity": "medium",
+                **template,
+            }
+        )
+
+    for check in checks:
+        if check.get("id") != "legacy_work_bounded" or check.get("status") != "warn":
+            continue
+        risks.append(
+            {
+                "id": "risk.legacy_projection_backlog",
+                "source": "acceptance_checks",
+                "severity": "medium",
+                "risk": "Remaining monolithic publishers and local shims can slow full rollout after the MVP.",
+                "impact": "The MVP remains demonstrable, but cross-skill migration still needs prioritized cleanup.",
+                "mitigation": "Use migration recommendations to migrate high-risk monolithic publishers first.",
+                "verification": "Track monolith_exposure_ratio, legacy_pressure_score, and local_shim_pressure_score trending down.",
+            }
+        )
+
+    return {
+        "status": "watch" if risks else "clear",
+        "risk_total": len(risks),
+        "risks": risks,
+        "usage": "Use this block as the risk/limitations register for the diploma and demo notes.",
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -1365,6 +1430,11 @@ def projection_migration_acceptance_summary(
     interpretation = _acceptance_interpretation(status=status, fail_total=fail_total, warn_total=warn_total)
     server_mvp_ready = fail_total == 0
     progress = _acceptance_progress(checks=checks, metrics=metrics)
+    completion_gates = _acceptance_completion_gates(
+        server_mvp_ready=server_mvp_ready,
+        fail_total=fail_total,
+        warn_total=warn_total,
+    )
     return {
         "ok": server_mvp_ready,
         "status": status,
@@ -1396,11 +1466,8 @@ def projection_migration_acceptance_summary(
             server_mvp_ready=server_mvp_ready,
             progress=progress,
         ),
-        "completion_gates": _acceptance_completion_gates(
-            server_mvp_ready=server_mvp_ready,
-            fail_total=fail_total,
-            warn_total=warn_total,
-        ),
+        "completion_gates": completion_gates,
+        "risk_register": _acceptance_risk_register(completion_gates=completion_gates, checks=checks),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),
