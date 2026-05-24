@@ -177,6 +177,8 @@ The `progress` block separates two numbers:
 - `completed_groups[]`: already implemented server-side migration groups.
 - `remaining_groups[]`: explicit groups that keep the full-plan estimate below
   the server MVP number.
+- `remaining_group_details[]`: the same remaining groups with a reason and a
+  verification hint for the next control run.
 - `headline_metrics`: report-friendly ratios such as
   `migration_readiness_ratio`, `legacy_pressure_score`, and
   `manifest_projection_key_coverage_ratio`.
