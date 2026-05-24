@@ -1089,6 +1089,104 @@ def _acceptance_control_snapshot(
     }
 
 
+def _acceptance_plan_review(
+    *,
+    status: str,
+    server_mvp_ready: bool,
+    progress: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "purpose": "Maps the current acceptance result back to operational-event-model-reference-plan.md.",
+        "reference": "docs/architecture/operational-event-model-reference-plan.md",
+        "overall": {
+            "server_mvp_status": status,
+            "server_mvp_ready": bool(server_mvp_ready),
+            "server_mvp_percent": progress.get("server_mvp_percent"),
+            "full_plan_estimate_percent": progress.get("full_plan_estimate_percent"),
+        },
+        "slices": [
+            {
+                "slice": 1,
+                "name": "Shared ABI Foundation",
+                "state": "mostly_complete",
+                "completed": [
+                    "projection key helpers",
+                    "ProjectionRecord shape",
+                    "status-card ABI reference",
+                    "read-only named entity registry reference",
+                ],
+                "remaining": ["event producer migration"],
+            },
+            {
+                "slice": 2,
+                "name": "Browser Demand Runtime",
+                "state": "server_ready_client_pending",
+                "completed": [
+                    "server demand registry",
+                    "full-overwrite API",
+                    "browser-state mapper",
+                    "session touch and stale marking",
+                ],
+                "remaining": ["direct browser client hookup"],
+            },
+            {
+                "slice": 3,
+                "name": "Shared Dispatcher",
+                "state": "server_ready",
+                "completed": [
+                    "per-webspace demanded refresh",
+                    "status-card wildcard handler",
+                    "ProjectionRecord materialization",
+                    "Yjs projection cache diagnostics",
+                ],
+                "remaining": ["client adapter consumption of the materialized cache"],
+            },
+            {
+                "slice": 4,
+                "name": "Platform Emitters Pilot",
+                "state": "pilot_ready",
+                "completed": [
+                    "runtime status card",
+                    "UI runtime diagnostics card",
+                    "notifications card",
+                    "desktop shell card",
+                ],
+                "remaining": ["push/delta consumption outside the first pilot"],
+            },
+            {
+                "slice": 5,
+                "name": "Heavy Skill Pilot",
+                "state": "server_pilot_ready",
+                "completed": [
+                    "Infrascope status-card adapter",
+                    "demanded-only refresh",
+                    "diagnostics correlation",
+                    "lazy details refresh",
+                ],
+                "remaining": ["live skill refresh hookup", "full Infrascope projection-family split"],
+            },
+            {
+                "slice": 6,
+                "name": "Cross-Skill Rollout",
+                "state": "mvp_acceptance_ready",
+                "completed": [
+                    "migration inventory",
+                    "control metrics",
+                    "recommendations",
+                    "acceptance summary",
+                    "measurement and control snapshots",
+                ],
+                "remaining": [
+                    "skill-by-skill migration",
+                    "legacy cleanup",
+                    "node-aware top-level Yjs envelope",
+                ],
+            },
+        ],
+        "remaining_themes": list(progress.get("remaining_groups") or []),
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -1227,6 +1325,11 @@ def projection_migration_acceptance_summary(
             metrics=metrics,
             progress=progress,
             updated_at=metrics_report["updated_at"],
+        ),
+        "plan_review": _acceptance_plan_review(
+            status=status,
+            server_mvp_ready=server_mvp_ready,
+            progress=progress,
         ),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),

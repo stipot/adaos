@@ -414,6 +414,10 @@ async def publish(payload, webspace_id):
     assert summary["control_snapshot"]["result"]["server_mvp_percent"] == 91.7
     assert summary["control_snapshot"]["key_metrics"]["migration_readiness_ratio"] == 0.5
     assert "diploma" in summary["control_snapshot"]["save_hint"]
+    assert summary["plan_review"]["reference"] == "docs/architecture/operational-event-model-reference-plan.md"
+    assert summary["plan_review"]["overall"]["server_mvp_percent"] == 91.7
+    assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
+    assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -559,6 +563,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert payload["progress"]["followup_roadmap"][-1]["milestone"] == "legacy_projection_cleanup"
     assert payload["control_snapshot"]["source_endpoint"] == "/api/node/projection-migration/acceptance-summary"
     assert payload["control_snapshot"]["result"]["server_mvp_ready"] is True
+    assert payload["plan_review"]["overall"]["server_mvp_ready"] is True
+    assert payload["plan_review"]["slices"][1]["name"] == "Browser Demand Runtime"
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",
