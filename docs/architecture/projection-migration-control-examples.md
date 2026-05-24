@@ -122,6 +122,8 @@ Important fields:
   Swagger check
 - `manual_steps[]`: ordered Swagger/API checks for validating the server-side
   migration MVP
+- `swagger_verification`: single-endpoint Swagger checklist for the compact
+  acceptance response
 - `evidence_rows[]`: compact metric table with value, direction, meaning, and
   diploma usage notes
 - `measurement_model`: before/after measurement rows with current values,
@@ -161,6 +163,11 @@ The `manual_steps` array should be followed in order:
 2. `metrics`: inspect aggregate migration ratios.
 3. `monolith-inventory`: inspect per-skill roots and compatibility metadata.
 4. `recommendations`: inspect prioritized follow-up work.
+
+The `swagger_verification` block is the fastest manual check when only one
+endpoint is opened. It names the required header, the expected success markers,
+the fields to inspect, and the action to take if `fail_total` is greater than
+zero.
 
 The `evidence_rows` array is the shortest table to cite in a report:
 
