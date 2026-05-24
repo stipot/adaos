@@ -126,6 +126,8 @@ Important fields:
   acceptance response
 - `request_examples`: terminal request examples for repeating the same checks
   with curl after `adaos api serve` is running
+- `traceability_matrix`: mapping from plan items to API fields, diploma usage,
+  and verification steps
 - `evidence_rows[]`: compact metric table with value, direction, meaning, and
   diploma usage notes
 - `measurement_model`: before/after measurement rows with current values,
@@ -174,6 +176,10 @@ zero.
 The `request_examples` block contains repeatable terminal checks for
 `acceptance-summary`, `metrics`, and `recommendations`. Use it when Swagger UI
 is not convenient or when a control run needs to be repeated from a script.
+
+The `traceability_matrix` block links the plan, API evidence, and diploma text.
+It is useful during review because each row answers: which plan item is covered,
+which response fields prove it, and how the result should be verified.
 
 The `evidence_rows` array is the shortest table to cite in a report:
 

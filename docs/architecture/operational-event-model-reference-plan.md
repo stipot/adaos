@@ -361,6 +361,8 @@ Progress:
 - `acceptance-summary` exposes `request_examples` with curl-ready calls for
   `acceptance-summary`, `metrics`, and `recommendations` so control runs can be
   repeated from a terminal after `adaos api serve`
+- `acceptance-summary` exposes `traceability_matrix`, mapping plan items to
+  API fields, diploma usage, and verification steps for review/defense
 - `acceptance-summary` also exposes `evidence_rows`: a compact table of
   report-ready metrics with value, expected direction, meaning, and diploma
   usage notes
