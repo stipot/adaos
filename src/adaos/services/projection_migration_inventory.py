@@ -927,6 +927,41 @@ def _acceptance_demo_script(*, status: str, fail_total: int, warn_total: int) ->
     }
 
 
+def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[str, Any]) -> dict[str, Any]:
+    total = len(checks)
+    pass_total = sum(1 for item in checks if item.get("status") == "pass")
+    warn_total = sum(1 for item in checks if item.get("status") == "warn")
+    fail_total = sum(1 for item in checks if item.get("status") == "fail")
+    weighted_done = pass_total + warn_total * 0.5
+    server_mvp_percent = round((weighted_done / total) * 100, 1) if total else 0.0
+    full_plan_estimate_percent = 65.0 if fail_total == 0 else 55.0
+    return {
+        "server_mvp_percent": server_mvp_percent,
+        "server_mvp_basis": "pass checks count as complete; warn checks count as half because they are documented follow-up work",
+        "full_plan_estimate_percent": full_plan_estimate_percent,
+        "full_plan_basis": "Estimate includes known out-of-scope work: browser client hookup, full Infrascope split, node top-level Yjs envelope, and legacy cleanup.",
+        "completed_groups": [
+            "server projection migration inventory",
+            "control metrics and recommendations",
+            "manifest guardrails",
+            "status-card shared bridge evidence",
+            "manual acceptance report",
+        ],
+        "remaining_groups": [
+            "browser client adapter and projection cache",
+            "full Infrascope projection-family split",
+            "node-aware top-level Yjs envelope",
+            "cross-skill migration and legacy cleanup",
+        ],
+        "headline_metrics": {
+            "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
+            "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
+            "legacy_pressure_score": metrics.get("legacy_pressure_score"),
+            "manifest_projection_key_coverage_ratio": metrics.get("manifest_projection_key_coverage_ratio"),
+        },
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -1053,6 +1088,7 @@ def projection_migration_acceptance_summary(
         "manual_steps": _acceptance_manual_steps(),
         "evidence_rows": _acceptance_evidence_rows(metrics),
         "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
+        "progress": _acceptance_progress(checks=checks, metrics=metrics),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),

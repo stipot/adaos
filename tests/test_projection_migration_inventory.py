@@ -398,6 +398,9 @@ async def publish(payload, webspace_id):
     assert "ProjectionRecord ABI" in evidence_by_metric["manifest_projection_key_coverage_ratio"]["vkr_use"]
     assert summary["demo_script"]["current_result"] == "Current status is ready_with_followups; fail_total=0, warn_total=1."
     assert "ready for demonstration" in summary["demo_script"]["conclusion"]
+    assert summary["progress"]["server_mvp_percent"] == 91.7
+    assert summary["progress"]["full_plan_estimate_percent"] == 65.0
+    assert "browser client adapter and projection cache" in summary["progress"]["remaining_groups"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -535,6 +538,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
         "reserved_cache_manifest_target_total",
     }
     assert payload["demo_script"]["expected_result"] == "The demo is acceptable when server_mvp_ready=true and fail_total=0."
+    assert payload["progress"]["server_mvp_percent"] >= 80.0
+    assert "migration_readiness_ratio" in payload["progress"]["headline_metrics"]
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",
