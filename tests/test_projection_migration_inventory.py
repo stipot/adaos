@@ -396,6 +396,8 @@ async def publish(payload, webspace_id):
     assert evidence_by_metric["monolith_exposure_ratio"]["direction"] == "lower_is_better"
     assert evidence_by_metric["reserved_cache_manifest_target_total"]["direction"] == "must_be_zero"
     assert "ProjectionRecord ABI" in evidence_by_metric["manifest_projection_key_coverage_ratio"]["vkr_use"]
+    assert summary["demo_script"]["current_result"] == "Current status is ready_with_followups; fail_total=0, warn_total=1."
+    assert "ready for demonstration" in summary["demo_script"]["conclusion"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -532,6 +534,7 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
         "migration_readiness_ratio",
         "reserved_cache_manifest_target_total",
     }
+    assert payload["demo_script"]["expected_result"] == "The demo is acceptable when server_mvp_ready=true and fail_total=0."
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",

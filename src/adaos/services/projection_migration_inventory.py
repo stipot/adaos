@@ -908,6 +908,25 @@ def _acceptance_evidence_rows(metrics: Mapping[str, Any]) -> list[dict[str, Any]
     ]
 
 
+def _acceptance_demo_script(*, status: str, fail_total: int, warn_total: int) -> dict[str, Any]:
+    if status == "blocked":
+        conclusion = "Server-side migration MVP is not ready for demonstration until fail checks are resolved."
+    elif status == "ready_with_followups":
+        conclusion = "Server-side migration MVP is ready for demonstration with documented follow-up work."
+    else:
+        conclusion = "Server-side migration MVP is ready for demonstration."
+    return {
+        "opening": "This report checks the server-side operational event model MVP through migration inventory, metrics, manifest guardrails, and ranked follow-up work.",
+        "expected_result": "The demo is acceptable when server_mvp_ready=true and fail_total=0.",
+        "current_result": f"Current status is {status}; fail_total={int(fail_total)}, warn_total={int(warn_total)}.",
+        "conclusion": conclusion,
+        "limitations": [
+            "Browser client hookup is tracked separately from the server-side MVP.",
+            "Full Infrascope decomposition and legacy cleanup remain follow-up work when warning checks are present.",
+        ],
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -1033,6 +1052,7 @@ def projection_migration_acceptance_summary(
         },
         "manual_steps": _acceptance_manual_steps(),
         "evidence_rows": _acceptance_evidence_rows(metrics),
+        "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),
