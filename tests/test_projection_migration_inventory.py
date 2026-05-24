@@ -401,6 +401,8 @@ async def publish(payload, webspace_id):
     assert summary["progress"]["server_mvp_percent"] == 91.7
     assert summary["progress"]["full_plan_estimate_percent"] == 65.0
     assert "browser client adapter and projection cache" in summary["progress"]["remaining_groups"]
+    assert summary["progress"]["remaining_group_details"][0]["group"] == "browser client adapter and projection cache"
+    assert "verification" in summary["progress"]["remaining_group_details"][0]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -540,6 +542,7 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert payload["demo_script"]["expected_result"] == "The demo is acceptable when server_mvp_ready=true and fail_total=0."
     assert payload["progress"]["server_mvp_percent"] >= 80.0
     assert "migration_readiness_ratio" in payload["progress"]["headline_metrics"]
+    assert payload["progress"]["remaining_group_details"][0]["verification"]
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",

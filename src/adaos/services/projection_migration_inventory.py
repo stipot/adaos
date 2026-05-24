@@ -953,6 +953,28 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
             "node-aware top-level Yjs envelope",
             "cross-skill migration and legacy cleanup",
         ],
+        "remaining_group_details": [
+            {
+                "group": "browser client adapter and projection cache",
+                "reason": "Frontend consumers still need to read shared ProjectionRecord snapshots consistently instead of skill-local branches.",
+                "verification": "Open the web UI and verify that browser widgets read projection-record-backed status without legacy fallback paths.",
+            },
+            {
+                "group": "full Infrascope projection-family split",
+                "reason": "Infrascope still has a larger inventory/status domain than the minimal status-card bridge used by the MVP.",
+                "verification": "Check Infrascope refresh output and confirm separate projection keys for inventory, topology, inspectors, and status cards.",
+            },
+            {
+                "group": "node-aware top-level Yjs envelope",
+                "reason": "The MVP proves node-scoped records inside the cache, while a wider top-level envelope remains an integration task.",
+                "verification": "Inspect multi-node projection cache snapshots and confirm that node ownership is visible without reading card internals.",
+            },
+            {
+                "group": "cross-skill migration and legacy cleanup",
+                "reason": "Remaining legacy roots and local shims must be migrated skill by skill after the shared ABI is stable.",
+                "verification": "Run migration inventory and recommendations until monolith exposure and local shim pressure trend down.",
+            },
+        ],
         "headline_metrics": {
             "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
             "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
