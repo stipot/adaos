@@ -367,6 +367,9 @@ Progress:
 - `acceptance-summary` exposes `plan_review`, which maps the current result
   back to slices 1-6 and separates server-ready work from client hookup,
   Infrascope split, node-envelope, and cleanup follow-ups
+- `acceptance-summary` exposes `completion_gates`, a pass/warn/fail checklist
+  derived from this Completion Definition so server-ready gates and remaining
+  follow-ups can be read directly from Swagger
 - `acceptance-summary` exposes `demo_script` with a short expected result,
   current result, conclusion, and limitation text for a manual demo or
   presentation

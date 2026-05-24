@@ -130,6 +130,8 @@ Important fields:
   diploma before/after table
 - `plan_review`: current alignment with slices 1-6 of
   `operational-event-model-reference-plan.md`
+- `completion_gates`: checklist derived from the plan completion definition,
+  with pass/warn/fail status for each gate
 - `demo_script`: short explanation block for presenting the acceptance result
 - `progress`: compact progress summary for the server MVP and the larger
   end-to-end plan
@@ -185,6 +187,11 @@ The `plan_review` block maps the same acceptance result back to the six slices
 of the reference plan. It is the quickest way to explain which slices are
 server-ready, which are pilot-ready, and which still have client or cleanup
 follow-up work.
+
+The `completion_gates` block converts the plan's Completion Definition into a
+checklist. `pass` gates are already covered by the server-side MVP, while
+`warn` gates name follow-up work such as direct browser hookup, named-entity
+consumer invalidation, and full event producer/client test migration.
 
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit
