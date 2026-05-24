@@ -12,6 +12,7 @@ from adaos.apps.api.auth import require_token
 from adaos.services.agent_context import get_ctx
 from adaos.services.projection_migration_inventory import (
     legacy_projection_branch_compatibility,
+    projection_migration_acceptance_summary,
     projection_migration_metrics,
     projection_migration_monolith_inventory,
     projection_migration_recommendations,
@@ -353,6 +354,44 @@ async def publish(payload, webspace_id):
     assert report["items"][1]["recommended_next_step"] == "split_monolithic_root_behind_shared_bridge"
 
 
+def test_projection_migration_acceptance_summary_marks_server_mvp_ready_with_followups(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+        handler_text="""
+from adaos.sdk.data import ctx_subnet
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("voice_chat.state", payload, webspace_id=webspace_id)
+""",
+    )
+    _write_skill(
+        root,
+        "infrascope_skill",
+        skill_yaml=_infrascope_skill_yaml(),
+        webui={"webio": {"receivers": {"infrascope.inventory.*": {"mode": "replace"}}}},
+    )
+
+    summary = projection_migration_acceptance_summary(
+        skills_root=root,
+        include_non_browser=True,
+        now=100.0,
+    )
+    checks = {item["id"]: item for item in summary["checks"]}
+
+    assert summary["ok"] is True
+    assert summary["server_mvp_ready"] is True
+    assert summary["status"] == "ready_with_followups"
+    assert summary["fail_total"] == 0
+    assert checks["manifest_contract_guarded"]["status"] == "pass"
+    assert checks["shared_bridge_present"]["status"] == "pass"
+    assert checks["legacy_work_bounded"]["status"] == "warn"
+    assert summary["metrics"]["manifest_projection_key_coverage_ratio"] == 0.0
+
+
 def _make_api_client() -> TestClient:
     sys.modules.setdefault("nats", types.SimpleNamespace())
     fake_y_py = types.SimpleNamespace(
@@ -450,3 +489,28 @@ async def publish(payload, webspace_id):
     assert payload["recommendation_total"] == 1
     assert payload["items"][0]["skill_id"] == "voice_chat_skill"
     assert payload["items"][0]["actions"][0]["category"] == "monolith"
+
+
+def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> None:
+    ctx = get_ctx()
+    root = Path(ctx.paths.skills_dir())
+    _write_skill(
+        root,
+        "infrascope_skill",
+        skill_yaml=_infrascope_skill_yaml(),
+        webui={"webio": {"receivers": {"infrascope.inventory.*": {"mode": "replace"}}}},
+    )
+    client = _make_api_client()
+
+    response = client.get("/api/node/projection-migration/acceptance-summary")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["server_mvp_ready"] is True
+    assert payload["scope"] == "server-side operational event model MVP"
+    assert {item["id"] for item in payload["checks"]} >= {
+        "inventory_observable",
+        "manifest_contract_guarded",
+        "migration_backlog_ranked",
+    }

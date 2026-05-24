@@ -782,9 +782,156 @@ def projection_migration_recommendations(
     }
 
 
+def _acceptance_check(
+    *,
+    check_id: str,
+    title: str,
+    status: str,
+    evidence: Mapping[str, Any],
+    followup: str | None = None,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "id": check_id,
+        "title": title,
+        "status": status,
+        "evidence": dict(evidence),
+    }
+    if followup:
+        item["followup"] = followup
+    return item
+
+
+def projection_migration_acceptance_summary(
+    *,
+    skills_root: str | Path,
+    include_non_browser: bool = False,
+    top_limit: int = 5,
+    now: float | None = None,
+) -> dict[str, Any]:
+    metrics_report = projection_migration_metrics(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        top_limit=top_limit,
+        now=now,
+    )
+    recommendations = projection_migration_recommendations(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        limit=top_limit,
+        now=metrics_report.get("updated_at"),
+    )
+    metrics = _mapping(metrics_report.get("metrics"))
+    metric_names = {str(item.get("metric") or "") for item in metrics_report.get("metric_definitions", [])}
+    reserved_cache_target_total = int(metrics.get("reserved_cache_manifest_target_total") or 0)
+    manifest_yjs_target_total = int(metrics.get("manifest_yjs_target_total") or 0)
+    projection_keyed_total = int(metrics.get("projection_keyed_yjs_target_total") or 0)
+    monolithic_candidate_total = int(metrics.get("monolithic_candidate_total") or 0)
+    local_shim_pressure_score = int(metrics.get("local_shim_pressure_score") or 0)
+    shared_bridge_total = int(metrics.get("shared_bridge_total") or 0)
+
+    checks = [
+        _acceptance_check(
+            check_id="inventory_observable",
+            title="Browser-facing projection inventory is observable",
+            status="pass" if int(metrics.get("skill_total") or 0) >= 0 else "fail",
+            evidence={
+                "skill_total": int(metrics.get("skill_total") or 0),
+                "monolithic_candidate_total": monolithic_candidate_total,
+                "top_monolithic_candidates": metrics_report.get("top_monolithic_candidates", []),
+            },
+        ),
+        _acceptance_check(
+            check_id="control_metrics_available",
+            title="Migration control metrics are available",
+            status=(
+                "pass"
+                if {
+                    "monolith_exposure_ratio",
+                    "migration_readiness_ratio",
+                    "legacy_pressure_score",
+                    "local_shim_pressure_score",
+                    "manifest_projection_key_coverage_ratio",
+                }.issubset(metric_names)
+                else "fail"
+            ),
+            evidence={
+                "metric_names": sorted(metric_names),
+                "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
+                "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
+                "manifest_projection_key_coverage_ratio": metrics.get("manifest_projection_key_coverage_ratio"),
+            },
+        ),
+        _acceptance_check(
+            check_id="manifest_contract_guarded",
+            title="Projection manifest targets are guarded",
+            status="pass" if reserved_cache_target_total == 0 else "fail",
+            evidence={
+                "reserved_cache_manifest_target_total": reserved_cache_target_total,
+                "manifest_yjs_target_total": manifest_yjs_target_total,
+                "projection_keyed_yjs_target_total": projection_keyed_total,
+            },
+            followup=(
+                "Remove direct data/projectionRecords targets from skill.yaml or scenario.yaml."
+                if reserved_cache_target_total
+                else None
+            ),
+        ),
+        _acceptance_check(
+            check_id="shared_bridge_present",
+            title="At least one shared projection bridge is present",
+            status="pass" if shared_bridge_total > 0 else "warn",
+            evidence={"shared_bridge_total": shared_bridge_total},
+            followup="Keep at least one status-card or SDK bridge as a reference pilot." if shared_bridge_total <= 0 else None,
+        ),
+        _acceptance_check(
+            check_id="migration_backlog_ranked",
+            title="Remaining migration backlog is ranked",
+            status="pass" if recommendations.get("recommendation_total") is not None else "fail",
+            evidence={
+                "recommendation_total": int(recommendations.get("recommendation_total") or 0),
+                "top_items": recommendations.get("items", []),
+            },
+        ),
+        _acceptance_check(
+            check_id="legacy_work_bounded",
+            title="Legacy work is visible and bounded for the diploma MVP",
+            status="warn" if monolithic_candidate_total or local_shim_pressure_score else "pass",
+            evidence={
+                "monolithic_candidate_total": monolithic_candidate_total,
+                "local_shim_pressure_score": local_shim_pressure_score,
+                "legacy_pressure_score": metrics.get("legacy_pressure_score"),
+            },
+            followup=(
+                "Treat remaining monolithic publishers and local shims as follow-up migration work."
+                if monolithic_candidate_total or local_shim_pressure_score
+                else None
+            ),
+        ),
+    ]
+    fail_total = sum(1 for item in checks if item.get("status") == "fail")
+    warn_total = sum(1 for item in checks if item.get("status") == "warn")
+    status = "blocked" if fail_total else "ready_with_followups" if warn_total else "ready"
+    return {
+        "ok": fail_total == 0,
+        "status": status,
+        "server_mvp_ready": fail_total == 0,
+        "scope": "server-side operational event model MVP",
+        "skills_root": metrics_report["skills_root"],
+        "include_non_browser": bool(include_non_browser),
+        "check_total": len(checks),
+        "pass_total": sum(1 for item in checks if item.get("status") == "pass"),
+        "warn_total": warn_total,
+        "fail_total": fail_total,
+        "checks": checks,
+        "metrics": metrics,
+        "updated_at": metrics_report["updated_at"],
+    }
+
+
 __all__ = [
     "inspect_skill_projection_migration",
     "legacy_projection_branch_compatibility",
+    "projection_migration_acceptance_summary",
     "projection_migration_metrics",
     "projection_migration_monolith_inventory",
     "projection_migration_recommendations",
