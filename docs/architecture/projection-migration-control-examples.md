@@ -141,6 +141,8 @@ Important fields:
 - `risk_register`: risk/limitation register generated from warning gates and
   remaining acceptance checks
 - `demo_script`: short explanation block for presenting the acceptance result
+- `defense_summary`: short defense-oriented summary with thesis, proof points,
+  metrics to quote, limitations, and closing statement
 - `progress`: compact progress summary for the server MVP and the larger
   end-to-end plan
 - `checks[].status`: per-check `pass`, `warn`, or `fail`
@@ -222,6 +224,10 @@ still showing that remaining work is controlled.
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit
 limitations.
+
+The `defense_summary` block is the shortest defense-oriented explanation. It
+connects the implemented MVP, the metrics worth quoting, and the remaining
+limitations in one compact response section.
 
 The `progress` block separates two numbers:
 

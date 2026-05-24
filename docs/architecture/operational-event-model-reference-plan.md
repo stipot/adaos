@@ -384,6 +384,9 @@ Progress:
 - `acceptance-summary` exposes `demo_script` with a short expected result,
   current result, conclusion, and limitation text for a manual demo or
   presentation
+- `acceptance-summary` exposes `defense_summary`, a compact thesis/proof
+  section with metrics to quote, limitations, and a closing statement for
+  diploma defense
 - `acceptance-summary` exposes a `progress` block that separates weighted
   server-side MVP progress from the wider full-plan estimate and names the
   remaining work groups; the block also carries `completed_groups`,
