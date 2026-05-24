@@ -975,6 +975,36 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
                 "verification": "Run migration inventory and recommendations until monolith exposure and local shim pressure trend down.",
             },
         ],
+        "followup_roadmap": [
+            {
+                "order": 1,
+                "milestone": "browser_projection_record_read_path",
+                "group": "browser client adapter and projection cache",
+                "goal": "Route browser widgets through shared ProjectionRecord snapshots before removing legacy fallback reads.",
+                "exit_check": "Web UI status cards render from data/projectionRecords and acceptance-summary keeps fail_total=0.",
+            },
+            {
+                "order": 2,
+                "milestone": "infrascope_projection_family_split",
+                "group": "full Infrascope projection-family split",
+                "goal": "Split Infrascope inventory, topology, inspectors, and status cards into explicit projection keys.",
+                "exit_check": "Infrascope refresh reports keyed projection families and no direct reserved-cache manifest targets.",
+            },
+            {
+                "order": 3,
+                "milestone": "node_aware_projection_envelope",
+                "group": "node-aware top-level Yjs envelope",
+                "goal": "Expose node ownership at the projection-cache envelope level for multi-node diagnostics.",
+                "exit_check": "Projection cache summaries expose node ownership without reading individual card payloads.",
+            },
+            {
+                "order": 4,
+                "milestone": "legacy_projection_cleanup",
+                "group": "cross-skill migration and legacy cleanup",
+                "goal": "Migrate remaining skill-local branches and shims after the shared ABI is stable.",
+                "exit_check": "Monolith exposure, local shim pressure, and legacy pressure score trend toward zero.",
+            },
+        ],
         "headline_metrics": {
             "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
             "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
