@@ -364,9 +364,9 @@ Progress:
 - `acceptance-summary` exposes a `progress` block that separates weighted
   server-side MVP progress from the wider full-plan estimate and names the
   remaining work groups; the block also carries `completed_groups`,
-  `remaining_groups`, `remaining_group_details`, and `headline_metrics` so the
-  current status can be checked without interpreting every low-level metric by
-  hand
+  `remaining_groups`, `remaining_group_details`, `followup_roadmap`, and
+  `headline_metrics` so the current status and next milestones can be checked
+  without interpreting every low-level metric by hand
 
 Exit criteria:
 

@@ -179,6 +179,8 @@ The `progress` block separates two numbers:
   the server MVP number.
 - `remaining_group_details[]`: the same remaining groups with a reason and a
   verification hint for the next control run.
+- `followup_roadmap[]`: ordered milestones for closing the remaining groups,
+  each with a goal and an exit check.
 - `headline_metrics`: report-friendly ratios such as
   `migration_readiness_ratio`, `legacy_pressure_score`, and
   `manifest_projection_key_coverage_ratio`.
@@ -186,6 +188,11 @@ The `progress` block separates two numbers:
 For diploma reporting, use `server_mvp_percent` to describe the current
 implemented backend scope and `full_plan_estimate_percent` to explain why the
 whole AdaOS migration is not presented as finished yet.
+
+The `followup_roadmap` array is intentionally ordered. It starts with the
+browser read path because that is the first user-visible confirmation that the
+new projection cache is consumed by the UI. It then moves to the larger
+Infrascope split, node-aware cache envelope, and final cross-skill cleanup.
 
 Risk weights:
 
