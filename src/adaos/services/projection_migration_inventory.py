@@ -868,6 +868,46 @@ def _acceptance_manual_steps() -> list[dict[str, Any]]:
     ]
 
 
+def _acceptance_evidence_rows(metrics: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "metric": "monolith_exposure_ratio",
+            "value": metrics.get("monolith_exposure_ratio"),
+            "direction": "lower_is_better",
+            "meaning": "Share of observed projection surfaces still exposed as monolithic Yjs roots.",
+            "vkr_use": "Shows reduction of dependence on old monolithic state branches.",
+        },
+        {
+            "metric": "migration_readiness_ratio",
+            "value": metrics.get("migration_readiness_ratio"),
+            "direction": "higher_is_better",
+            "meaning": "Share of observed surfaces already covered by modern slots, streams, or shared bridges.",
+            "vkr_use": "Shows how much of the projection surface is ready for the new operational model.",
+        },
+        {
+            "metric": "manifest_projection_key_coverage_ratio",
+            "value": metrics.get("manifest_projection_key_coverage_ratio"),
+            "direction": "higher_is_better",
+            "meaning": "Share of manifest-declared Yjs targets tied to canonical projection_key values.",
+            "vkr_use": "Shows whether skill and scenario manifests are converging on the shared ProjectionRecord ABI.",
+        },
+        {
+            "metric": "legacy_pressure_score",
+            "value": metrics.get("legacy_pressure_score"),
+            "direction": "lower_is_better",
+            "meaning": "Weighted backlog of monolithic publishers.",
+            "vkr_use": "Shows the remaining migration pressure after the server-side MVP work.",
+        },
+        {
+            "metric": "reserved_cache_manifest_target_total",
+            "value": metrics.get("reserved_cache_manifest_target_total"),
+            "direction": "must_be_zero",
+            "meaning": "Direct manifest writes to the core-owned data/projectionRecords cache.",
+            "vkr_use": "Proves that the canonical cache is protected from skill/scenario-owned writes.",
+        },
+    ]
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -992,6 +1032,7 @@ def projection_migration_acceptance_summary(
             "swagger_hint": "Open /api/node/projection-migration/acceptance-summary and read interpretation.meaning first.",
         },
         "manual_steps": _acceptance_manual_steps(),
+        "evidence_rows": _acceptance_evidence_rows(metrics),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),
