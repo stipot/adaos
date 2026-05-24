@@ -1053,6 +1053,42 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
     }
 
 
+def _acceptance_control_snapshot(
+    *,
+    status: str,
+    server_mvp_ready: bool,
+    fail_total: int,
+    warn_total: int,
+    metrics: Mapping[str, Any],
+    progress: Mapping[str, Any],
+    updated_at: Any,
+) -> dict[str, Any]:
+    return {
+        "kind": "projection-migration-control-snapshot",
+        "scope": "server-side operational event model MVP",
+        "source_endpoint": "/api/node/projection-migration/acceptance-summary",
+        "captured_at": updated_at,
+        "result": {
+            "status": status,
+            "server_mvp_ready": bool(server_mvp_ready),
+            "fail_total": int(fail_total),
+            "warn_total": int(warn_total),
+            "server_mvp_percent": progress.get("server_mvp_percent"),
+            "full_plan_estimate_percent": progress.get("full_plan_estimate_percent"),
+        },
+        "key_metrics": {
+            "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
+            "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
+            "legacy_pressure_score": metrics.get("legacy_pressure_score"),
+            "local_shim_pressure_score": metrics.get("local_shim_pressure_score"),
+            "manifest_projection_key_coverage_ratio": metrics.get("manifest_projection_key_coverage_ratio"),
+            "reserved_cache_manifest_target_total": metrics.get("reserved_cache_manifest_target_total"),
+        },
+        "save_hint": "Save this block as the current control run evidence for the diploma before/after table.",
+        "recommended_caption": "Control snapshot for the server-side operational event model migration MVP.",
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -1164,10 +1200,12 @@ def projection_migration_acceptance_summary(
     warn_total = sum(1 for item in checks if item.get("status") == "warn")
     status = "blocked" if fail_total else "ready_with_followups" if warn_total else "ready"
     interpretation = _acceptance_interpretation(status=status, fail_total=fail_total, warn_total=warn_total)
+    server_mvp_ready = fail_total == 0
+    progress = _acceptance_progress(checks=checks, metrics=metrics)
     return {
-        "ok": fail_total == 0,
+        "ok": server_mvp_ready,
         "status": status,
-        "server_mvp_ready": fail_total == 0,
+        "server_mvp_ready": server_mvp_ready,
         "scope": "server-side operational event model MVP",
         "interpretation": interpretation,
         "manual_review": {
@@ -1180,7 +1218,16 @@ def projection_migration_acceptance_summary(
         "evidence_rows": _acceptance_evidence_rows(metrics),
         "measurement_model": _acceptance_measurement_model(metrics),
         "demo_script": _acceptance_demo_script(status=status, fail_total=fail_total, warn_total=warn_total),
-        "progress": _acceptance_progress(checks=checks, metrics=metrics),
+        "progress": progress,
+        "control_snapshot": _acceptance_control_snapshot(
+            status=status,
+            server_mvp_ready=server_mvp_ready,
+            fail_total=fail_total,
+            warn_total=warn_total,
+            metrics=metrics,
+            progress=progress,
+            updated_at=metrics_report["updated_at"],
+        ),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),

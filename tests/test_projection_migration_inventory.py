@@ -410,6 +410,10 @@ async def publish(payload, webspace_id):
     assert "verification" in summary["progress"]["remaining_group_details"][0]
     assert [item["order"] for item in summary["progress"]["followup_roadmap"]] == [1, 2, 3, 4]
     assert summary["progress"]["followup_roadmap"][0]["milestone"] == "browser_projection_record_read_path"
+    assert summary["control_snapshot"]["kind"] == "projection-migration-control-snapshot"
+    assert summary["control_snapshot"]["result"]["server_mvp_percent"] == 91.7
+    assert summary["control_snapshot"]["key_metrics"]["migration_readiness_ratio"] == 0.5
+    assert "diploma" in summary["control_snapshot"]["save_hint"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -553,6 +557,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert "migration_readiness_ratio" in payload["progress"]["headline_metrics"]
     assert payload["progress"]["remaining_group_details"][0]["verification"]
     assert payload["progress"]["followup_roadmap"][-1]["milestone"] == "legacy_projection_cleanup"
+    assert payload["control_snapshot"]["source_endpoint"] == "/api/node/projection-migration/acceptance-summary"
+    assert payload["control_snapshot"]["result"]["server_mvp_ready"] is True
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",
