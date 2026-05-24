@@ -801,6 +801,30 @@ def _acceptance_check(
     return item
 
 
+def _acceptance_interpretation(*, status: str, fail_total: int, warn_total: int) -> dict[str, Any]:
+    if status == "blocked":
+        meaning = "Server-side operational event model MVP has blocking checks."
+        next_action = "Open checks with status=fail and fix them before using the report as diploma evidence."
+    elif status == "ready_with_followups":
+        meaning = "Server-side operational event model MVP is demonstrable; remaining warnings are explicit follow-up work."
+        next_action = "Use checks[].evidence as proof and describe checks[].followup as project limitations or future work."
+    else:
+        meaning = "Server-side operational event model MVP is ready without warning-level follow-ups in this report."
+        next_action = "Use the report as compact acceptance evidence for the implemented server-side scope."
+    return {
+        "meaning": meaning,
+        "next_action": next_action,
+        "fail_total": int(fail_total),
+        "warn_total": int(warn_total),
+        "how_to_read": [
+            "server_mvp_ready=true means there are no blocking fail checks for the server-side MVP.",
+            "status=ready_with_followups is acceptable for the diploma MVP when warnings are documented as limitations.",
+            "checks[].evidence contains the concrete metrics to cite in the control examples.",
+            "checks[].followup lists remaining client, skill migration, or cleanup work that is outside the current MVP.",
+        ],
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -911,11 +935,19 @@ def projection_migration_acceptance_summary(
     fail_total = sum(1 for item in checks if item.get("status") == "fail")
     warn_total = sum(1 for item in checks if item.get("status") == "warn")
     status = "blocked" if fail_total else "ready_with_followups" if warn_total else "ready"
+    interpretation = _acceptance_interpretation(status=status, fail_total=fail_total, warn_total=warn_total)
     return {
         "ok": fail_total == 0,
         "status": status,
         "server_mvp_ready": fail_total == 0,
         "scope": "server-side operational event model MVP",
+        "interpretation": interpretation,
+        "manual_review": {
+            "expected_for_demo": "server_mvp_ready=true and fail_total=0",
+            "acceptable_warning_status": "ready_with_followups",
+            "inspect_first": ["status", "server_mvp_ready", "fail_total", "warn_total", "checks"],
+            "swagger_hint": "Open /api/node/projection-migration/acceptance-summary and read interpretation.meaning first.",
+        },
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),

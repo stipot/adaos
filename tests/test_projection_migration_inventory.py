@@ -386,6 +386,9 @@ async def publish(payload, webspace_id):
     assert summary["server_mvp_ready"] is True
     assert summary["status"] == "ready_with_followups"
     assert summary["fail_total"] == 0
+    assert "demonstrable" in summary["interpretation"]["meaning"]
+    assert summary["manual_review"]["expected_for_demo"] == "server_mvp_ready=true and fail_total=0"
+    assert "checks" in summary["manual_review"]["inspect_first"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -509,6 +512,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert payload["ok"] is True
     assert payload["server_mvp_ready"] is True
     assert payload["scope"] == "server-side operational event model MVP"
+    assert payload["manual_review"]["acceptable_warning_status"] == "ready_with_followups"
+    assert payload["interpretation"]["how_to_read"][0].startswith("server_mvp_ready=true")
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",
