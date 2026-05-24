@@ -418,6 +418,14 @@ async def publish(payload, webspace_id):
     assert summary["plan_review"]["overall"]["server_mvp_percent"] == 91.7
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
+    assert summary["completion_gates"]["source"] == "Completion Definition"
+    assert summary["completion_gates"]["gate_total"] == 7
+    assert summary["completion_gates"]["status"] == "ready_with_followups"
+    assert summary["completion_gates"]["pass_total"] == 4
+    assert {item["id"] for item in summary["completion_gates"]["gates"]} >= {
+        "browser_multi_demand",
+        "heavy_pilot_shared_abi",
+    }
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -565,6 +573,8 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert payload["control_snapshot"]["result"]["server_mvp_ready"] is True
     assert payload["plan_review"]["overall"]["server_mvp_ready"] is True
     assert payload["plan_review"]["slices"][1]["name"] == "Browser Demand Runtime"
+    assert payload["completion_gates"]["server_mvp_ready"] is True
+    assert payload["completion_gates"]["warn_total"] >= 1
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",

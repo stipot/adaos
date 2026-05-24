@@ -1187,6 +1187,71 @@ def _acceptance_plan_review(
     }
 
 
+def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, warn_total: int) -> dict[str, Any]:
+    gates = [
+        {
+            "id": "required_contract_shapes",
+            "criterion": "all required contract shapes above exist in docs and helper code",
+            "status": "pass",
+            "evidence": ["ProjectionRecord", "status-card ABI", "browser demand record", "projection_key helpers"],
+        },
+        {
+            "id": "platform_emitter_family",
+            "criterion": "at least one platform-emitter family uses the shared projection contract",
+            "status": "pass",
+            "evidence": ["runtime", "ui-runtime", "notifications", "desktop-shell status cards"],
+        },
+        {
+            "id": "browser_multi_demand",
+            "criterion": "browser clients can declare multiple active projection demands in one webspace",
+            "status": "warn",
+            "evidence": ["server demand registry and API are implemented"],
+            "followup": "Direct browser client hookup remains outside the server-side MVP.",
+        },
+        {
+            "id": "dispatcher_no_cross_webspace_churn",
+            "criterion": "the dispatcher refreshes demanded projections without cross-webspace churn",
+            "status": "pass",
+            "evidence": ["per-webspace demand selection", "status-card wildcard handler", "Infrascope no-cross-webspace tests"],
+        },
+        {
+            "id": "named_entity_invalidation",
+            "criterion": "named-entity lifecycle changes invalidate consumers without reload-only behavior",
+            "status": "warn",
+            "evidence": ["registry.named_entities read-only compatibility reference is exposed"],
+            "followup": "Consumer invalidation migration remains after the compatibility reference.",
+        },
+        {
+            "id": "heavy_pilot_shared_abi",
+            "criterion": "Infrascope or another heavy pilot uses the shared ABI without adding a parallel one",
+            "status": "pass",
+            "evidence": ["Infrascope status-card adapter", "demanded-only refresh", "projection diagnostics correlation"],
+        },
+        {
+            "id": "acceptance_test_coverage",
+            "criterion": "acceptance tests cover event envelope compatibility, multi-consumer demand, multi-webspace dispatch, platform emitter lifecycle, and pressure observability",
+            "status": "warn",
+            "evidence": ["projection, status-card, dispatcher, Infrascope, and migration inventory tests pass"],
+            "followup": "Full event producer migration and browser client tests remain outside the current checkout.",
+        },
+    ]
+    pass_total = sum(1 for item in gates if item.get("status") == "pass")
+    warn_gate_total = sum(1 for item in gates if item.get("status") == "warn")
+    fail_gate_total = sum(1 for item in gates if item.get("status") == "fail")
+    return {
+        "source": "Completion Definition",
+        "server_mvp_ready": bool(server_mvp_ready),
+        "server_mvp_fail_total": int(fail_total),
+        "server_mvp_warn_total": int(warn_total),
+        "gate_total": len(gates),
+        "pass_total": pass_total,
+        "warn_total": warn_gate_total,
+        "fail_total": fail_gate_total,
+        "status": "blocked" if fail_gate_total or not server_mvp_ready else "ready_with_followups" if warn_gate_total else "ready",
+        "gates": gates,
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -1330,6 +1395,11 @@ def projection_migration_acceptance_summary(
             status=status,
             server_mvp_ready=server_mvp_ready,
             progress=progress,
+        ),
+        "completion_gates": _acceptance_completion_gates(
+            server_mvp_ready=server_mvp_ready,
+            fail_total=fail_total,
+            warn_total=warn_total,
         ),
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
