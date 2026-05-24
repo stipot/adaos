@@ -116,6 +116,10 @@ Important fields:
 
 - `server_mvp_ready`: `true` when no blocking `fail` checks are present
 - `status`: `ready`, `ready_with_followups`, or `blocked`
+- `interpretation.meaning`: plain-language explanation of the status
+- `interpretation.next_action`: what to do with the report result
+- `manual_review.inspect_first`: fields to inspect first during a manual
+  Swagger check
 - `checks[].status`: per-check `pass`, `warn`, or `fail`
 - `checks[].evidence`: metric-backed proof for the check
 - `checks[].followup`: explicit remaining work when a warning or failure is
@@ -124,6 +128,15 @@ Important fields:
 This endpoint is intentionally not a claim that the full AdaOS client and all
 skills are migrated. It is a compact acceptance report for the server-side
 operational event model MVP.
+
+For a normal diploma MVP demo, the expected result is:
+
+- `server_mvp_ready=true`
+- `fail_total=0`
+- `status=ready` or `status=ready_with_followups`
+
+`ready_with_followups` is acceptable when the warning checks explicitly name
+remaining client hookup, skill migration, or legacy cleanup work.
 
 Risk weights:
 

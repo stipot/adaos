@@ -349,6 +349,9 @@ Progress:
   server-side MVP readiness report with `pass`/`warn`/`fail` checks over
   inventory, metrics, manifest guardrails, shared bridge evidence, and ranked
   migration backlog
+- the acceptance summary now includes `interpretation` and `manual_review`
+  blocks so a manual Swagger check explains what `ready_with_followups` means
+  and which fields should be inspected first
 
 Exit criteria:
 
