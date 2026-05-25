@@ -297,6 +297,20 @@ This does not prove that the Angular UI has already switched read paths. It
 proves that the server now exposes the demanded-only ProjectionRecord read
 model the browser adapter should consume.
 
+For a browser-session-specific check, call the same endpoint with
+`client_id=<browser-client>` and `session_id=<browser-session>`. The expected
+additional evidence is:
+
+- `session_scoped=true`
+- `client_id` equals the requested browser client
+- `session_id` equals the requested browser session
+- `projection_keys[]` contains only projections demanded by that session
+- `cache_contract.client_session_filter=true`
+
+This is the server-side guardrail that lets the future browser adapter read its
+own demanded records without mixing widget demand from another browser session
+in the same webspace.
+
 Risk weights:
 
 | Risk | Weight |
