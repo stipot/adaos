@@ -24,8 +24,11 @@ from .projection_keys import (
     widget_projection_key,
 )
 from .projection_subscription import (
+    CLIENT_SUBSCRIPTION_CONTRACT,
     ClientSubscriptionRecord,
+    PROJECTION_SUBSCRIPTION_REQUIRED_FIELDS,
     ProjectionSubscription,
+    client_subscription_contract_snapshot,
     make_client_subscription_record,
     make_projection_subscription,
     normalize_client_subscription_record,
@@ -47,6 +50,7 @@ from .skill_registry import SkillRecord
 
 __all__ = [
     "ClientSubscriptionRecord",
+    "CLIENT_SUBSCRIPTION_CONTRACT",
     "STATUS_CARD_PROJECTION_KIND",
     "SkillId",
     "ScenarioId",
@@ -59,6 +63,7 @@ __all__ = [
     "ProjectionRecord",
     "ProjectionStatus",
     "ProjectionSubscription",
+    "PROJECTION_SUBSCRIPTION_REQUIRED_FIELDS",
     "STATUS_CARD_PROJECTION_PREFIX",
     "SURFACE_PROJECTION_KINDS",
     "SkillMeta",
@@ -70,6 +75,7 @@ __all__ = [
     "make_client_subscription_record",
     "enrich_event_payload",
     "event_envelope_contract_snapshot",
+    "client_subscription_contract_snapshot",
     "make_projection_subscription",
     "make_projection_record",
     "make_status_card",

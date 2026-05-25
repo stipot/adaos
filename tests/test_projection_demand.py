@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from adaos.domain import make_client_subscription_record, make_projection_subscription
+from adaos.domain import client_subscription_contract_snapshot, make_client_subscription_record, make_projection_subscription
 from adaos.services.projection_demand import (
     clear_projection_demand_registry,
     delete_client_subscription_record,
@@ -210,3 +210,25 @@ def test_explicit_client_delete_removes_demand() -> None:
 
     assert deleted is True
     assert demanded_projection_keys(webspace_id="desktop") == []
+
+
+def test_client_subscription_contract_snapshot_exposes_browser_demand_abi() -> None:
+    snapshot = client_subscription_contract_snapshot(now=30.0)
+
+    assert snapshot["contract"] == "adaos.client-projection-subscription.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["record_required_fields"] == [
+        "client_id",
+        "device_id",
+        "session_id",
+        "webspace_id",
+        "role",
+        "subscriptions",
+        "updated_at",
+    ]
+    assert snapshot["subscription_required_fields"] == ["projection_key", "consumer_id", "consumer_kind"]
+    assert "pinned" in snapshot["subscription_optional_fields"]
+    assert snapshot["write_policy"]["mode"] == "replace_full_client_session_set"
+    assert snapshot["registry"]["write_endpoint"] == "/api/node/projection-demand/client"
+    assert snapshot["sample_record"]["updated_at"] == 30.0
+    assert "status-card:runtime" in snapshot["sample_projection_keys"]

@@ -5,6 +5,29 @@ import time
 from typing import Any, Iterable, Mapping
 
 
+CLIENT_SUBSCRIPTION_CONTRACT = "adaos.client-projection-subscription.v1"
+CLIENT_SUBSCRIPTION_REQUIRED_FIELDS = (
+    "client_id",
+    "device_id",
+    "session_id",
+    "webspace_id",
+    "role",
+    "subscriptions",
+    "updated_at",
+)
+PROJECTION_SUBSCRIPTION_REQUIRED_FIELDS = (
+    "projection_key",
+    "consumer_id",
+    "consumer_kind",
+)
+PROJECTION_SUBSCRIPTION_OPTIONAL_FIELDS = (
+    "node_scope",
+    "pinned",
+    "visibility",
+    "params",
+)
+
+
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
@@ -143,9 +166,68 @@ def normalize_client_subscription_record(
     )
 
 
+def client_subscription_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the browser-written projection subscription ABI contract."""
+
+    sample_record = make_client_subscription_record(
+        client_id="browser-1",
+        device_id="desktop",
+        session_id="session-1",
+        webspace_id="desktop",
+        role="operator",
+        updated_at=float(now if now is not None else 0.0),
+        subscriptions=[
+            make_projection_subscription(
+                projection_key="status-card:runtime",
+                consumer_id="widget:runtime",
+                consumer_kind="widget",
+                node_scope={"node_id": "node-a"},
+                visibility="visible",
+            ),
+            make_projection_subscription(
+                projection_key="projection:hub/object-inspector",
+                consumer_id="modal:runtime-details",
+                consumer_kind="modal",
+                pinned=True,
+                visibility="hidden",
+                params={"object_id": "runtime"},
+            ),
+        ],
+    )
+    return {
+        "contract": CLIENT_SUBSCRIPTION_CONTRACT,
+        "ready_for_mvp": True,
+        "record_required_fields": list(CLIENT_SUBSCRIPTION_REQUIRED_FIELDS),
+        "subscription_required_fields": list(PROJECTION_SUBSCRIPTION_REQUIRED_FIELDS),
+        "subscription_optional_fields": list(PROJECTION_SUBSCRIPTION_OPTIONAL_FIELDS),
+        "write_policy": {
+            "mode": "replace_full_client_session_set",
+            "touch_extends_session_without_replacing_demand": True,
+            "delete_removes_session_demand": True,
+        },
+        "semantics": {
+            "pinned": "Keeps demand meaningful even when the consumer is temporarily hidden or stale.",
+            "visibility": "visible consumers count toward visible_total; hidden consumers still keep explicit demand.",
+            "node_scope": "Limits a projection demand to a node-aware view when the projection supports node multiplicity.",
+            "params": "Carries consumer-specific projection parameters without changing the projection_key identity.",
+        },
+        "registry": {
+            "snapshot_endpoint": "/api/node/projection-demand",
+            "write_endpoint": "/api/node/projection-demand/client",
+            "browser_state_endpoint": "/api/node/projection-demand/browser-state",
+            "delete_endpoint": "/api/node/projection-demand/client/{client_id}/{session_id}",
+        },
+        "sample_record": sample_record.to_dict(),
+        "sample_projection_keys": sorted({item.projection_key for item in sample_record.subscriptions}),
+    }
+
+
 __all__ = [
+    "CLIENT_SUBSCRIPTION_CONTRACT",
     "ClientSubscriptionRecord",
+    "PROJECTION_SUBSCRIPTION_REQUIRED_FIELDS",
     "ProjectionSubscription",
+    "client_subscription_contract_snapshot",
     "make_client_subscription_record",
     "make_projection_subscription",
     "normalize_client_subscription_record",

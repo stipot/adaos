@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from adaos.domain import Event, event_envelope_contract_snapshot
+from adaos.domain import Event, client_subscription_contract_snapshot, event_envelope_contract_snapshot
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.apps.api.auth import ensure_token, require_token, resolve_presented_token
 from adaos.services.agent_context import get_ctx
@@ -2247,6 +2247,11 @@ async def node_projection_demand_snapshot(
         include_stale=include_stale,
         stale_after_s=stale_after_s,
     )
+
+
+@router.get("/projection-demand/contract", dependencies=[Depends(require_token)])
+async def node_projection_demand_contract() -> dict[str, Any]:
+    return client_subscription_contract_snapshot(now=time.time())
 
 
 @router.post("/projection-demand/client", dependencies=[Depends(require_token)])

@@ -68,6 +68,20 @@ def test_projection_demand_api_accepts_full_client_snapshot() -> None:
     assert payload["snapshot"]["projections"][0]["projection_key"] == "status-card:runtime"
 
 
+def test_projection_demand_contract_endpoint_exposes_client_subscription_abi() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/projection-demand/contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.client-projection-subscription.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["registry"]["snapshot_endpoint"] == "/api/node/projection-demand"
+    assert payload["write_policy"]["touch_extends_session_without_replacing_demand"] is True
+    assert "projection:hub/object-inspector" in payload["sample_projection_keys"]
+
+
 def test_projection_demand_api_get_and_delete_snapshot() -> None:
     client = _make_client()
     client.post(
