@@ -141,6 +141,20 @@ def test_browser_projection_record_snapshot_returns_only_demanded_records() -> N
     assert snapshot["cache"]["key"] == "browser-projection-records:desktop:*:*:status-card:missing,status-card:runtime"
     assert snapshot["cache"]["etag"] == snapshot["etag"]
     assert snapshot["cache"]["if_none_match_supported"] is True
+    entries = {entry["projection_key"]: entry for entry in snapshot["entries"]}
+    runtime_entry = entries["status-card:runtime"]
+    missing_entry = entries["status-card:missing"]
+    assert runtime_entry["cache"]["key"] == "browser-projection-records:desktop:*:*:status-card:runtime"
+    assert runtime_entry["cache"]["record_fingerprint"] == runtime_entry["record"]["meta"]["fingerprint"]
+    assert runtime_entry["cache"]["missing_reason"] is None
+    assert missing_entry["cache"]["key"] == "browser-projection-records:desktop:*:*:status-card:missing"
+    assert missing_entry["cache"]["record_fingerprint"] is None
+    assert missing_entry["cache"]["missing_reason"] == "demanded_projection_record_not_materialized"
+    assert snapshot["entry_cache_keys"] == [
+        "browser-projection-records:desktop:*:*:status-card:missing",
+        "browser-projection-records:desktop:*:*:status-card:runtime",
+    ]
+    assert snapshot["entry_fingerprints"]["status-card:runtime"] == runtime_entry["cache"]["fingerprint"]
     assert snapshot["fingerprint"]
     assert snapshot["cache_contract"]["browser_read"] is True
     assert snapshot["cache_contract"]["browser_write"] is False

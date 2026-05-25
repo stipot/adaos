@@ -151,6 +151,49 @@ def _browser_cache_key(
     )
 
 
+def _browser_cache_entry_metadata(
+    *,
+    webspace_id: str | None,
+    client_id: str | None,
+    session_id: str | None,
+    projection_key: str,
+    record_payload: Mapping[str, Any] | None,
+    cached: bool,
+) -> dict[str, Any]:
+    meta = record_payload.get("meta") if isinstance(record_payload, Mapping) else None
+    meta_payload = meta if isinstance(meta, Mapping) else {}
+    status = record_payload.get("status") if isinstance(record_payload, Mapping) else None
+    record_version = meta_payload.get("version")
+    record_fingerprint = meta_payload.get("fingerprint")
+    fingerprint = projection_fingerprint(
+        {
+            "webspace_id": webspace_id,
+            "client_id": client_id,
+            "session_id": session_id,
+            "projection_key": projection_key,
+            "cached": bool(cached),
+            "status": status,
+            "record_version": record_version,
+            "record_fingerprint": record_fingerprint,
+        }
+    )
+    return {
+        "key": _browser_cache_key(
+            webspace_id=webspace_id,
+            client_id=client_id,
+            session_id=session_id,
+            projection_keys=[projection_key],
+        ),
+        "fingerprint": fingerprint,
+        "etag": f'W/"browser-projection-record:{fingerprint}"',
+        "record_version": record_version,
+        "record_fingerprint": record_fingerprint,
+        "status": status,
+        "source": "ProjectionRecord registry" if cached else "browser demand",
+        "missing_reason": None if cached else "demanded_projection_record_not_materialized",
+    }
+
+
 def browser_projection_record_snapshot(
     *,
     webspace_id: str | None = None,
@@ -210,6 +253,14 @@ def browser_projection_record_snapshot(
                     "record": None,
                     "consumer_total": len(consumer_items),
                     "consumers": consumer_items,
+                    "cache": _browser_cache_entry_metadata(
+                        webspace_id=webspace_token or None,
+                        client_id=client_token or None,
+                        session_id=session_token or None,
+                        projection_key=projection_key,
+                        record_payload=None,
+                        cached=False,
+                    ),
                 }
             )
             continue
@@ -222,6 +273,14 @@ def browser_projection_record_snapshot(
                 "record": record_payload,
                 "consumer_total": len(consumer_items),
                 "consumers": consumer_items,
+                "cache": _browser_cache_entry_metadata(
+                    webspace_id=webspace_token or None,
+                    client_id=client_token or None,
+                    session_id=session_token or None,
+                    projection_key=projection_key,
+                    record_payload=record_payload,
+                    cached=True,
+                ),
             }
         )
 
@@ -269,6 +328,13 @@ def browser_projection_record_snapshot(
         "missing_projection_keys": missing_projection_keys,
         "records": records,
         "entries": entries,
+        "entry_cache_keys": [str(entry["cache"]["key"]) for entry in entries],
+        "entry_fingerprints": {
+            str(entry["projection_key"]): str(entry["cache"]["fingerprint"]) for entry in entries
+        },
+        "entry_etags": {
+            str(entry["projection_key"]): str(entry["cache"]["etag"]) for entry in entries
+        },
         "fingerprint": fingerprint,
         "etag": etag,
         "cache": {

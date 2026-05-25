@@ -203,6 +203,10 @@ def test_projection_records_api_exposes_browser_cache_snapshot() -> None:
     assert payload["missing_record_total"] == 0
     assert payload["projection_keys"] == ["status-card:runtime"]
     assert payload["records"]["status-card:runtime"]["data"]["summary"] == "Runtime ready"
+    assert payload["entries"][0]["cache"]["key"] == "browser-projection-records:desktop:*:*:status-card:runtime"
+    assert payload["entries"][0]["cache"]["etag"] == payload["entry_etags"]["status-card:runtime"]
+    assert payload["entries"][0]["cache"]["missing_reason"] is None
+    assert payload["entry_fingerprints"]["status-card:runtime"] == payload["entries"][0]["cache"]["fingerprint"]
     assert payload["cache_contract"]["write_policy"] == "core-owned-cache-only"
     assert payload["cache"]["etag"] == resp.headers["etag"]
     assert resp.headers["cache-control"] == "no-cache"
