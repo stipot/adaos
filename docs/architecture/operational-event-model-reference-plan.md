@@ -220,6 +220,9 @@ Required artifacts:
 Current status:
 
 - materialized status-card registry is implemented in the node runtime
+- `/api/node/projection-platform-emitters` exposes the status-card platform
+  emitter contract for runtime lifecycle, browser shell, notifications, UI
+  diagnostics, and system-error-facing coverage
 - `/api/node/status-cards` publishes and reads status-card projection records
 - `/api/node/projection-records/status-cards/materialize` can explicitly copy
   status-card projection records into the shared materialized

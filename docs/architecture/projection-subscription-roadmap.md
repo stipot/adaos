@@ -93,7 +93,7 @@ Current status:
 - [ ] `runtime.event_envelope_abi`: align with the master roadmap's shared event envelope before adding projection-specific metadata
 - [ ] `runtime.core_skill_contract`: define the core-to-skill invalidation and refresh contract before browser-specific consumption logic
 - [ ] `runtime.ownership_split`: define which runtime transitions are core-owned and which projection rebuilds are skill-owned
-- [ ] `runtime.platform_emitters_defined`: define platform-emitted projections for notifications, warnings, diagnostics, and system errors
+- [x] `runtime.platform_emitters_defined`: define platform-emitted projections for notifications, warnings, diagnostics, and system errors
 - [ ] `runtime.restore_demand_from_yjs`: define startup restoration rules for core and skills reading active demand from Yjs
 
 Current status:
@@ -118,6 +118,9 @@ Current status:
   `core_skill_contract_readiness` in `completion_gates`, so the final MVP
   report now checks this contract alongside browser demand and dispatcher
   coverage
+- `/api/node/projection-platform-emitters` exposes the platform emitter
+  contract for runtime lifecycle, browser shell, notifications, UI diagnostics,
+  and system-error-facing coverage through the shared status-card ABI
 
 ### 3. Projection ABI
 

@@ -397,6 +397,24 @@ materialization, while skill/platform handlers own payload refresh.
 The ownership block must keep direct browser or skill writes to
 `data/projectionRecords` in `ownership.forbidden`.
 
+For platform emitter contract validation, call
+`/api/node/projection-platform-emitters`. The expected evidence is:
+
+- `contract=adaos.platform-emitters.status-card.v1`
+- `ready_for_mvp=true`
+- `projection_keys[]` includes `status-card:runtime`,
+  `status-card:desktop-shell`, `status-card:notifications`, and
+  `status-card:ui-runtime`
+- `coverage.runtime_lifecycle=true`
+- `coverage.notifications=true`
+- `coverage.diagnostics=true`
+- every emitter contract keeps `browser_write=false` and
+  `skill_direct_write=false`
+
+This proves that platform-owned operational surfaces are defined as shared
+ProjectionRecord/status-card emitters instead of another skill-local snapshot
+branch.
+
 Risk weights:
 
 | Risk | Weight |

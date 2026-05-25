@@ -298,6 +298,9 @@ Current checkpoint as of 2026-05-15:
   core-to-skill refresh contract for demanded keys, handler coverage, and
   ProjectionRecord materialization ownership; the response includes explicit
   core/skill/browser/forbidden ownership lists and readiness metrics
+- `/api/node/projection-platform-emitters` now defines the platform-owned
+  status-card emitter set for runtime lifecycle, browser shell, notifications,
+  and UI diagnostics
 - skill and scenario `data_projections` manifests now share the
   `adaos.data-projections.v1` target contract, including optional
   `projection_key` and explicit rejection of direct manifest targets to
