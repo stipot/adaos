@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **90%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **91%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -179,7 +179,7 @@ but the productionization checklist remains mostly open.
   notebook artifacts.
 - [x] Add rollback pointer for the node-level active model.
 - [x] Add golden phrase regression report before model promotion.
-- [ ] Add full quality gates using macro-F1, abstain rate, and latency.
+- [x] Add full quality gates using macro-F1, abstain rate, and latency.
 - [ ] Defer per-locale/webspace/profile models until usage statistics justify
   the added operational complexity.
 
@@ -216,9 +216,8 @@ but the productionization checklist remains mostly open.
 
 1. Wire the Teacher UI Check phrase flow to show canonicalization, neural,
    Rasa, and action-preview evidence.
-2. Add full model promotion gates using macro-F1, abstain rate, and latency.
-3. Route named-entity corrections to the governed named-entity write path.
-4. Add runtime-backed host actions for move/hide/pin before exporting them as
+2. Route named-entity corrections to the governed named-entity write path.
+3. Add runtime-backed host actions for move/hide/pin before exporting them as
    active NLU commands.
 
 ## Last Completed Slice
@@ -237,6 +236,9 @@ but the productionization checklist remains mostly open.
   with Rasa evidence (`intent`, `confidence`, `slots`, `entities`,
   `intent_ranking`, `_raw`), and the Teacher bridge forwards that evidence in
   `nlp.teacher.request`.
+- Neural candidate training and promotion now gate on dev accuracy, macro-F1,
+  dev abstain rate, and average dev latency; direct promotion rejects
+  candidates whose recorded quality gates failed.
 - Neural service skill now declares service-owned venv execution and keeps Torch/Numpy dependencies outside the hub root venv.
 - Neural artifacts now include `intent_map.json` so notebook labels can map to AdaOS canonical intents and optional
   action ids while evidence preserves the original source label.

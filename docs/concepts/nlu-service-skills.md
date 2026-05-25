@@ -257,8 +257,10 @@ Char-CNN + BiLSTM architecture and writes the full service artifact layout under
 `--promote` is passed. Promotion backs up the previous active layout under
 `state/nlu/neural/rollback`, writes `active_model.json` and
 `rollback/latest.json`, removes stale indexes, and triggers service `/reindex`.
-Operators can pass `--min-dev-accuracy` and `--min-macro-f1` to enforce
-candidate quality gates before promotion.
+Operators can pass `--min-dev-accuracy`, `--min-macro-f1`,
+`--max-dev-abstain-rate`, and `--max-dev-latency-ms` to enforce candidate
+quality gates before promotion. A candidate whose `metrics.json:gates.passed`
+is false is rejected by direct promotion as well as by the CLI rebuild flow.
 
 The parse and train bridges do not install or prepare Rasa. If the service-skill is missing, they return fallback
 reasons such as `rasa_base_url_unresolved` and let the operator run the install/update path intentionally.

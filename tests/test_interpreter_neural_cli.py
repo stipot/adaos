@@ -134,6 +134,7 @@ def test_neural_reindex_from_curated_plan_cli(monkeypatch):
 def test_neural_rebuild_from_curated_candidate_cli(monkeypatch, tmp_path):
     from adaos.apps.cli.commands import interpreter
 
+    seen = {}
     monkeypatch.setattr(
         interpreter,
         "sync_from_scenarios_and_skills",
@@ -145,16 +146,31 @@ def test_neural_rebuild_from_curated_candidate_cli(monkeypatch, tmp_path):
             return {"ok": True, "examples_path": str(tmp_path / "examples_manifest.jsonl")}
 
         def rebuild_neural_candidate_from_examples(self, **kwargs):
+            seen.update(kwargs)
             return {"ok": True, "candidate_dir": str(tmp_path / "candidate"), "result": {"metrics": {"model_id": "unit"}}}
 
     monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
 
-    result = CliRunner().invoke(interpreter.app, ["neural-rebuild", "--from-curated", "--epochs", "1"])
+    result = CliRunner().invoke(
+        interpreter.app,
+        [
+            "neural-rebuild",
+            "--from-curated",
+            "--epochs",
+            "1",
+            "--max-dev-abstain-rate",
+            "0.25",
+            "--max-dev-latency-ms",
+            "15",
+        ],
+    )
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["mode"] == "candidate_build"
     assert payload["build"]["candidate_dir"] == str(tmp_path / "candidate")
+    assert seen["max_dev_abstain_rate"] == 0.25
+    assert seen["max_dev_latency_ms_avg"] == 15.0
 
 
 def test_neural_rebuild_promotes_and_reindexes(monkeypatch, tmp_path):

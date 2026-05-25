@@ -141,6 +141,7 @@ def _evaluate(model: Any, rows: list[dict[str, Any]], *, labels: list[str], stoi
             pred = labels[pred_idx]
             expected = str(row["skill"])
             confidence = float(probs[pred_idx].item())
+            accepted = confidence >= float(_CFG.THRESHOLD)
             confusion[(expected, pred)] += 1
             rows_out.append(
                 {
@@ -149,6 +150,8 @@ def _evaluate(model: Any, rows: list[dict[str, Any]], *, labels: list[str], stoi
                     "expected_intent": expected,
                     "top_intent": pred,
                     "passed": bool(pred == expected),
+                    "accepted": bool(accepted),
+                    "abstained": bool(not accepted),
                     "confidence": confidence,
                 }
             )
@@ -169,13 +172,16 @@ def _evaluate(model: Any, rows: list[dict[str, Any]], *, labels: list[str], stoi
         }
     total = len(rows_out)
     passed = sum(1 for row in rows_out if row["passed"])
+    abstained = sum(1 for row in rows_out if row["abstained"])
     macro_f1 = sum(item["f1"] for item in per_label.values()) / len(per_label) if per_label else 0.0
     return {
         "total": total,
         "passed": passed,
         "failed": total - passed,
+        "abstained": abstained,
         "accuracy": round((passed / total) if total else 0.0, 6),
         "macro_f1": round(macro_f1, 6),
+        "abstain_rate": round((abstained / total) if total else 0.0, 6),
         "latency_ms_total": round(elapsed_ms, 3),
         "latency_ms_avg": round((elapsed_ms / total) if total else 0.0, 3),
         "per_label": per_label,
@@ -209,6 +215,8 @@ def train_artifacts(
     seed: int = 13,
     min_dev_accuracy: float = 0.0,
     min_macro_f1: float = 0.0,
+    max_dev_abstain_rate: float = 1.0,
+    max_dev_latency_ms_avg: float = 0.0,
 ) -> dict[str, Any]:
     if torch is None or F is None or NLUEncoder is None:
         raise RuntimeError("torch runtime is required for Neural NLU training")
@@ -255,12 +263,25 @@ def train_artifacts(
 
     train_report = _evaluate(model, train_rows, labels=labels, stoi=stoi)
     dev_report = _evaluate(model, dev_rows, labels=labels, stoi=stoi)
+    latency_limit = float(max_dev_latency_ms_avg)
+    latency_passed = True if latency_limit <= 0 else bool(dev_report["latency_ms_avg"] <= latency_limit)
+    accuracy_passed = bool(dev_report["accuracy"] >= float(min_dev_accuracy))
+    macro_f1_passed = bool(dev_report["macro_f1"] >= float(min_macro_f1))
+    abstain_rate_passed = bool(dev_report["abstain_rate"] <= float(max_dev_abstain_rate))
     gates = {
         "min_dev_accuracy": float(min_dev_accuracy),
         "min_macro_f1": float(min_macro_f1),
+        "max_dev_abstain_rate": float(max_dev_abstain_rate),
+        "max_dev_latency_ms_avg": latency_limit,
         "dev_accuracy": dev_report["accuracy"],
         "dev_macro_f1": dev_report["macro_f1"],
-        "passed": bool(dev_report["accuracy"] >= float(min_dev_accuracy) and dev_report["macro_f1"] >= float(min_macro_f1)),
+        "dev_abstain_rate": dev_report["abstain_rate"],
+        "dev_latency_ms_avg": dev_report["latency_ms_avg"],
+        "accuracy_passed": accuracy_passed,
+        "macro_f1_passed": macro_f1_passed,
+        "abstain_rate_passed": abstain_rate_passed,
+        "latency_passed": latency_passed,
+        "passed": bool(accuracy_passed and macro_f1_passed and abstain_rate_passed and latency_passed),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     model_path = out_dir / "model.pt"
@@ -384,6 +405,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=13)
     parser.add_argument("--min-dev-accuracy", type=float, default=0.0)
     parser.add_argument("--min-macro-f1", type=float, default=0.0)
+    parser.add_argument("--max-dev-abstain-rate", type=float, default=1.0)
+    parser.add_argument("--max-dev-latency-ms", type=float, default=0.0)
     return parser
 
 
@@ -399,6 +422,8 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         min_dev_accuracy=args.min_dev_accuracy,
         min_macro_f1=args.min_macro_f1,
+        max_dev_abstain_rate=args.max_dev_abstain_rate,
+        max_dev_latency_ms_avg=args.max_dev_latency_ms,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("ok") else 2

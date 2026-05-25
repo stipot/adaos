@@ -172,3 +172,31 @@ def test_promote_neural_candidate_backs_up_active_model_and_writes_pointer() -> 
     assert pointer["rollback_dir"]
     assert (active_root / "rollback" / "latest.json").exists()
     assert (Path(pointer["rollback_dir"]) / "model.pt").read_text(encoding="utf-8") == "old model"
+
+
+def test_promote_neural_candidate_rejects_failed_quality_gates() -> None:
+    from adaos.services.agent_context import get_ctx
+    from adaos.services.interpreter.workspace import InterpreterWorkspace
+
+    ctx = get_ctx()
+    ws = InterpreterWorkspace(ctx)
+    candidate = ws.root / "neural_candidates" / "failed-gates"
+    candidate.mkdir(parents=True)
+    for name, content in {
+        "model.pt": "new model",
+        "labels.json": json.dumps(["new.intent"]),
+        "vocab.json": json.dumps(["<pad>", "n"]),
+        "examples_manifest.jsonl": json.dumps({"intent": "new.intent", "text": "new"}, ensure_ascii=False) + "\n",
+        "ranker_config.json": "{}",
+        "metrics.json": json.dumps({"model_id": "new-model", "gates": {"passed": False, "dev_abstain_rate": 1.0}}),
+    }.items():
+        (candidate / name).write_text(content, encoding="utf-8")
+
+    promoted = ws.promote_neural_candidate(candidate_dir=candidate, reason="unit")
+
+    assert promoted == {
+        "ok": False,
+        "reason": "candidate_quality_gates_failed",
+        "candidate_dir": str(candidate.resolve()),
+        "gates": {"passed": False, "dev_abstain_rate": 1.0},
+    }

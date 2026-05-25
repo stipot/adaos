@@ -59,7 +59,10 @@ from the curated bundle and writes it under
 provider unless `--promote` is passed. Promotion backs up the previous active
 layout under `.adaos/state/nlu/neural/rollback`, writes rollback pointers, clears
 stale indexes, and runs service reindex. `--min-dev-accuracy` and
-`--min-macro-f1` can require quality gates before the candidate is accepted.
+`--min-macro-f1` can require accuracy gates before the candidate is accepted.
+`--max-dev-abstain-rate` and `--max-dev-latency-ms` add operational gates for
+the average dev abstain rate and average dev latency. Candidates with failed
+recorded gates are rejected by promotion even if promotion is called directly.
 
 ## Runtime locations
 

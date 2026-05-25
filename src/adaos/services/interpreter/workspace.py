@@ -112,7 +112,7 @@ def _compact_neural_training_payload(payload: dict[str, Any], *, out_dir: Path) 
             data = dict(section) if isinstance(section, dict) else {}
             return {
                 key: data.get(key)
-                for key in ("total", "passed", "failed", "accuracy", "macro_f1", "latency_ms_avg")
+                for key in ("total", "passed", "failed", "abstained", "accuracy", "macro_f1", "abstain_rate", "latency_ms_avg")
                 if key in data
             }
 
@@ -879,6 +879,8 @@ class InterpreterWorkspace:
         seed: int = 13,
         min_dev_accuracy: float = 0.0,
         min_macro_f1: float = 0.0,
+        max_dev_abstain_rate: float = 1.0,
+        max_dev_latency_ms_avg: float = 0.0,
     ) -> Dict[str, Any]:
         candidate_root = self.root / "neural_candidates"
         out_dir = candidate_dir or _unique_path(candidate_root / f"candidate.{_utc_filename_stamp()}")
@@ -904,6 +906,10 @@ class InterpreterWorkspace:
             str(float(min_dev_accuracy)),
             "--min-macro-f1",
             str(float(min_macro_f1)),
+            "--max-dev-abstain-rate",
+            str(float(max_dev_abstain_rate)),
+            "--max-dev-latency-ms",
+            str(float(max_dev_latency_ms_avg)),
         ]
         if model_id:
             cmd.extend(["--model-id", model_id])
@@ -948,6 +954,15 @@ class InterpreterWorkspace:
         missing = [name for name in required if not (candidate_dir / name).exists()]
         if missing:
             return {"ok": False, "reason": "candidate_missing_required_artifacts", "missing": missing, "candidate_dir": str(candidate_dir)}
+        candidate_metrics = _read_json_file(candidate_dir / "metrics.json")
+        gates = candidate_metrics.get("gates") if isinstance(candidate_metrics, dict) else None
+        if isinstance(gates, dict) and gates.get("passed") is False:
+            return {
+                "ok": False,
+                "reason": "candidate_quality_gates_failed",
+                "candidate_dir": str(candidate_dir),
+                "gates": gates,
+            }
 
         active_root = self._neural_artifact_root()
         active_root.mkdir(parents=True, exist_ok=True)

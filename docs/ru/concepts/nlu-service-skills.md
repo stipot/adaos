@@ -88,3 +88,9 @@ Controls:
 - `ADAOS_NLU_AUTOTRAIN=1` enables event-driven retraining after scenario/skill changes.
 - `ADAOS_RASA_PORT_PATH` points to a local `rasa-port` checkout.
 - `ADAOS_RASA_PORT_REQUIREMENT` overrides the fallback git requirement.
+
+For Neural rebuilds, operators can pass `--min-dev-accuracy`,
+`--min-macro-f1`, `--max-dev-abstain-rate`, and `--max-dev-latency-ms` to
+enforce candidate quality gates before promotion. A candidate whose
+`metrics.json:gates.passed` is false is rejected by direct promotion as well as
+by the CLI rebuild flow.

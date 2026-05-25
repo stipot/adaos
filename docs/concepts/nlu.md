@@ -110,8 +110,11 @@ Implemented now:
   - `adaos interpreter neural-rebuild --from-curated`
   - trains a candidate service artifact layout under
     `state/interpreter/neural_candidates`
+  - supports quality gates for dev accuracy, macro-F1, abstain rate, and
+    average dev latency.
   - `--promote` backs up the active model, writes rollback pointers, clears
-    stale indexes, and reloads the Neural service.
+    stale indexes, and reloads the Neural service; candidates with failed
+    recorded gates are rejected before promotion.
 - Operator-approved example save backend:
   - `POST /api/nlu/teacher/{webspace_id}/example/save`
   - event: `nlp.teacher.example.save`

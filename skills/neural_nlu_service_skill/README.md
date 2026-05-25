@@ -210,5 +210,9 @@ is explicit:
 Promotion backs up the previous active model layout under
 `state/nlu/neural/rollback`, writes `active_model.json` plus
 `rollback/latest.json`, removes stale indexes, and calls service `/reindex`.
-Use `--min-dev-accuracy` and `--min-macro-f1` to require candidate quality gates
-before promotion.
+Use `--min-dev-accuracy`, `--min-macro-f1`, `--max-dev-abstain-rate`, and
+`--max-dev-latency-ms` to require candidate quality gates before promotion.
+The latency gate uses the average dev evaluation latency in milliseconds; `0`
+leaves that gate disabled. Promotion also rejects candidates whose
+`metrics.json:gates.passed` is false, so failed candidates cannot be promoted by
+calling the workspace helper directly.

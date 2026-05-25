@@ -315,6 +315,8 @@ def neural_rebuild(
     seed: int = typer.Option(13, "--seed", help="Training split/shuffle seed."),
     min_dev_accuracy: float = typer.Option(0.0, "--min-dev-accuracy", min=0.0, max=1.0, help="Required candidate dev accuracy."),
     min_macro_f1: float = typer.Option(0.0, "--min-macro-f1", min=0.0, max=1.0, help="Required candidate macro-F1."),
+    max_dev_abstain_rate: float = typer.Option(1.0, "--max-dev-abstain-rate", min=0.0, max=1.0, help="Maximum allowed dev abstain rate."),
+    max_dev_latency_ms: float = typer.Option(0.0, "--max-dev-latency-ms", min=0.0, help="Maximum allowed average dev latency in ms; 0 disables this gate."),
     promote: bool = typer.Option(False, "--promote", help="Promote the candidate into active Neural artifacts."),
     reason: Optional[str] = typer.Option(None, "--reason", help="Promotion reason recorded in rollback pointer."),
     start_service: bool = typer.Option(True, "--start/--no-start", help="Start the Neural service after promotion."),
@@ -343,6 +345,8 @@ def neural_rebuild(
         seed=seed,
         min_dev_accuracy=min_dev_accuracy,
         min_macro_f1=min_macro_f1,
+        max_dev_abstain_rate=max_dev_abstain_rate,
+        max_dev_latency_ms_avg=max_dev_latency_ms,
     )
     result: dict[str, Any] = {
         "ok": bool(build.get("ok")) and not promote,
