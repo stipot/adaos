@@ -152,7 +152,7 @@ Current status:
 - [x] `abi.projection_record_shape`: define the canonical projection record shape: `status`, `data`, `meta`, `error`
 - [x] `abi.projection_keys_fixed`: define deterministic `projection_key` rules for page, widget, modal, panel, platform-emitted, and node-scoped projections
 - [x] `abi.client_subscription_shape`: define the browser-written client subscription record shape
-- [ ] `abi.node_aware_yjs_envelope`: define the node-scoped top-level Yjs envelope so shared subnet state can preserve multiple node emitters
+- [x] `abi.node_aware_yjs_envelope`: define the node-scoped top-level Yjs envelope so shared subnet state can preserve multiple node emitters
 - [x] `abi.pinned_consumer_semantics`: define `pinned` consumer semantics
 
 Next active projection task:
@@ -169,7 +169,7 @@ Next active projection task:
 - [x] `client.full_subscription_overwrite`: make each client write its full active subscription set on change
 - [x] `client.surface_lifecycle_to_subscriptions`: ensure modal open/close, widget mount/unmount, and visibility changes update the client subscription record
 - [x] `client.multi_projection_support`: add support for multiple active projections in one webspace
-- [ ] `client.node_multiplicity_ready`: prepare the browser to consume node multiplicity from shared Yjs instead of assuming one anonymous node view
+- [x] `client.node_multiplicity_ready`: prepare the browser to consume node multiplicity from shared Yjs instead of assuming one anonymous node view
 - [x] `client.soft_session_sanitation`: keep stale-client cleanup as a soft client/session sanitation mechanism, not as projection activity logic
 
 Current status:
@@ -210,8 +210,16 @@ Current status:
   server-side surface lifecycle mapping contract for page, widget, modal, and
   pinned panel consumers; direct Angular client adapter hookup remains pending,
   but the server now exposes the canonical mapping shape through Swagger
+- `/api/node/projection-records/node-multiplicity-contract` exposes the
+  browser-facing node multiplicity contract for the shared
+  `data/projectionRecords` Yjs cache, including `node_ids`,
+  `node_scoped_record_total`, `records[*].meta.node_id`, and
+  `envelope.node_scope`
 - `/api/node/projection-migration/acceptance-summary` includes
   `surface_lifecycle_contract` in `completion_gates` and embeds the evidence
+  block for one-response MVP verification
+- `/api/node/projection-migration/acceptance-summary` includes
+  `node_multiplicity_contract` in `completion_gates` and embeds the evidence
   block for one-response MVP verification
 - direct Angular client adapter hookup remains pending because the client
   submodule is not initialized in this checkout

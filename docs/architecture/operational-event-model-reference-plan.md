@@ -233,6 +233,10 @@ Current status:
 - `/api/node/projection-runtime-ownership` exposes the shared ownership split
   across event normalization, browser demand, refresh dispatch, platform
   emitters, and the Yjs ProjectionRecord cache
+- `/api/node/projection-records/node-multiplicity-contract` exposes the
+  browser-facing node multiplicity contract for the shared ProjectionRecord
+  cache, including `node_ids`, `node_scoped_record_total`, `records[*].meta.node_id`,
+  and `envelope.node_scope`
 - materialized status-card registry is implemented in the node runtime
 - `/api/node/projection-platform-emitters` exposes the status-card platform
   emitter contract for runtime lifecycle, browser shell, notifications, UI
@@ -473,6 +477,9 @@ Progress:
 - `acceptance-summary` embeds `runtime_ownership_contract` and checks
   `runtime_ownership_contract`, so the final MVP report proves that core,
   browser, skill, and platform responsibilities are separated explicitly
+- `acceptance-summary` embeds `node_multiplicity_contract` and checks
+  `node_multiplicity_contract`, so the final MVP report proves that browser
+  consumers can read node multiplicity from shared ProjectionRecord metadata
 
 Exit criteria:
 

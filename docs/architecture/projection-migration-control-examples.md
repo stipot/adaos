@@ -495,6 +495,22 @@ The same evidence is embedded in
 `runtime_ownership_contract`, and the `runtime_ownership_contract` completion
 gate must pass for the server-side MVP report.
 
+For node multiplicity validation, call
+`/api/node/projection-records/node-multiplicity-contract`. The expected
+evidence is:
+
+- `contract=adaos.projection-records.node-multiplicity.v1`
+- `ready_for_mvp=true`
+- `node_scope_mode=record-meta-node-id`
+- `sample_node_ids[]` includes `node-a` and `node-b`
+- `browser_rules.do_not_assume_single_anonymous_node=true`
+- `browser_rules.browser_writes_projection_cache=false`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`node_multiplicity_contract`, and the `node_multiplicity_contract` completion
+gate must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:
