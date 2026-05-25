@@ -110,7 +110,9 @@ Current status:
 - `/api/node/projection-dispatcher/core-skill-contract` exposes the current
   core-to-skill demanded refresh contract, including handler coverage and the
   ownership split between core demand selection, skill payload refresh, and
-  core ProjectionRecord materialization
+  core ProjectionRecord materialization; each demand now carries an explicit
+  `ownership` block with core-owned, skill-owned, browser-owned, and forbidden
+  responsibilities
 
 ### 3. Projection ABI
 

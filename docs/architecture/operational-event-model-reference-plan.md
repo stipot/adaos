@@ -151,7 +151,9 @@ Progress:
 - `/api/node/projection-dispatcher/core-skill-contract` exposes the
   core-to-skill refresh contract before dispatch: demanded keys, handler
   coverage, and the ownership split where core selects demand and materializes
-  ProjectionRecords while skill/platform handlers refresh payloads
+  ProjectionRecords while skill/platform handlers refresh payloads; each demand
+  carries an explicit `ownership` block with core-owned, skill-owned,
+  browser-owned, and forbidden responsibilities
 - projection-family wildcard handlers are implemented; `status-card:*` is the
   first platform handler family
 - canonical `ProjectionRecord` results can now be materialized in a shared

@@ -376,6 +376,8 @@ For the core-to-skill refresh contract, call
 - `demands[]` contains active demanded `projection_key` values for the
   requested webspace
 - each demand reports `handler.covered`, `handler.key`, and `handler.kind`
+- each demand reports `ownership.core_owned`, `ownership.skill_owned`,
+  `ownership.browser_owned`, and `ownership.forbidden`
 - each demand reports `refresh_contract.core_selects_demand=true`
 - covered demands report `refresh_contract.skill_refreshes_payload=true`
 - every demand reports
@@ -385,6 +387,8 @@ For the core-to-skill refresh contract, call
 
 This is the Swagger-facing proof that core owns demand selection and canonical
 materialization, while skill/platform handlers own payload refresh.
+The ownership block must keep direct browser or skill writes to
+`data/projectionRecords` in `ownership.forbidden`.
 
 Risk weights:
 

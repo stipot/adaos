@@ -296,7 +296,8 @@ Current checkpoint as of 2026-05-15:
 - dispatcher now exposes
   `/api/node/projection-dispatcher/core-skill-contract` as the inspectable
   core-to-skill refresh contract for demanded keys, handler coverage, and
-  ProjectionRecord materialization ownership
+  ProjectionRecord materialization ownership; the response includes explicit
+  core/skill/browser/forbidden ownership lists
 - skill and scenario `data_projections` manifests now share the
   `adaos.data-projections.v1` target contract, including optional
   `projection_key` and explicit rejection of direct manifest targets to
