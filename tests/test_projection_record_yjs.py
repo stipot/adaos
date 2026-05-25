@@ -7,6 +7,9 @@ from adaos.domain import make_client_subscription_record, make_projection_record
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_records import clear_projection_record_registry, write_projection_record
 from adaos.services.projection_record_yjs import (
+    PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA,
+    PROJECTION_RECORDS_YJS_OWNER,
+    PROJECTION_RECORDS_YJS_WRITE_POLICY,
     materialize_projection_records_to_yjs,
     read_projection_records_yjs_cache,
 )
@@ -84,6 +87,11 @@ def test_materialize_projection_records_to_yjs_writes_compact_cache(monkeypatch)
     assert result["yjs_path"] == "data/projectionRecords"
     assert result["record_total"] == 1
     assert payload["schema"] == "adaos.projection-records.v1"
+    assert payload["envelope"]["schema"] == PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA
+    assert payload["envelope"]["owner"] == PROJECTION_RECORDS_YJS_OWNER
+    assert payload["envelope"]["write_policy"] == PROJECTION_RECORDS_YJS_WRITE_POLICY
+    assert payload["envelope"]["node_scope"]["mode"] == "record-meta-node-id"
+    assert result["envelope_ok"] is True
     assert payload["records"]["status-card:runtime"]["data"]["summary"] == "Runtime ready"
     assert payload["projection_keys"] == ["status-card:runtime"]
 
@@ -139,9 +147,14 @@ def test_projection_records_yjs_cache_preserves_node_scope(monkeypatch) -> None:
     assert result["node_ids"] == ["node-a"]
     assert payload["node_scoped_record_total"] == 1
     assert payload["node_ids"] == ["node-a"]
+    assert payload["envelope"]["node_scope"]["node_ids"] == ["node-a"]
+    assert payload["envelope"]["node_scope"]["node_scoped_record_total"] == 1
     assert payload["records"]["status-card:runtime"]["meta"]["node_id"] == "node-a"
     assert readback["node_scoped_record_total"] == 1
     assert readback["node_ids"] == ["node-a"]
+    assert readback["envelope_present"] is True
+    assert readback["envelope_ok"] is True
+    assert readback["envelope"]["node_scope"]["node_ids"] == ["node-a"]
     assert readback["payload"]["records"]["status-card:runtime"]["meta"]["node_id"] == "node-a"
 
 
@@ -186,6 +199,9 @@ def test_read_projection_records_yjs_cache_returns_payload_summary(monkeypatch) 
     assert result["fingerprint_ok"] is True
     assert result["record_total"] == 1
     assert result["projection_keys"] == ["status-card:runtime"]
+    assert result["envelope_present"] is True
+    assert result["envelope_ok"] is True
+    assert result["envelope"]["owner"] == "core:projection_records"
     assert result["payload"]["records"]["status-card:runtime"]["data"]["summary"] == "Runtime ready"
 
 
@@ -203,3 +219,6 @@ def test_read_projection_records_yjs_cache_handles_missing_cache(monkeypatch) ->
     assert result["record_total"] == 0
     assert result["node_scoped_record_total"] == 0
     assert result["projection_keys"] == []
+    assert result["envelope_present"] is False
+    assert result["envelope_ok"] is False
+    assert result["expected_envelope"]["node_scope"]["record_total"] == 0

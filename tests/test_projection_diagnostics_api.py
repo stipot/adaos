@@ -265,6 +265,19 @@ def test_projection_diagnostics_can_include_yjs_cache_readback(monkeypatch) -> N
             "yjs_path": "data/projectionRecords",
             "schema_ok": True,
             "fingerprint_ok": True,
+            "envelope_ok": True,
+            "node_ids": ["node-a"],
+            "envelope": {
+                "schema": "adaos.projection-records.envelope.v1",
+                "owner": "core:projection_records",
+                "write_policy": "core-owned-cache-only",
+                "node_scope": {
+                    "mode": "record-meta-node-id",
+                    "node_ids": ["node-a"],
+                    "node_scoped_record_total": 1,
+                    "record_total": 1,
+                },
+            },
             "payload": {
                 "updated_at": 12.0,
                 "records": {
@@ -299,6 +312,9 @@ def test_projection_diagnostics_can_include_yjs_cache_readback(monkeypatch) -> N
     projection = payload["active_projections"][0]
     assert payload["yjs_cache_checked"] is True
     assert payload["yjs_cache_projection_total"] == 1
+    assert payload["yjs_cache_envelope_ok"] is True
+    assert payload["yjs_cache_envelope"]["node_scope"]["node_ids"] == ["node-a"]
+    assert payload["yjs_cache_node_ids"] == ["node-a"]
     assert payload["missing_yjs_cache_projection_total"] == 0
     assert projection["yjs_cache_record"]["cached"] is True
     assert projection["yjs_cache_record"]["version"] == 4
@@ -349,6 +365,19 @@ def test_projection_diagnostics_can_materialize_and_read_yjs_cache(monkeypatch) 
             "yjs_path": "data/projectionRecords",
             "schema_ok": True,
             "fingerprint_ok": True,
+            "envelope_ok": True,
+            "node_ids": [],
+            "envelope": {
+                "schema": "adaos.projection-records.envelope.v1",
+                "owner": "core:projection_records",
+                "write_policy": "core-owned-cache-only",
+                "node_scope": {
+                    "mode": "record-meta-node-id",
+                    "node_ids": [],
+                    "node_scoped_record_total": 0,
+                    "record_total": 1,
+                },
+            },
             "payload": {
                 "records": {
                     "status-card:runtime": {
@@ -384,6 +413,7 @@ def test_projection_diagnostics_can_materialize_and_read_yjs_cache(monkeypatch) 
     assert payload["refreshes"]["projection_records_yjs"]["record_total"] == 1
     assert payload["yjs_cache_checked"] is True
     assert payload["yjs_cache_projection_total"] == 1
+    assert payload["yjs_cache_envelope_ok"] is True
 
 
 def test_projection_diagnostics_counts_missing_status_card_for_demand() -> None:

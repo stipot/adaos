@@ -206,6 +206,9 @@ def projection_operator_diagnostics(
         if yjs_cache_checked
         else 0
     )
+    yjs_cache_envelope = None
+    if isinstance(yjs_cache, Mapping) and isinstance(yjs_cache.get("envelope"), Mapping):
+        yjs_cache_envelope = dict(yjs_cache.get("envelope") or {})
     return {
         "ok": True,
         "webspace_id": str(webspace_id or "").strip() or None,
@@ -217,6 +220,9 @@ def projection_operator_diagnostics(
         "missing_projection_record_total": len(active) - materialized_projection_total,
         "yjs_cache_checked": yjs_cache_checked,
         "yjs_cache_projection_total": yjs_cache_projection_total,
+        "yjs_cache_envelope_ok": yjs_cache.get("envelope_ok") if isinstance(yjs_cache, Mapping) else None,
+        "yjs_cache_envelope": yjs_cache_envelope,
+        "yjs_cache_node_ids": list(yjs_cache.get("node_ids") or []) if isinstance(yjs_cache, Mapping) else [],
         "missing_yjs_cache_projection_total": (
             len(active) - yjs_cache_projection_total if yjs_cache_checked else 0
         ),

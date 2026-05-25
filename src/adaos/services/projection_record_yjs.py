@@ -14,6 +14,9 @@ from adaos.services.yjs.webspace import default_webspace_id
 PROJECTION_RECORDS_YJS_KEY = "projectionRecords"
 PROJECTION_RECORDS_YJS_PATH = f"data/{PROJECTION_RECORDS_YJS_KEY}"
 PROJECTION_RECORDS_YJS_SCHEMA = "adaos.projection-records.v1"
+PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA = "adaos.projection-records.envelope.v1"
+PROJECTION_RECORDS_YJS_OWNER = "core:projection_records"
+PROJECTION_RECORDS_YJS_WRITE_POLICY = "core-owned-cache-only"
 
 
 def _json_clone(value: Any) -> Any:
@@ -74,6 +77,61 @@ def _node_scoped_record_total(records: Iterable[ProjectionRecord | Mapping[str, 
     return total
 
 
+def _projection_records_yjs_envelope(
+    *,
+    webspace_id: str,
+    record_total: int,
+    node_ids: Iterable[Any],
+    node_scoped_record_total: int,
+) -> dict[str, Any]:
+    normalized_node_ids = sorted({str(item or "").strip() for item in node_ids if str(item or "").strip()})
+    return {
+        "schema": PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA,
+        "owner": PROJECTION_RECORDS_YJS_OWNER,
+        "write_policy": PROJECTION_RECORDS_YJS_WRITE_POLICY,
+        "cache_role": "collaborative_projection_cache",
+        "source_of_truth": "projection_record_registry",
+        "webspace_id": webspace_id,
+        "yjs_path": PROJECTION_RECORDS_YJS_PATH,
+        "node_scope": {
+            "mode": "record-meta-node-id",
+            "node_ids": normalized_node_ids,
+            "node_scoped_record_total": int(node_scoped_record_total),
+            "record_total": int(record_total),
+            "empty_scope_allowed": True,
+        },
+        "boundaries": {
+            "skills_may_read": True,
+            "skills_may_write": False,
+            "browser_may_read": True,
+            "browser_may_write": False,
+        },
+    }
+
+
+def _projection_records_yjs_envelope_ok(
+    envelope: Mapping[str, Any],
+    *,
+    expected: Mapping[str, Any],
+) -> bool:
+    node_scope = envelope.get("node_scope") if isinstance(envelope.get("node_scope"), Mapping) else {}
+    expected_node_scope = (
+        expected.get("node_scope") if isinstance(expected.get("node_scope"), Mapping) else {}
+    )
+    return (
+        envelope.get("schema") == expected.get("schema")
+        and envelope.get("owner") == expected.get("owner")
+        and envelope.get("write_policy") == expected.get("write_policy")
+        and envelope.get("webspace_id") == expected.get("webspace_id")
+        and envelope.get("yjs_path") == expected.get("yjs_path")
+        and node_scope.get("mode") == expected_node_scope.get("mode")
+        and list(node_scope.get("node_ids") or []) == list(expected_node_scope.get("node_ids") or [])
+        and int(node_scope.get("node_scoped_record_total") or 0)
+        == int(expected_node_scope.get("node_scoped_record_total") or 0)
+        and int(node_scope.get("record_total") or 0) == int(expected_node_scope.get("record_total") or 0)
+    )
+
+
 def build_projection_records_yjs_payload(
     *,
     webspace_id: str | None = None,
@@ -91,6 +149,7 @@ def build_projection_records_yjs_payload(
     items = [record.to_dict() for record in records]
     by_key = {str(record.meta.projection_key): record.to_dict() for record in records}
     node_scoped_record_total = _node_scoped_record_total(records)
+    node_ids = _node_ids_from_records(records)
     registry = projection_record_registry_snapshot(webspace_id=target_webspace_id)
     payload = {
         "schema": PROJECTION_RECORDS_YJS_SCHEMA,
@@ -105,16 +164,23 @@ def build_projection_records_yjs_payload(
         "unavailable_total": sum(1 for record in records if record.status == "unavailable"),
         "demanded_only": bool(demanded_only),
         "projection_keys": sorted(by_key),
-        "node_ids": _node_ids_from_records(records),
+        "node_ids": node_ids,
         "records": by_key,
         "items": items,
         "updated_at": ts,
     }
+    payload["envelope"] = _projection_records_yjs_envelope(
+        webspace_id=target_webspace_id,
+        record_total=len(items),
+        node_ids=node_ids,
+        node_scoped_record_total=node_scoped_record_total,
+    )
     payload["fingerprint"] = projection_fingerprint(
         {
             "schema": payload["schema"],
             "webspace_id": payload["webspace_id"],
             "registry_version": payload["registry_version"],
+            "envelope": payload["envelope"],
             "records": by_key,
         }
     )
@@ -144,15 +210,26 @@ def _cache_payload_summary(payload: Mapping[str, Any], *, webspace_id: str) -> d
     node_scoped_record_total = payload.get("node_scoped_record_total")
     if not isinstance(node_scoped_record_total, int):
         node_scoped_record_total = _node_scoped_record_total(normalized_records)
+    expected_envelope = _projection_records_yjs_envelope(
+        webspace_id=str(payload.get("webspace_id") or webspace_id),
+        record_total=int(payload.get("record_total") or len(records)),
+        node_ids=node_ids,
+        node_scoped_record_total=int(node_scoped_record_total or 0),
+    )
+    envelope = payload.get("envelope") if isinstance(payload.get("envelope"), Mapping) else None
+    fingerprint_source = {
+        "schema": payload.get("schema"),
+        "webspace_id": payload.get("webspace_id"),
+        "registry_version": payload.get("registry_version"),
+        "records": dict(records),
+    }
+    if isinstance(envelope, Mapping):
+        fingerprint_source["envelope"] = dict(envelope)
     expected_fingerprint = projection_fingerprint(
-        {
-            "schema": payload.get("schema"),
-            "webspace_id": payload.get("webspace_id"),
-            "registry_version": payload.get("registry_version"),
-            "records": dict(records),
-        }
+        fingerprint_source
     )
     fingerprint = str(payload.get("fingerprint") or "")
+    envelope_present = isinstance(envelope, Mapping)
     return {
         "ok": True,
         "accepted": True,
@@ -165,6 +242,14 @@ def _cache_payload_summary(payload: Mapping[str, Any], *, webspace_id: str) -> d
         "node_scoped_record_total": int(node_scoped_record_total or 0),
         "projection_keys": list(projection_keys),
         "node_ids": list(node_ids),
+        "envelope_present": envelope_present,
+        "envelope_ok": (
+            _projection_records_yjs_envelope_ok(envelope, expected=expected_envelope)
+            if isinstance(envelope, Mapping)
+            else False
+        ),
+        "envelope": _json_clone(dict(envelope)) if isinstance(envelope, Mapping) else None,
+        "expected_envelope": expected_envelope,
         "registry_version": payload.get("registry_version"),
         "fingerprint": fingerprint or None,
         "fingerprint_ok": bool(fingerprint) and fingerprint == expected_fingerprint,
@@ -200,6 +285,15 @@ async def read_projection_records_yjs_cache(*, webspace_id: str | None = None) -
             "node_scoped_record_total": 0,
             "projection_keys": [],
             "node_ids": [],
+            "envelope_present": False,
+            "envelope_ok": False,
+            "envelope": None,
+            "expected_envelope": _projection_records_yjs_envelope(
+                webspace_id=target_webspace_id,
+                record_total=0,
+                node_ids=[],
+                node_scoped_record_total=0,
+            ),
             "payload": None,
         }
     return _cache_payload_summary(payload, webspace_id=target_webspace_id)
@@ -253,6 +347,9 @@ async def materialize_projection_records_to_yjs(
         "demanded_only": bool(demanded_only),
         "projection_keys": list(payload["projection_keys"]),
         "node_ids": list(payload["node_ids"]),
+        "envelope_present": True,
+        "envelope_ok": True,
+        "envelope": payload["envelope"],
         "record_total": int(payload["record_total"]),
         "node_scoped_record_total": int(payload["node_scoped_record_total"]),
         "registry_version": payload["registry_version"],
@@ -280,7 +377,10 @@ def normalize_projection_record_keys(records: Iterable[Mapping[str, Any] | Proje
 __all__ = [
     "PROJECTION_RECORDS_YJS_KEY",
     "PROJECTION_RECORDS_YJS_PATH",
+    "PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA",
+    "PROJECTION_RECORDS_YJS_OWNER",
     "PROJECTION_RECORDS_YJS_SCHEMA",
+    "PROJECTION_RECORDS_YJS_WRITE_POLICY",
     "build_projection_records_yjs_payload",
     "materialize_projection_records_to_yjs",
     "normalize_projection_record_keys",
