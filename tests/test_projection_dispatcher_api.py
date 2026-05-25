@@ -118,6 +118,9 @@ def test_projection_dispatcher_core_skill_contract_endpoint_reports_demand() -> 
     assert payload["covered_total"] == 1
     assert payload["demands"][0]["projection_key"] == "status-card:runtime"
     assert payload["demands"][0]["handler"]["covered"] is True
+    assert "projection demand selection" in payload["demands"][0]["ownership"]["core_owned"]
+    assert "payload refresh" in payload["demands"][0]["ownership"]["skill_owned"]
+    assert "active subscription set" in payload["demands"][0]["ownership"]["browser_owned"]
     assert payload["demands"][0]["refresh_contract"]["core_selects_demand"] is True
     assert payload["demands"][0]["refresh_contract"]["core_materializes_projection_record"] is True
 

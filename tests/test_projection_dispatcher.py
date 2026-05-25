@@ -140,6 +140,10 @@ def test_core_skill_refresh_contract_reports_handler_coverage() -> None:
         "kind": "wildcard",
     }
     assert demands["projection:missing"]["handler"]["covered"] is False
+    assert "ProjectionRecord materialization" in demands["status-card:runtime"]["ownership"]["core_owned"]
+    assert "payload refresh" in demands["status-card:runtime"]["ownership"]["skill_owned"]
+    assert demands["projection:missing"]["ownership"]["skill_owned"] == []
+    assert "browser writes to data/projectionRecords" in demands["status-card:runtime"]["ownership"]["forbidden"]
     assert demands["status-card:runtime"]["refresh_contract"]["core_selects_demand"] is True
     assert demands["status-card:runtime"]["refresh_contract"]["skill_refreshes_payload"] is True
     assert demands["projection:missing"]["refresh_contract"]["skill_refreshes_payload"] is False

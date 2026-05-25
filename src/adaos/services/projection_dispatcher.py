@@ -219,6 +219,34 @@ def _handler_match(projection_key: str) -> dict[str, Any]:
     }
 
 
+def _core_skill_ownership_policy(*, handler_covered: bool) -> dict[str, Any]:
+    return {
+        "core_owned": [
+            "projection demand selection",
+            "projection lifecycle bookkeeping",
+            "ProjectionRecord materialization",
+            "data/projectionRecords cache writes",
+        ],
+        "skill_owned": [
+            "semantic source state",
+            "payload refresh",
+            "domain-specific error mapping",
+        ]
+        if handler_covered
+        else [],
+        "browser_owned": [
+            "active subscription set",
+            "consumer identity",
+            "view lifecycle demand",
+        ],
+        "forbidden": [
+            "browser writes to data/projectionRecords",
+            "skill direct writes to data/projectionRecords",
+            "skill-local replacement of ProjectionRecord lifecycle",
+        ],
+    }
+
+
 def core_skill_refresh_contract_snapshot(
     event: Any | None = None,
     *,
@@ -264,6 +292,7 @@ def core_skill_refresh_contract_snapshot(
                 "consumer_total": len(context.consumers),
                 "consumers": [item.to_dict() for item in context.consumers],
                 "handler": handler,
+                "ownership": _core_skill_ownership_policy(handler_covered=bool(handler["covered"])),
                 "refresh_contract": {
                     "core_selects_demand": True,
                     "skill_refreshes_payload": bool(handler["covered"]),
