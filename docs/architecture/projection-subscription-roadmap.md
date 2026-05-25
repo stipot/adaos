@@ -118,6 +118,8 @@ Current status:
   `core_skill_contract_readiness` in `completion_gates`, so the final MVP
   report now checks this contract alongside browser demand and dispatcher
   coverage
+- the same acceptance summary now includes `platform_emitter_contract`, tying
+  the platform emitter endpoint to the final server-side MVP gate list
 - `/api/node/projection-platform-emitters` exposes the platform emitter
   contract for runtime lifecycle, browser shell, notifications, UI diagnostics,
   and system-error-facing coverage through the shared status-card ABI

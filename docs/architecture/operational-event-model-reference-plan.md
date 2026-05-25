@@ -423,7 +423,8 @@ Progress:
   derived from this Completion Definition so server-ready gates and remaining
   follow-ups can be read directly from Swagger; the checklist includes
   `core_skill_contract_readiness` for the inspectable core-to-skill refresh
-  contract and ownership split
+  contract and ownership split, plus `platform_emitter_contract` for the
+  inspectable platform-emitter status-card contract
 - `acceptance-summary` exposes `risk_register`, generated from warning gates
   and acceptance checks, with risk, impact, mitigation, and verification text
   for diploma limitations and demo notes
