@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import time
 from threading import RLock
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from adaos.domain import ProjectionRecord, normalize_projection_record, projection_fingerprint
+from adaos.services.projection_demand import projection_demand_consumers
 
 
 _LOCK = RLock()
@@ -124,7 +125,113 @@ def projection_record_registry_snapshot(*, webspace_id: str | None = None) -> di
     }
 
 
+def _projection_key_filter(values: Iterable[Any] | None) -> set[str] | None:
+    if values is None:
+        return None
+    keys = {str(value or "").strip() for value in values if str(value or "").strip()}
+    return keys
+
+
+def browser_projection_record_snapshot(
+    *,
+    webspace_id: str | None = None,
+    projection_keys: Iterable[Any] | None = None,
+    include_hidden: bool = True,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Return a browser-facing view of demanded canonical ProjectionRecords."""
+
+    webspace_token = str(webspace_id or "").strip()
+    requested_keys = _projection_key_filter(projection_keys)
+    consumers = projection_demand_consumers(
+        webspace_id=webspace_token or None,
+        include_hidden=include_hidden,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+        now=now,
+    )
+    demanded_keys = sorted(
+        {
+            consumer.projection_key
+            for consumer in consumers
+            if consumer.projection_key and (requested_keys is None or consumer.projection_key in requested_keys)
+        }
+    )
+    consumers_by_projection = {
+        key: [consumer.to_dict() for consumer in consumers if consumer.projection_key == key]
+        for key in demanded_keys
+    }
+    records_by_projection = {
+        record.meta.projection_key: record
+        for record in list_projection_records(webspace_id=webspace_token or None)
+        if requested_keys is None or record.meta.projection_key in requested_keys
+    }
+    entries: list[dict[str, Any]] = []
+    records: dict[str, Any] = {}
+    missing_projection_keys: list[str] = []
+    for projection_key in demanded_keys:
+        record = records_by_projection.get(projection_key)
+        consumer_items = consumers_by_projection.get(projection_key, [])
+        if record is None:
+            missing_projection_keys.append(projection_key)
+            entries.append(
+                {
+                    "projection_key": projection_key,
+                    "cached": False,
+                    "record": None,
+                    "consumer_total": len(consumer_items),
+                    "consumers": consumer_items,
+                }
+            )
+            continue
+        record_payload = record.to_dict()
+        records[projection_key] = record_payload
+        entries.append(
+            {
+                "projection_key": projection_key,
+                "cached": True,
+                "record": record_payload,
+                "consumer_total": len(consumer_items),
+                "consumers": consumer_items,
+            }
+        )
+
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": webspace_token or None,
+        "kind": "browser-demanded-projection-records",
+        "read_path": "data/projectionRecords.records[projection_key]",
+        "demanded_only": True,
+        "include_hidden": bool(include_hidden),
+        "include_stale": bool(include_stale),
+        "demanded_projection_total": len(demanded_keys),
+        "record_total": len(records),
+        "missing_record_total": len(missing_projection_keys),
+        "ready_record_total": sum(1 for item in records.values() if item.get("status") == "ready"),
+        "stale_record_total": sum(1 for item in records.values() if item.get("status") == "stale"),
+        "error_record_total": sum(1 for item in records.values() if item.get("status") == "error"),
+        "projection_keys": demanded_keys,
+        "missing_projection_keys": missing_projection_keys,
+        "records": records,
+        "entries": entries,
+        "cache_contract": {
+            "source": "ProjectionRecord registry",
+            "yjs_path": "data/projectionRecords",
+            "browser_read": True,
+            "browser_write": False,
+            "skill_write": False,
+            "write_policy": "core-owned-cache-only",
+            "legacy_fallback": "compatibility-only",
+        },
+        "updated_at": float(now if now is not None else time.time()),
+    }
+
+
 __all__ = [
+    "browser_projection_record_snapshot",
     "clear_projection_record_registry",
     "get_projection_record",
     "list_projection_records",

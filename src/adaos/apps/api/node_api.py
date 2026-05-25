@@ -64,6 +64,7 @@ from adaos.services.projection_dispatcher import (
 )
 from adaos.services.projection_diagnostics import projection_operator_diagnostics
 from adaos.services.projection_records import (
+    browser_projection_record_snapshot,
     get_projection_record,
     projection_record_registry_snapshot,
     write_projection_record,
@@ -2636,6 +2637,22 @@ async def node_status_card_details_refresh(card_id: str, webspace_id: str | None
 async def node_projection_records_snapshot(webspace_id: str | None = None) -> dict[str, Any]:
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     return projection_record_registry_snapshot(webspace_id=target_webspace_id)
+
+
+@router.get("/projection-records/browser-cache", dependencies=[Depends(require_token)])
+async def node_projection_records_browser_cache(
+    webspace_id: str | None = None,
+    include_hidden: bool = True,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return browser_projection_record_snapshot(
+        webspace_id=target_webspace_id,
+        include_hidden=include_hidden,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+    )
 
 
 @router.get("/projection-records/item", dependencies=[Depends(require_token)])

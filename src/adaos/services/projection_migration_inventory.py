@@ -1108,19 +1108,20 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
             "control metrics and recommendations",
             "manifest guardrails",
             "status-card shared bridge evidence",
+            "browser demanded ProjectionRecord read snapshot",
             "manual acceptance report",
         ],
         "remaining_groups": [
-            "browser client adapter and projection cache",
+            "browser client adapter hookup",
             "full Infrascope projection-family split",
             "cross-branch node-aware Yjs envelope rollout",
             "cross-skill migration and legacy cleanup",
         ],
         "remaining_group_details": [
             {
-                "group": "browser client adapter and projection cache",
-                "reason": "Frontend consumers still need to read shared ProjectionRecord snapshots consistently instead of skill-local branches.",
-                "verification": "Open the web UI and verify that browser widgets read projection-record-backed status without legacy fallback paths.",
+                "group": "browser client adapter hookup",
+                "reason": "The server now exposes demanded ProjectionRecord snapshots for browsers; frontend consumers still need to call that read path instead of skill-local branches.",
+                "verification": "Open the web UI and verify that browser widgets read /api/node/projection-records/browser-cache without legacy fallback paths.",
             },
             {
                 "group": "full Infrascope projection-family split",
@@ -1141,10 +1142,10 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
         "followup_roadmap": [
             {
                 "order": 1,
-                "milestone": "browser_projection_record_read_path",
-                "group": "browser client adapter and projection cache",
-                "goal": "Route browser widgets through shared ProjectionRecord snapshots before removing legacy fallback reads.",
-                "exit_check": "Web UI status cards render from data/projectionRecords and acceptance-summary keeps fail_total=0.",
+                "milestone": "browser_projection_record_client_adapter",
+                "group": "browser client adapter hookup",
+                "goal": "Route browser widgets through the demanded ProjectionRecord browser-cache endpoint before removing legacy fallback reads.",
+                "exit_check": "Web UI status cards render from /api/node/projection-records/browser-cache and acceptance-summary keeps fail_total=0.",
             },
             {
                 "order": 2,
@@ -1329,7 +1330,10 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             "id": "browser_multi_demand",
             "criterion": "browser clients can declare multiple active projection demands in one webspace",
             "status": "warn",
-            "evidence": ["server demand registry and API are implemented"],
+            "evidence": [
+                "server demand registry and API are implemented",
+                "demanded ProjectionRecord browser-cache endpoint is implemented",
+            ],
             "followup": "Direct browser client hookup remains outside the server-side MVP.",
         },
         {
@@ -1386,8 +1390,8 @@ def _acceptance_risk_register(
         "browser_multi_demand": {
             "risk": "Browser UI may keep reading legacy branches while the server-side ProjectionRecord cache is ready.",
             "impact": "The API can demonstrate the model, but the visible web UI may not prove full client migration yet.",
-            "mitigation": "Finish direct browser adapter hookup and verify widgets against data/projectionRecords.",
-            "verification": "Run the web UI and confirm status widgets render from ProjectionRecord-backed data.",
+            "mitigation": "Finish direct browser adapter hookup against /api/node/projection-records/browser-cache and verify widgets against data/projectionRecords.",
+            "verification": "Run the web UI and confirm status widgets render from the demanded ProjectionRecord browser-cache read path.",
         },
         "named_entity_invalidation": {
             "risk": "Named-entity consumers may still rely on reload-only compatibility behavior.",

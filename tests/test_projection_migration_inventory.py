@@ -419,11 +419,12 @@ async def publish(payload, webspace_id):
     assert "server-side demonstration" in summary["defense_summary"]["closing_statement"]
     assert summary["progress"]["server_mvp_percent"] == 91.7
     assert summary["progress"]["full_plan_estimate_percent"] == 65.0
-    assert "browser client adapter and projection cache" in summary["progress"]["remaining_groups"]
-    assert summary["progress"]["remaining_group_details"][0]["group"] == "browser client adapter and projection cache"
+    assert "browser demanded ProjectionRecord read snapshot" in summary["progress"]["completed_groups"]
+    assert "browser client adapter hookup" in summary["progress"]["remaining_groups"]
+    assert summary["progress"]["remaining_group_details"][0]["group"] == "browser client adapter hookup"
     assert "verification" in summary["progress"]["remaining_group_details"][0]
     assert [item["order"] for item in summary["progress"]["followup_roadmap"]] == [1, 2, 3, 4]
-    assert summary["progress"]["followup_roadmap"][0]["milestone"] == "browser_projection_record_read_path"
+    assert summary["progress"]["followup_roadmap"][0]["milestone"] == "browser_projection_record_client_adapter"
     assert summary["control_snapshot"]["kind"] == "projection-migration-control-snapshot"
     assert summary["control_snapshot"]["result"]["server_mvp_percent"] == 91.7
     assert summary["control_snapshot"]["key_metrics"]["migration_readiness_ratio"] == 0.5
@@ -436,6 +437,10 @@ async def publish(payload, webspace_id):
     assert summary["completion_gates"]["gate_total"] == 7
     assert summary["completion_gates"]["status"] == "ready_with_followups"
     assert summary["completion_gates"]["pass_total"] == 4
+    browser_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["browser_multi_demand"]
+    assert "demanded ProjectionRecord browser-cache endpoint is implemented" in browser_gate["evidence"]
     assert {item["id"] for item in summary["completion_gates"]["gates"]} >= {
         "browser_multi_demand",
         "heavy_pilot_shared_abi",

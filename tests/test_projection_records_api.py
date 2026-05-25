@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from adaos.apps.api.auth import require_token
+from adaos.domain import make_client_subscription_record, make_projection_subscription
+from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_records import clear_projection_record_registry
 
 
@@ -28,6 +30,7 @@ def _make_client() -> TestClient:
     from adaos.apps.api import node_api
 
     clear_projection_record_registry()
+    clear_projection_demand_registry()
     app = FastAPI()
     app.include_router(node_api.router, prefix="/api/node")
     app.dependency_overrides[require_token] = lambda: None
@@ -151,3 +154,53 @@ def test_projection_records_api_reads_yjs_cache(monkeypatch) -> None:
     assert payload["yjs_path"] == "data/projectionRecords"
     assert payload["projection_keys"] == ["status-card:runtime"]
     assert captured["webspace_id"] == "desktop"
+
+
+def test_projection_records_api_exposes_browser_cache_snapshot() -> None:
+    client = _make_client()
+    write_resp = client.post(
+        "/api/node/projection-records",
+        json={
+            "status": "ready",
+            "data": {"summary": "Runtime ready"},
+            "meta": {
+                "projection_key": "status-card:runtime",
+                "kind": "status-card",
+                "webspace_id": "desktop",
+                "version": 1,
+                "fingerprint": "fp-1",
+            },
+        },
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    resp = client.get(
+        "/api/node/projection-records/browser-cache",
+        params={"webspace_id": "desktop"},
+    )
+
+    assert write_resp.status_code == 200
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["kind"] == "browser-demanded-projection-records"
+    assert payload["demanded_only"] is True
+    assert payload["record_total"] == 1
+    assert payload["missing_record_total"] == 0
+    assert payload["projection_keys"] == ["status-card:runtime"]
+    assert payload["records"]["status-card:runtime"]["data"]["summary"] == "Runtime ready"
+    assert payload["cache_contract"]["write_policy"] == "core-owned-cache-only"
