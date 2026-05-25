@@ -204,6 +204,8 @@ def test_projection_records_api_exposes_browser_cache_snapshot() -> None:
     assert payload["projection_keys"] == ["status-card:runtime"]
     assert payload["records"]["status-card:runtime"]["data"]["summary"] == "Runtime ready"
     assert payload["cache_contract"]["write_policy"] == "core-owned-cache-only"
+    assert payload["cache"]["etag"] == resp.headers["etag"]
+    assert resp.headers["cache-control"] == "no-cache"
 
 
 def test_projection_records_api_filters_browser_cache_by_client_session() -> None:
@@ -319,3 +321,50 @@ def test_projection_records_api_filters_browser_cache_by_projection_keys() -> No
     assert payload["requested_projection_keys"] == ["status-card:desktop-shell"]
     assert payload["projection_keys"] == ["status-card:desktop-shell"]
     assert set(payload["records"]) == {"status-card:desktop-shell"}
+
+
+def test_projection_records_api_returns_not_modified_for_matching_browser_cache_etag() -> None:
+    client = _make_client()
+    client.post(
+        "/api/node/projection-records",
+        json={
+            "status": "ready",
+            "data": {"summary": "Runtime ready"},
+            "meta": {
+                "projection_key": "status-card:runtime",
+                "kind": "status-card",
+                "webspace_id": "desktop",
+            },
+        },
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    first = client.get(
+        "/api/node/projection-records/browser-cache",
+        params={"webspace_id": "desktop", "client_id": "browser-1", "session_id": "session-1"},
+    )
+    not_modified = client.get(
+        "/api/node/projection-records/browser-cache",
+        params={"webspace_id": "desktop", "client_id": "browser-1", "session_id": "session-1"},
+        headers={"If-None-Match": first.headers["etag"]},
+    )
+
+    assert first.status_code == 200
+    assert not_modified.status_code == 304
+    assert not_modified.headers["etag"] == first.headers["etag"]
+    assert not_modified.headers["cache-control"] == "no-cache"

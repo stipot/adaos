@@ -132,6 +132,25 @@ def _projection_key_filter(values: Iterable[Any] | None) -> set[str] | None:
     return keys
 
 
+def _browser_cache_key(
+    *,
+    webspace_id: str | None,
+    client_id: str | None,
+    session_id: str | None,
+    projection_keys: Iterable[Any],
+) -> str:
+    key_scope = ",".join(str(item) for item in projection_keys) or "*"
+    return ":".join(
+        [
+            "browser-projection-records",
+            str(webspace_id or "*"),
+            str(client_id or "*"),
+            str(session_id or "*"),
+            key_scope,
+        ]
+    )
+
+
 def browser_projection_record_snapshot(
     *,
     webspace_id: str | None = None,
@@ -206,6 +225,26 @@ def browser_projection_record_snapshot(
             }
         )
 
+    cache_key = _browser_cache_key(
+        webspace_id=webspace_token or None,
+        client_id=client_token or None,
+        session_id=session_token or None,
+        projection_keys=demanded_keys,
+    )
+    fingerprint = projection_fingerprint(
+        {
+            "webspace_id": webspace_token or None,
+            "client_id": client_token or None,
+            "session_id": session_token or None,
+            "projection_keys": demanded_keys,
+            "requested_projection_keys": sorted(requested_keys or []),
+            "missing_projection_keys": missing_projection_keys,
+            "records": records,
+            "consumers": consumers_by_projection,
+        }
+    )
+    etag = f'W/"browser-projection-records:{fingerprint}"'
+
     return {
         "ok": True,
         "accepted": True,
@@ -230,6 +269,15 @@ def browser_projection_record_snapshot(
         "missing_projection_keys": missing_projection_keys,
         "records": records,
         "entries": entries,
+        "fingerprint": fingerprint,
+        "etag": etag,
+        "cache": {
+            "key": cache_key,
+            "fingerprint": fingerprint,
+            "etag": etag,
+            "policy": "no-cache",
+            "if_none_match_supported": True,
+        },
         "cache_contract": {
             "source": "ProjectionRecord registry",
             "yjs_path": "data/projectionRecords",

@@ -138,6 +138,10 @@ def test_browser_projection_record_snapshot_returns_only_demanded_records() -> N
     assert snapshot["missing_projection_keys"] == ["status-card:missing"]
     assert set(snapshot["records"]) == {"status-card:runtime"}
     assert snapshot["records"]["status-card:runtime"]["data"]["summary"] == "runtime ready"
+    assert snapshot["cache"]["key"] == "browser-projection-records:desktop:*:*:status-card:missing,status-card:runtime"
+    assert snapshot["cache"]["etag"] == snapshot["etag"]
+    assert snapshot["cache"]["if_none_match_supported"] is True
+    assert snapshot["fingerprint"]
     assert snapshot["cache_contract"]["browser_read"] is True
     assert snapshot["cache_contract"]["browser_write"] is False
 

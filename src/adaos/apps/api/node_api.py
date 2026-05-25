@@ -2639,8 +2639,9 @@ async def node_projection_records_snapshot(webspace_id: str | None = None) -> di
     return projection_record_registry_snapshot(webspace_id=target_webspace_id)
 
 
-@router.get("/projection-records/browser-cache", dependencies=[Depends(require_token)])
+@router.get("/projection-records/browser-cache", dependencies=[Depends(require_token)], response_model=None)
 async def node_projection_records_browser_cache(
+    response: Response,
     webspace_id: str | None = None,
     client_id: str | None = None,
     session_id: str | None = None,
@@ -2648,9 +2649,10 @@ async def node_projection_records_browser_cache(
     include_hidden: bool = True,
     include_stale: bool = True,
     stale_after_s: float | None = None,
-) -> dict[str, Any]:
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+) -> Any:
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
-    return browser_projection_record_snapshot(
+    payload = browser_projection_record_snapshot(
         webspace_id=target_webspace_id,
         client_id=client_id,
         session_id=session_id,
@@ -2659,6 +2661,11 @@ async def node_projection_records_browser_cache(
         include_stale=include_stale,
         stale_after_s=stale_after_s,
     )
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["ETag"] = str(payload.get("etag") or "")
+    if _if_none_match_matches(if_none_match, response.headers["ETag"]):
+        return Response(status_code=304, headers=dict(response.headers))
+    return payload
 
 
 @router.get("/projection-records/item", dependencies=[Depends(require_token)])
