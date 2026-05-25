@@ -311,6 +311,18 @@ This is the server-side guardrail that lets the future browser adapter read its
 own demanded records without mixing widget demand from another browser session
 in the same webspace.
 
+For a projection-scoped browser-cache check, pass one or more
+`projection_keys=<projection-key>` query parameters. The expected additional
+evidence is:
+
+- `projection_scoped=true`
+- `requested_projection_keys[]` contains the requested keys
+- `projection_keys[]` contains only demanded keys that also match the request
+- `records` does not include other demanded projections from the same session
+
+This is useful for a widget-level adapter that wants to refresh only its own
+ProjectionRecord while keeping the wider browser demand set intact.
+
 Risk weights:
 
 | Risk | Weight |

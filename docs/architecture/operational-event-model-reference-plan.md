@@ -101,7 +101,9 @@ Progress:
 - `/api/node/projection-records/browser-cache` exposes a demanded-only
   browser-facing ProjectionRecord snapshot with missing-record evidence and
   explicit cache read/write policy; optional `client_id` and `session_id`
-  filters scope the response to one browser session
+  filters scope the response to one browser session, and repeated
+  `projection_keys` query parameters scope the response to requested demanded
+  projections
 - `/api/node/projection-demand/client/{client_id}/{session_id}/touch` can
   refresh an existing browser session timestamp without replacing its current
   subscriptions, so pinned demand survives heartbeat traffic
@@ -347,6 +349,9 @@ Progress:
 - the same endpoint supports session-scoped reads with `client_id` and
   `session_id`, preventing unrelated browser sessions in one webspace from
   being merged into the future UI adapter read path
+- repeated `projection_keys` query filters let a widget-level adapter request
+  only its own demanded ProjectionRecords while preserving the full browser
+  demand set
 - legacy `data/<skill>` Yjs branches are now reported with explicit
   compatibility metadata: monolithic roots, single-slot branches, and
   sectioned roots remain transitional read surfaces, but their write policy is
@@ -538,7 +543,7 @@ Use this checklist for every implementation slice touching the event model.
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; `registry.named_entities` now exposes read-only compatibility metadata; consumer migration remains |
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
 | Projection record ABI | Canonical record shape | Helper code, deterministic projection-key helpers, shared materialized registry, status-card bridge, diagnostics correlation, `data/projectionRecords` Yjs materialization/readback, and diagnostics cache correlation added |
-| Browser subscription ABI | Full-overwrite demand records | Helper code, server runtime, browser-state mapper, session touch, demanded ProjectionRecord browser-cache endpoint, and client/session scoped browser-cache reads added; browser client adapter hookup remains |
+| Browser subscription ABI | Full-overwrite demand records | Helper code, server runtime, browser-state mapper, session touch, demanded ProjectionRecord browser-cache endpoint, client/session scoped browser-cache reads, and projection-key filtered browser-cache reads added; browser client adapter hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | `data/projectionRecords` now has a top-level envelope with core ownership, write policy, node-scope summary, and read/write boundaries; wider rollout to non-projection Yjs branches remains |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, session touch, and multi-webspace API isolation tests added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |

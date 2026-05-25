@@ -153,6 +153,8 @@ Current status:
   snapshot with `missing_projection_keys` and `cache_contract`
 - the browser-cache read path supports `client_id` and `session_id` filters,
   so one browser session can read only its own demanded ProjectionRecords
+- the same read path supports repeated `projection_keys` query filters for
+  widget-level reads without changing the browser's full demand set
 - direct Angular client adapter hookup remains pending because the client
   submodule is not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before

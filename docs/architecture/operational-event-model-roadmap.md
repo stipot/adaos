@@ -282,6 +282,8 @@ Current checkpoint as of 2026-05-15:
   before the Angular adapter is wired
 - the same read model accepts `client_id` and `session_id`, so the future
   browser adapter can read a session-scoped ProjectionRecord subset
+- repeated `projection_keys` filters are supported for widget-level browser
+  reads that should not fetch every demanded projection in the session
 - skill and scenario `data_projections` manifests now share the
   `adaos.data-projections.v1` target contract, including optional
   `projection_key` and explicit rejection of direct manifest targets to
