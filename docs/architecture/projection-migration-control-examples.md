@@ -441,6 +441,24 @@ also appears as the `event_envelope_contract` completion gate. For the final
 MVP report, verify that `event_envelope.dispatcher_ready=true` and
 `final_acceptance.evidence_fields[]` includes `event_envelope`.
 
+For browser demand contract validation, call
+`/api/node/projection-demand/contract`. The expected evidence is:
+
+- `contract=adaos.client-projection-subscription.v1`
+- `ready_for_mvp=true`
+- `record_required_fields[]` includes `client_id`, `device_id`,
+  `session_id`, `webspace_id`, `role`, `subscriptions`, and `updated_at`
+- `subscription_required_fields[]` includes `projection_key`, `consumer_id`,
+  and `consumer_kind`
+- `write_policy.mode=replace_full_client_session_set`
+- `registry.write_endpoint=/api/node/projection-demand/client`
+- `sample_projection_keys[]` includes `status-card:runtime`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`browser_demand_contract`, and the `browser_demand_contract` completion gate
+must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

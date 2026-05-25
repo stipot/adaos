@@ -223,6 +223,10 @@ Current status:
   envelope ABI as an inspectable contract with required legacy fields,
   `_meta.event` metadata, compatibility flags, ownership rules, and a
   dispatcher-ready normalized example
+- `/api/node/projection-demand/contract` exposes the browser-written client
+  subscription ABI for demanded projections, including required fields,
+  replace-full-session write policy, pinned/visibility semantics, and registry
+  endpoints
 - materialized status-card registry is implemented in the node runtime
 - `/api/node/projection-platform-emitters` exposes the status-card platform
   emitter contract for runtime lifecycle, browser shell, notifications, UI
@@ -454,6 +458,9 @@ Progress:
 - `acceptance-summary` embeds `event_envelope` and checks
   `event_envelope_contract`, so the final MVP report proves that operational
   events have a shared dispatcher-ready envelope ABI
+- `acceptance-summary` embeds `browser_demand_contract` and checks
+  `browser_demand_contract`, so the final MVP report proves that browser demand
+  records have a stable client subscription ABI
 
 Exit criteria:
 

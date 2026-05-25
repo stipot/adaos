@@ -105,6 +105,13 @@ Current status:
 - `/api/node/projection-migration/acceptance-summary` includes
   `event_envelope_contract` in `completion_gates` and embeds the
   `event_envelope` evidence block for the final server-side MVP report
+- `/api/node/projection-demand/contract` exposes the browser-written client
+  subscription ABI, including required record fields, per-subscription fields,
+  replace-full-session write policy, pinned/visibility semantics, and links to
+  the demand registry endpoints
+- `/api/node/projection-migration/acceptance-summary` includes
+  `browser_demand_contract` in `completion_gates` and embeds the
+  `browser_demand_contract` evidence block for one-response MVP verification
 - named-entity ABI is already implemented enough to serve as a model for
   contract-first runtime work
 - eventbus backpressure exists for selected hot paths, but does not replace
@@ -152,7 +159,7 @@ Next active projection task:
 
 ### 4. Client Subscription Runtime
 
-- [ ] `client.subscription_registry`: add browser-side projection subscription registry support
+- [x] `client.subscription_registry`: add browser-side projection subscription registry support
 - [x] `client.full_subscription_overwrite`: make each client write its full active subscription set on change
 - [ ] `client.surface_lifecycle_to_subscriptions`: ensure modal open/close, widget mount/unmount, and visibility changes update the client subscription record
 - [x] `client.multi_projection_support`: add support for multiple active projections in one webspace
@@ -189,6 +196,10 @@ Current status:
 - browser-cache now exposes `entries[].lifecycle` and `lifecycle_summary`, so
   browser consumers can distinguish pending, refreshing, ready, stale, and
   error demanded ProjectionRecords
+- `/api/node/projection-demand/contract` fixes the browser subscription
+  registry contract for Swagger checks, including the client/session identity,
+  demanded `projection_key`, consumer identity, pinned state, visibility, and
+  optional node scope
 - direct Angular client adapter hookup remains pending because the client
   submodule is not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before
