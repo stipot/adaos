@@ -120,6 +120,9 @@ Current status:
   coverage
 - the same acceptance summary now includes `platform_emitter_contract`, tying
   the platform emitter endpoint to the final server-side MVP gate list
+- the acceptance summary also embeds `platform_emitters` as final evidence, so
+  the platform-emitter contract, projection keys, and MVP readiness can be
+  verified from the same report as the other completion gates
 - `/api/node/projection-platform-emitters` exposes the platform emitter
   contract for runtime lifecycle, browser shell, notifications, UI diagnostics,
   and system-error-facing coverage through the shared status-card ABI

@@ -444,6 +444,9 @@ Progress:
   decision for the server-side MVP with required evidence, explicit accepted
   scope, and non-accepted full-plan follow-ups such as browser client
   migration, full Infrascope split, node-aware envelope, and legacy cleanup
+- `acceptance-summary` embeds `platform_emitters` as final evidence for the
+  platform-owned status-card contract, so the MVP report can be checked from
+  one Swagger response without opening the dedicated emitter endpoint
 
 Exit criteria:
 

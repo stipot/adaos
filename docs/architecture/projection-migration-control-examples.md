@@ -419,6 +419,16 @@ This proves that platform-owned operational surfaces are defined as shared
 ProjectionRecord/status-card emitters instead of another skill-local snapshot
 branch.
 
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
+For the final MVP report, verify that:
+
+- `platform_emitters.contract=adaos.platform-emitters.status-card.v1`
+- `platform_emitters.ready_for_mvp=true`
+- `platform_emitters.projection_keys[]` includes
+  `status-card:notifications`
+- `final_acceptance.evidence_fields[]` includes `platform_emitters`
+
 Risk weights:
 
 | Risk | Weight |
