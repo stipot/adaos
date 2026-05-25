@@ -279,6 +279,24 @@ The same evidence is available in `/api/node/projection-diagnostics` as
 `yjs_cache_envelope_ok`, `yjs_cache_envelope`, and `yjs_cache_node_ids` when
 `include_yjs_cache=true`.
 
+For the browser read-path increment, use
+`/api/node/projection-records/browser-cache` after at least one browser demand
+record exists. The expected evidence is:
+
+- `kind=browser-demanded-projection-records`
+- `demanded_only=true`
+- `read_path=data/projectionRecords.records[projection_key]`
+- `record_total` for demanded records already available in the canonical
+  ProjectionRecord registry
+- `missing_projection_keys[]` for demanded records not materialized yet
+- `cache_contract.browser_read=true`
+- `cache_contract.browser_write=false`
+- `cache_contract.write_policy=core-owned-cache-only`
+
+This does not prove that the Angular UI has already switched read paths. It
+proves that the server now exposes the demanded-only ProjectionRecord read
+model the browser adapter should consume.
+
 Risk weights:
 
 | Risk | Weight |

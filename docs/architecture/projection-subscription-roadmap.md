@@ -148,8 +148,11 @@ Current status:
   `projection:node/<node_id>/<projection_key>` forms
 - a server-side browser demand registry, full-overwrite API, and browser-state
   mapper are implemented
-- direct Angular client hookup remains pending because the client submodule is
-  not initialized in this checkout
+- `/api/node/projection-records/browser-cache` now joins active browser demand
+  with canonical ProjectionRecords and returns a demanded-only browser read
+  snapshot with `missing_projection_keys` and `cache_contract`
+- direct Angular client adapter hookup remains pending because the client
+  submodule is not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before
   the shared subscription shape is locked
 

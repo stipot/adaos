@@ -98,11 +98,14 @@ Progress:
 
 - server-side demand registry, full-overwrite API, browser-state mapper, and
   stale-session marking are implemented
+- `/api/node/projection-records/browser-cache` exposes a demanded-only
+  browser-facing ProjectionRecord snapshot with missing-record evidence and
+  explicit cache read/write policy
 - `/api/node/projection-demand/client/{client_id}/{session_id}/touch` can
   refresh an existing browser session timestamp without replacing its current
   subscriptions, so pinned demand survives heartbeat traffic
-- direct browser client hookup remains because the Angular client submodule is
-  not present in this checkout
+- direct browser client adapter hookup remains because the Angular client
+  submodule is not present in this checkout
 
 Required artifacts:
 
@@ -336,6 +339,10 @@ Progress:
   `envelope`, and `/api/node/projection-diagnostics?include_yjs_cache=true`
   exposes `yjs_cache_envelope_ok`, `yjs_cache_envelope`, and
   `yjs_cache_node_ids` for operator checks
+- `/api/node/projection-records/browser-cache` now returns active browser
+  demands joined with canonical ProjectionRecords, including
+  `missing_projection_keys` and a `cache_contract` that keeps browser writes
+  disabled
 - legacy `data/<skill>` Yjs branches are now reported with explicit
   compatibility metadata: monolithic roots, single-slot branches, and
   sectioned roots remain transitional read surfaces, but their write policy is
@@ -527,7 +534,7 @@ Use this checklist for every implementation slice touching the event model.
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; `registry.named_entities` now exposes read-only compatibility metadata; consumer migration remains |
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
 | Projection record ABI | Canonical record shape | Helper code, deterministic projection-key helpers, shared materialized registry, status-card bridge, diagnostics correlation, `data/projectionRecords` Yjs materialization/readback, and diagnostics cache correlation added |
-| Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
+| Browser subscription ABI | Full-overwrite demand records | Helper code, server runtime, browser-state mapper, session touch, and demanded ProjectionRecord browser-cache endpoint added; browser client adapter hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | `data/projectionRecords` now has a top-level envelope with core ownership, write policy, node-scope summary, and read/write boundaries; wider rollout to non-projection Yjs branches remains |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, session touch, and multi-webspace API isolation tests added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |
@@ -537,7 +544,7 @@ Use this checklist for every implementation slice touching the event model.
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |
 | Infrastate alignment | Operational overlay uses shared status-card path | Snapshot-to-card adapter, API publication, and lazy details refresh added |
 | Infrascope migration | Uses shared ABI and dispatcher | First status-card adapter covers overview/incidents/inventory/operations/browser/runtime/registry plus object-inspector/topology cards; API refresh path can publish from request payload or `data/infrascope`; explicit `card_ids` and `demanded_only` refreshes are supported; dispatcher and diagnostics can refresh demanded `status-card:infrascope-*` records from `data/infrascope`; no-cross-webspace churn is covered; status-card snapshot and thin summary can refresh from `data/infrascope` on read; `infrascope-overview` supports tool-backed lazy details refresh; client/live-skill hookup remains |
-| Cross-skill rollout | Inventory and migration path for remaining skills | Monolithic Yjs publisher inventory added through `/api/node/projection-migration/monolith-inventory`; legacy branch compatibility rules classify transitional read surfaces versus the canonical `data/projectionRecords` cache; skill/scenario `data_projections` targets now accept `projection_key`, have shared manifest contract inspection, and expose API metrics for keyed-target coverage and reserved cache violations; skill-local projection shim findings added to the inventory; migration metrics added through `/api/node/projection-migration/metrics`; prioritized migration recommendations added through `/api/node/projection-migration/recommendations`; SDK pressure counters added for dirty drops/coalesced/overlapping refreshes; SDK active-demand restore added for projection and stream runtimes; migration and cleanup remain |
+| Cross-skill rollout | Inventory and migration path for remaining skills | Monolithic Yjs publisher inventory added through `/api/node/projection-migration/monolith-inventory`; legacy branch compatibility rules classify transitional read surfaces versus the canonical `data/projectionRecords` cache; skill/scenario `data_projections` targets now accept `projection_key`, have shared manifest contract inspection, and expose API metrics for keyed-target coverage and reserved cache violations; skill-local projection shim findings added to the inventory; migration metrics added through `/api/node/projection-migration/metrics`; prioritized migration recommendations added through `/api/node/projection-migration/recommendations`; SDK pressure counters added for dirty drops/coalesced/overlapping refreshes; SDK active-demand restore added for projection and stream runtimes; demanded ProjectionRecord browser-cache read path added; migration and cleanup remain |
 
 ## Completion Definition
 

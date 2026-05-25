@@ -276,6 +276,10 @@ Current checkpoint as of 2026-05-15:
   branches as transitional read-compatible surfaces with
   `projection-record-only` write policy, while `data/projectionRecords` is
   treated as the core-owned canonical cache
+- browsers now have a server-side demanded read model through
+  `/api/node/projection-records/browser-cache`, which joins active browser
+  demand with canonical ProjectionRecords and reports missing demanded records
+  before the Angular adapter is wired
 - skill and scenario `data_projections` manifests now share the
   `adaos.data-projections.v1` target contract, including optional
   `projection_key` and explicit rejection of direct manifest targets to
