@@ -109,6 +109,21 @@ def test_status_card_api_snapshot_includes_runtime_card_by_default() -> None:
     assert payload["stats"]["publish_total"] == 1
 
 
+def test_projection_platform_emitters_endpoint_exposes_contract() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/projection-platform-emitters")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.platform-emitters.status-card.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["emitter_total"] == 4
+    assert payload["coverage"]["runtime_lifecycle"] is True
+    assert payload["coverage"]["notifications"] is True
+    assert "status-card:ui-runtime" in payload["projection_keys"]
+
+
 def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     client = _make_client()
 

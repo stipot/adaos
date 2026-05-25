@@ -10,6 +10,7 @@ from adaos.services.agent_context import clear_ctx, set_ctx
 from adaos.services.desktop_status_cards import publish_desktop_status_card
 from adaos.services.io_web.desktop import WebDesktopInstalled, WebDesktopSnapshot
 from adaos.services.io_web.toast import WebToast, publish_notification_status_card
+from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.runtime_status_cards import publish_runtime_status_card
 from adaos.services.status_card_registry import clear_status_card_registry, status_card_projection_record
 from adaos.services.ui_runtime_diagnostics import ingest_ui_runtime_diagnostics
@@ -94,3 +95,28 @@ def test_platform_emitters_publish_shared_status_card_projection_records(tmp_pat
     assert records["desktop-shell"].data["kind"] == "browser-shell"
     assert records["notifications"].data["kind"] == "notifications"
     assert records["ui-runtime"].data["kind"] == "ui-runtime-diagnostics"
+
+
+def test_platform_emitter_contract_snapshot_defines_status_card_emitters() -> None:
+    snapshot = platform_emitter_contract_snapshot(now=10.0)
+
+    assert snapshot["contract"] == "adaos.platform-emitters.status-card.v1"
+    assert snapshot["emitter_total"] == 4
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["coverage"] == {
+        "runtime_lifecycle": True,
+        "browser_runtime": True,
+        "notifications": True,
+        "diagnostics": True,
+        "system_errors": True,
+    }
+    assert snapshot["projection_keys"] == [
+        "status-card:runtime",
+        "status-card:desktop-shell",
+        "status-card:notifications",
+        "status-card:ui-runtime",
+    ]
+    emitters = {item["id"]: item for item in snapshot["emitters"]}
+    assert emitters["runtime"]["owner"] == "core:runtime"
+    assert emitters["notifications"]["contract"]["browser_write"] is False
+    assert emitters["ui-runtime"]["category"] == "diagnostics"

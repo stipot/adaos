@@ -81,6 +81,7 @@ from adaos.services.projection_migration_inventory import (
     projection_migration_monolith_inventory,
     projection_migration_recommendations,
 )
+from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
     ensure_status_card_dispatcher_handler,
@@ -2484,6 +2485,11 @@ async def node_status_cards_snapshot(
     if refreshes:
         snapshot["refreshes"] = refreshes
     return snapshot
+
+
+@router.get("/projection-platform-emitters", dependencies=[Depends(require_token)])
+async def node_projection_platform_emitters() -> dict[str, Any]:
+    return platform_emitter_contract_snapshot()
 
 
 @router.post("/status-cards/runtime/refresh", dependencies=[Depends(require_token)])
