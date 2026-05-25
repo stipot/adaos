@@ -230,6 +230,9 @@ Current status:
 - `/api/node/projection-demand/surface-lifecycle-contract` exposes the
   server-side mapping from page, widget, modal, and pinned panel lifecycle
   state into canonical projection subscriptions
+- `/api/node/projection-runtime-ownership` exposes the shared ownership split
+  across event normalization, browser demand, refresh dispatch, platform
+  emitters, and the Yjs ProjectionRecord cache
 - materialized status-card registry is implemented in the node runtime
 - `/api/node/projection-platform-emitters` exposes the status-card platform
   emitter contract for runtime lifecycle, browser shell, notifications, UI
@@ -467,6 +470,9 @@ Progress:
 - `acceptance-summary` embeds `surface_lifecycle_contract` and checks
   `surface_lifecycle_contract`, so the final MVP report proves that browser
   surface lifecycle state has a stable mapping into projection subscriptions
+- `acceptance-summary` embeds `runtime_ownership_contract` and checks
+  `runtime_ownership_contract`, so the final MVP report proves that core,
+  browser, skill, and platform responsibilities are separated explicitly
 
 Exit criteria:
 

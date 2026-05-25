@@ -92,7 +92,7 @@ Current status:
 
 - [x] `runtime.event_envelope_abi`: align with the master roadmap's shared event envelope before adding projection-specific metadata
 - [ ] `runtime.core_skill_contract`: define the core-to-skill invalidation and refresh contract before browser-specific consumption logic
-- [ ] `runtime.ownership_split`: define which runtime transitions are core-owned and which projection rebuilds are skill-owned
+- [x] `runtime.ownership_split`: define which runtime transitions are core-owned and which projection rebuilds are skill-owned
 - [x] `runtime.platform_emitters_defined`: define platform-emitted projections for notifications, warnings, diagnostics, and system errors
 - [ ] `runtime.restore_demand_from_yjs`: define startup restoration rules for core and skills reading active demand from Yjs
 
@@ -112,6 +112,12 @@ Current status:
 - `/api/node/projection-migration/acceptance-summary` includes
   `browser_demand_contract` in `completion_gates` and embeds the
   `browser_demand_contract` evidence block for one-response MVP verification
+- `/api/node/projection-runtime-ownership` exposes the shared ownership split
+  across event normalization, browser demand, refresh dispatch, platform
+  emitters, and the Yjs ProjectionRecord cache
+- `/api/node/projection-migration/acceptance-summary` includes
+  `runtime_ownership_contract` in `completion_gates` and embeds the
+  ownership evidence block for one-response MVP verification
 - named-entity ABI is already implemented enough to serve as a model for
   contract-first runtime work
 - eventbus backpressure exists for selected hot paths, but does not replace

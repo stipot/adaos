@@ -477,6 +477,24 @@ The same evidence is embedded in
 `surface_lifecycle_contract`, and the `surface_lifecycle_contract` completion
 gate must pass for the server-side MVP report.
 
+For runtime ownership split validation, call
+`/api/node/projection-runtime-ownership`. The expected evidence is:
+
+- `contract=adaos.projection-runtime-ownership.v1`
+- `ready_for_mvp=true`
+- `boundary_total=5`
+- `boundaries[]` includes `event_envelope`, `browser_demand`,
+  `refresh_dispatch`, `platform_emitters`, and `yjs_projection_cache`
+- `browser_demand.forbidden[]` includes browser writes to
+  `data/projectionRecords`
+- `refresh_dispatch.skill_owned[]` includes payload refresh for owned
+  projection keys
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`runtime_ownership_contract`, and the `runtime_ownership_contract` completion
+gate must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:
