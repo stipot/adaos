@@ -110,6 +110,9 @@ Progress:
   `fingerprint`, `etag`, record metadata, and missing-record reason; aggregate
   `entry_cache_keys`, `entry_fingerprints`, and `entry_etags` let adapters
   compare individual demanded ProjectionRecords
+- browser-cache now exposes `entries[].lifecycle` and `lifecycle_summary` so
+  the browser read model consumes pending, refreshing, ready, stale, and error
+  states as first-class projection lifecycle data
 - `/api/node/projection-demand/client/{client_id}/{session_id}/touch` can
   refresh an existing browser session timestamp without replacing its current
   subscriptions, so pinned demand survives heartbeat traffic

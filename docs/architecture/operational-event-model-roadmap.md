@@ -290,6 +290,9 @@ Current checkpoint as of 2026-05-15:
 - browser-cache entries also carry per-demanded-projection cache metadata:
   entry cache key, fingerprint, ETag, source, record metadata, and a stable
   missing-record reason
+- browser-cache responses expose lifecycle consumption fields through
+  `entries[].lifecycle` and `lifecycle_summary`, covering pending, refreshing,
+  ready, stale, and error demanded ProjectionRecords
 - skill and scenario `data_projections` manifests now share the
   `adaos.data-projections.v1` target contract, including optional
   `projection_key` and explicit rejection of direct manifest targets to

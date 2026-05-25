@@ -352,6 +352,23 @@ This gives the future browser adapter a stable per-widget signal: the whole
 snapshot can be validated through HTTP `ETag`, while each demanded
 ProjectionRecord can still be compared independently.
 
+For browser-cache lifecycle consumption, inspect `entries[].lifecycle` and the
+top-level `lifecycle_summary`. The expected evidence is:
+
+- missing demanded records are reported as `state=pending`
+- cached `loading`, `refreshing`, or `pending` records are reported as
+  `state=refreshing`
+- cached `ready` records are reported as `state=ready`
+- cached `stale` records are reported as `state=stale`
+- error-like records are reported as `state=error`
+- `lifecycle_summary.states` aggregates the demanded set
+- `lifecycle_summary.blocked=true` when pending, refreshing, or error records
+  remain
+
+This proves the browser read model can consume projection lifecycle state as a
+first-class contract instead of treating every ProjectionRecord as only payload
+data.
+
 Risk weights:
 
 | Risk | Weight |

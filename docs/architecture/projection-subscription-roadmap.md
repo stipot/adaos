@@ -160,6 +160,9 @@ Current status:
 - browser-cache entries now expose per-projection `cache.key`, `fingerprint`,
   `etag`, and missing-record reasons, plus aggregate `entry_fingerprints` and
   `entry_etags` maps for widget-level comparison
+- browser-cache now exposes `entries[].lifecycle` and `lifecycle_summary`, so
+  browser consumers can distinguish pending, refreshing, ready, stale, and
+  error demanded ProjectionRecords
 - direct Angular client adapter hookup remains pending because the client
   submodule is not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before
