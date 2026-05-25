@@ -293,6 +293,10 @@ Current checkpoint as of 2026-05-15:
 - browser-cache responses expose lifecycle consumption fields through
   `entries[].lifecycle` and `lifecycle_summary`, covering pending, refreshing,
   ready, stale, and error demanded ProjectionRecords
+- dispatcher now exposes
+  `/api/node/projection-dispatcher/core-skill-contract` as the inspectable
+  core-to-skill refresh contract for demanded keys, handler coverage, and
+  ProjectionRecord materialization ownership
 - skill and scenario `data_projections` manifests now share the
   `adaos.data-projections.v1` target contract, including optional
   `projection_key` and explicit rejection of direct manifest targets to

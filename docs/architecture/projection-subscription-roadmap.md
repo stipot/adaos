@@ -107,6 +107,10 @@ Current status:
 - the SDK now has a `restore_active_demand(...)` helper for projection and
   stream runtimes; the remaining roadmap item is wiring that helper to the
   durable Yjs/source-of-truth restoration path
+- `/api/node/projection-dispatcher/core-skill-contract` exposes the current
+  core-to-skill demanded refresh contract, including handler coverage and the
+  ownership split between core demand selection, skill payload refresh, and
+  core ProjectionRecord materialization
 
 ### 3. Projection ABI
 

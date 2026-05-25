@@ -369,6 +369,23 @@ This proves the browser read model can consume projection lifecycle state as a
 first-class contract instead of treating every ProjectionRecord as only payload
 data.
 
+For the core-to-skill refresh contract, call
+`/api/node/projection-dispatcher/core-skill-contract`. The expected evidence is:
+
+- `contract=adaos.core-skill-projection-refresh.v1`
+- `demands[]` contains active demanded `projection_key` values for the
+  requested webspace
+- each demand reports `handler.covered`, `handler.key`, and `handler.kind`
+- each demand reports `refresh_contract.core_selects_demand=true`
+- covered demands report `refresh_contract.skill_refreshes_payload=true`
+- every demand reports
+  `refresh_contract.core_materializes_projection_record=true`
+- `covered_total` and `uncovered_total` summarize handler coverage before the
+  actual dispatch runs
+
+This is the Swagger-facing proof that core owns demand selection and canonical
+materialization, while skill/platform handlers own payload refresh.
+
 Risk weights:
 
 | Risk | Weight |
