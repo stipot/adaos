@@ -434,9 +434,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 13
+    assert summary["completion_gates"]["gate_total"] == 14
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 10
+    assert summary["completion_gates"]["pass_total"] == 11
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -447,6 +447,7 @@ async def publish(payload, webspace_id):
         "core_skill_contract_readiness",
         "event_envelope_contract",
         "heavy_pilot_shared_abi",
+        "node_multiplicity_contract",
         "platform_emitter_contract",
         "runtime_ownership_contract",
         "surface_lifecycle_contract",
@@ -472,6 +473,13 @@ async def publish(payload, webspace_id):
     assert summary["runtime_ownership_contract"]["contract"] == "adaos.projection-runtime-ownership.v1"
     assert summary["runtime_ownership_contract"]["ready_for_mvp"] is True
     assert summary["runtime_ownership_contract"]["boundary_total"] == 5
+    node_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["node_multiplicity_contract"]
+    assert "/api/node/projection-records/node-multiplicity-contract" in node_gate["evidence"]
+    assert summary["node_multiplicity_contract"]["contract"] == "adaos.projection-records.node-multiplicity.v1"
+    assert summary["node_multiplicity_contract"]["ready_for_mvp"] is True
+    assert summary["node_multiplicity_contract"]["browser_rules"]["do_not_assume_single_anonymous_node"] is True
     event_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["event_envelope_contract"]
@@ -503,6 +511,7 @@ async def publish(payload, webspace_id):
     assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
     assert "browser_demand_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "event_envelope" in summary["final_acceptance"]["evidence_fields"]
+    assert "node_multiplicity_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "platform_emitters" in summary["final_acceptance"]["evidence_fields"]
     assert "runtime_ownership_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "surface_lifecycle_contract" in summary["final_acceptance"]["evidence_fields"]

@@ -10,6 +10,7 @@ import yaml
 from adaos.domain import client_subscription_contract_snapshot, event_envelope_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.projection_demand_mapper import browser_surface_lifecycle_contract_snapshot
+from adaos.services.projection_record_yjs import projection_records_node_multiplicity_contract_snapshot
 from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
 from adaos.services.scenario.projection_registry import inspect_projection_manifest_entries
 
@@ -1398,6 +1399,18 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             ],
         },
         {
+            "id": "node_multiplicity_contract",
+            "criterion": "browser consumers can discover node multiplicity from shared ProjectionRecord cache metadata",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-records/node-multiplicity-contract",
+                "records[*].meta.node_id",
+                "payload.node_ids",
+                "envelope.node_scope",
+                "browser read-only cache rule",
+            ],
+        },
+        {
             "id": "dispatcher_no_cross_webspace_churn",
             "criterion": "the dispatcher refreshes demanded projections without cross-webspace churn",
             "status": "pass",
@@ -1572,6 +1585,7 @@ def _acceptance_final_acceptance(
             "request_examples",
             "browser_demand_contract",
             "event_envelope",
+            "node_multiplicity_contract",
             "platform_emitters",
             "runtime_ownership_contract",
             "surface_lifecycle_contract",
@@ -1610,6 +1624,9 @@ def projection_migration_acceptance_summary(
     metrics = _mapping(metrics_report.get("metrics"))
     browser_demand_contract = client_subscription_contract_snapshot(now=metrics_report.get("updated_at"))
     event_envelope = event_envelope_contract_snapshot(now=metrics_report.get("updated_at"))
+    node_multiplicity_contract = projection_records_node_multiplicity_contract_snapshot(
+        now=metrics_report.get("updated_at")
+    )
     platform_emitters = platform_emitter_contract_snapshot(now=metrics_report.get("updated_at"))
     runtime_ownership_contract = projection_runtime_ownership_contract_snapshot(now=metrics_report.get("updated_at"))
     surface_lifecycle_contract = browser_surface_lifecycle_contract_snapshot(now=metrics_report.get("updated_at"))
@@ -1767,6 +1784,7 @@ def projection_migration_acceptance_summary(
         "completion_gates": completion_gates,
         "browser_demand_contract": browser_demand_contract,
         "event_envelope": event_envelope,
+        "node_multiplicity_contract": node_multiplicity_contract,
         "platform_emitters": platform_emitters,
         "runtime_ownership_contract": runtime_ownership_contract,
         "surface_lifecycle_contract": surface_lifecycle_contract,
