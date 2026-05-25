@@ -1,5 +1,5 @@
 from .types import SkillId, ScenarioId, Event, ProcessSpec
-from .event_envelope import EventEnvelope, enrich_event_payload, normalize_event_envelope
+from .event_envelope import EventEnvelope, enrich_event_payload, event_envelope_contract_snapshot, normalize_event_envelope
 from .projection_record import (
     ProjectionMeta,
     ProjectionRecord,
@@ -69,6 +69,7 @@ __all__ = [
     "is_status_card_stale",
     "make_client_subscription_record",
     "enrich_event_payload",
+    "event_envelope_contract_snapshot",
     "make_projection_subscription",
     "make_projection_record",
     "make_status_card",

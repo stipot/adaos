@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from adaos.domain import Event
+from adaos.domain import Event, event_envelope_contract_snapshot
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.apps.api.auth import ensure_token, require_token, resolve_presented_token
 from adaos.services.agent_context import get_ctx
@@ -2490,6 +2490,11 @@ async def node_status_cards_snapshot(
 @router.get("/projection-platform-emitters", dependencies=[Depends(require_token)])
 async def node_projection_platform_emitters() -> dict[str, Any]:
     return platform_emitter_contract_snapshot()
+
+
+@router.get("/event-envelope-contract", dependencies=[Depends(require_token)])
+async def node_event_envelope_contract() -> dict[str, Any]:
+    return event_envelope_contract_snapshot(now=time.time())
 
 
 @router.post("/status-cards/runtime/refresh", dependencies=[Depends(require_token)])

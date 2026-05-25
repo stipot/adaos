@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from adaos.domain import Event, enrich_event_payload, normalize_event_envelope
+from adaos.domain import Event, enrich_event_payload, event_envelope_contract_snapshot, normalize_event_envelope
 
 
 def test_normalize_event_envelope_accepts_legacy_event() -> None:
@@ -90,3 +90,18 @@ def test_enrich_event_payload_can_generate_event_id() -> None:
     event_id = enriched["_meta"]["event"]["event_id"]
     assert isinstance(event_id, str)
     assert event_id
+
+
+def test_event_envelope_contract_snapshot_exposes_shared_abi() -> None:
+    snapshot = event_envelope_contract_snapshot(now=20.0)
+
+    assert snapshot["contract"] == "adaos.operational-event-envelope.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["meta_path"] == "_meta.event"
+    assert snapshot["required_fields"] == ["type", "source", "ts", "payload"]
+    assert "trace_id" in snapshot["metadata_fields"]
+    assert snapshot["compatibility"]["legacy_event_supported"] is True
+    assert snapshot["compatibility"]["nested_meta_preferred"] is True
+    assert "mutating original payload during enrichment" in snapshot["ownership"]["forbidden"]
+    assert snapshot["normalized_example"]["event_id"] == "evt-demo-1"
+    assert snapshot["dispatcher_ready"] is True

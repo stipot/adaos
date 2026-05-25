@@ -87,6 +87,21 @@ def test_projection_dispatcher_snapshot_endpoint_is_empty_by_default() -> None:
     assert payload["stats"]["incoming_total"] == 0
 
 
+def test_event_envelope_contract_endpoint_exposes_shared_abi() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/event-envelope-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.operational-event-envelope.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["meta_path"] == "_meta.event"
+    assert "scope" in payload["metadata_fields"]
+    assert payload["normalized_example"]["event_id"] == "evt-demo-1"
+    assert payload["dispatcher_ready"] is True
+
+
 def test_projection_dispatcher_core_skill_contract_endpoint_reports_demand() -> None:
     client = _make_client()
     write_client_subscription_record(
