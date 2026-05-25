@@ -197,3 +197,46 @@ def test_browser_projection_record_snapshot_can_scope_to_client_session() -> Non
     assert snapshot["projection_keys"] == ["status-card:runtime"]
     assert set(snapshot["records"]) == {"status-card:runtime"}
     assert snapshot["cache_contract"]["client_session_filter"] is True
+
+
+def test_browser_projection_record_snapshot_can_filter_projection_keys() -> None:
+    for projection_key in ["status-card:runtime", "status-card:desktop-shell"]:
+        write_projection_record(
+            make_projection_record(
+                projection_key=projection_key,
+                kind="status-card",
+                webspace_id="desktop",
+                data={"summary": projection_key},
+            )
+        )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                ),
+                make_projection_subscription(
+                    projection_key="status-card:desktop-shell",
+                    consumer_id="widget:desktop-shell",
+                    consumer_kind="widget",
+                ),
+            ],
+        )
+    )
+
+    snapshot = browser_projection_record_snapshot(
+        webspace_id="desktop",
+        projection_keys=["status-card:desktop-shell"],
+    )
+
+    assert snapshot["projection_scoped"] is True
+    assert snapshot["requested_projection_keys"] == ["status-card:desktop-shell"]
+    assert snapshot["projection_keys"] == ["status-card:desktop-shell"]
+    assert set(snapshot["records"]) == {"status-card:desktop-shell"}

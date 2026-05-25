@@ -216,6 +216,8 @@ def browser_projection_record_snapshot(
         "read_path": "data/projectionRecords.records[projection_key]",
         "demanded_only": True,
         "session_scoped": bool(client_token or session_token),
+        "projection_scoped": requested_keys is not None,
+        "requested_projection_keys": sorted(requested_keys or []),
         "include_hidden": bool(include_hidden),
         "include_stale": bool(include_stale),
         "demanded_projection_total": len(demanded_keys),

@@ -13,7 +13,7 @@ from typing import Any, Mapping, Optional
 
 import anyio
 import requests
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -2644,6 +2644,7 @@ async def node_projection_records_browser_cache(
     webspace_id: str | None = None,
     client_id: str | None = None,
     session_id: str | None = None,
+    projection_keys: list[str] | None = Query(default=None),
     include_hidden: bool = True,
     include_stale: bool = True,
     stale_after_s: float | None = None,
@@ -2653,6 +2654,7 @@ async def node_projection_records_browser_cache(
         webspace_id=target_webspace_id,
         client_id=client_id,
         session_id=session_id,
+        projection_keys=projection_keys,
         include_hidden=include_hidden,
         include_stale=include_stale,
         stale_after_s=stale_after_s,

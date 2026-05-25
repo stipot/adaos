@@ -266,3 +266,56 @@ def test_projection_records_api_filters_browser_cache_by_client_session() -> Non
     assert payload["session_id"] == "session-1"
     assert payload["projection_keys"] == ["status-card:runtime"]
     assert set(payload["records"]) == {"status-card:runtime"}
+
+
+def test_projection_records_api_filters_browser_cache_by_projection_keys() -> None:
+    client = _make_client()
+    for projection_key in ["status-card:runtime", "status-card:desktop-shell"]:
+        client.post(
+            "/api/node/projection-records",
+            json={
+                "status": "ready",
+                "data": {"summary": projection_key},
+                "meta": {
+                    "projection_key": projection_key,
+                    "kind": "status-card",
+                    "webspace_id": "desktop",
+                },
+            },
+        )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                ),
+                make_projection_subscription(
+                    projection_key="status-card:desktop-shell",
+                    consumer_id="widget:desktop-shell",
+                    consumer_kind="widget",
+                ),
+            ],
+        )
+    )
+
+    resp = client.get(
+        "/api/node/projection-records/browser-cache",
+        params={
+            "webspace_id": "desktop",
+            "projection_keys": ["status-card:desktop-shell"],
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["projection_scoped"] is True
+    assert payload["requested_projection_keys"] == ["status-card:desktop-shell"]
+    assert payload["projection_keys"] == ["status-card:desktop-shell"]
+    assert set(payload["records"]) == {"status-card:desktop-shell"}
