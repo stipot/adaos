@@ -11,6 +11,7 @@ from adaos.services.projection_record_yjs import (
     PROJECTION_RECORDS_YJS_OWNER,
     PROJECTION_RECORDS_YJS_WRITE_POLICY,
     materialize_projection_records_to_yjs,
+    projection_records_node_multiplicity_contract_snapshot,
     read_projection_records_yjs_cache,
 )
 
@@ -222,3 +223,18 @@ def test_read_projection_records_yjs_cache_handles_missing_cache(monkeypatch) ->
     assert result["envelope_present"] is False
     assert result["envelope_ok"] is False
     assert result["expected_envelope"]["node_scope"]["record_total"] == 0
+
+
+def test_projection_records_node_multiplicity_contract_snapshot_exposes_browser_rules() -> None:
+    snapshot = projection_records_node_multiplicity_contract_snapshot(now=60.0)
+
+    assert snapshot["contract"] == "adaos.projection-records.node-multiplicity.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["updated_at"] == 60.0
+    assert snapshot["yjs_path"] == "data/projectionRecords"
+    assert snapshot["node_scope_mode"] == "record-meta-node-id"
+    assert snapshot["sample_node_ids"] == ["node-a", "node-b"]
+    assert snapshot["sample_node_scoped_record_total"] == 2
+    assert snapshot["sample_envelope"]["node_scope"]["node_ids"] == ["node-a", "node-b"]
+    assert snapshot["browser_rules"]["do_not_assume_single_anonymous_node"] is True
+    assert snapshot["browser_rules"]["browser_writes_projection_cache"] is False

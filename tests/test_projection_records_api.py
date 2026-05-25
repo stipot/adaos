@@ -77,6 +77,21 @@ def test_projection_records_api_rejects_missing_identity() -> None:
     assert resp.json()["detail"] == "webspace_id is required"
 
 
+def test_projection_records_node_multiplicity_contract_endpoint_exposes_browser_rules() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/projection-records/node-multiplicity-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.projection-records.node-multiplicity.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["node_scope_mode"] == "record-meta-node-id"
+    assert payload["browser_read_path"] == "/api/node/projection-records/browser-cache"
+    assert payload["sample_node_ids"] == ["node-a", "node-b"]
+    assert payload["browser_rules"]["do_not_assume_single_anonymous_node"] is True
+
+
 def test_projection_records_api_materializes_yjs_cache(monkeypatch) -> None:
     client = _make_client()
     from adaos.apps.api import node_api

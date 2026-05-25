@@ -77,6 +77,7 @@ from adaos.services.projection_records import (
 from adaos.services.projection_record_yjs import (
     materialize_projection_records_to_yjs,
     normalize_projection_record_keys,
+    projection_records_node_multiplicity_contract_snapshot,
     read_projection_records_yjs_cache,
 )
 from adaos.services.projection_migration_inventory import (
@@ -2716,6 +2717,11 @@ async def node_projection_record_item(projection_key: str, webspace_id: str | No
 async def node_projection_records_yjs_cache(webspace_id: str | None = None) -> dict[str, Any]:
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     return await read_projection_records_yjs_cache(webspace_id=target_webspace_id)
+
+
+@router.get("/projection-records/node-multiplicity-contract", dependencies=[Depends(require_token)])
+async def node_projection_records_node_multiplicity_contract() -> dict[str, Any]:
+    return projection_records_node_multiplicity_contract_snapshot(now=time.time())
 
 
 @router.post("/projection-records", dependencies=[Depends(require_token)])

@@ -15,6 +15,7 @@ PROJECTION_RECORDS_YJS_KEY = "projectionRecords"
 PROJECTION_RECORDS_YJS_PATH = f"data/{PROJECTION_RECORDS_YJS_KEY}"
 PROJECTION_RECORDS_YJS_SCHEMA = "adaos.projection-records.v1"
 PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA = "adaos.projection-records.envelope.v1"
+PROJECTION_RECORDS_NODE_MULTIPLICITY_CONTRACT = "adaos.projection-records.node-multiplicity.v1"
 PROJECTION_RECORDS_YJS_OWNER = "core:projection_records"
 PROJECTION_RECORDS_YJS_WRITE_POLICY = "core-owned-cache-only"
 
@@ -374,15 +375,80 @@ def normalize_projection_record_keys(records: Iterable[Mapping[str, Any] | Proje
     return sorted(set(keys))
 
 
+def projection_records_node_multiplicity_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the browser-facing node multiplicity contract for projection records."""
+
+    sample_records = [
+        {
+            "status": "ready",
+            "data": {"summary": "Runtime on node-a"},
+            "meta": {
+                "projection_key": "status-card:runtime",
+                "webspace_id": "desktop",
+                "node_id": "node-a",
+                "kind": "status-card",
+            },
+        },
+        {
+            "status": "ready",
+            "data": {"summary": "Runtime on node-b"},
+            "meta": {
+                "projection_key": "projection:node/node-b/status-card:runtime",
+                "webspace_id": "desktop",
+                "node_id": "node-b",
+                "kind": "status-card",
+            },
+        },
+    ]
+    node_ids = _node_ids_from_records(sample_records)
+    node_scoped_record_total = _node_scoped_record_total(sample_records)
+    envelope = _projection_records_yjs_envelope(
+        webspace_id="desktop",
+        record_total=len(sample_records),
+        node_ids=node_ids,
+        node_scoped_record_total=node_scoped_record_total,
+    )
+    return {
+        "contract": PROJECTION_RECORDS_NODE_MULTIPLICITY_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": float(now if now is not None else 0.0),
+        "yjs_path": PROJECTION_RECORDS_YJS_PATH,
+        "cache_schema": PROJECTION_RECORDS_YJS_SCHEMA,
+        "envelope_schema": PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA,
+        "node_scope_mode": "record-meta-node-id",
+        "browser_read_path": "/api/node/projection-records/browser-cache",
+        "yjs_read_path": "/api/node/projection-records/yjs/cache",
+        "materialize_path": "/api/node/projection-records/yjs/materialize",
+        "node_multiplicity_fields": [
+            "payload.node_ids",
+            "payload.node_scoped_record_total",
+            "payload.envelope.node_scope.node_ids",
+            "records[*].meta.node_id",
+        ],
+        "browser_rules": {
+            "read_records_by_projection_key": True,
+            "read_node_scope_from_meta": True,
+            "do_not_assume_single_anonymous_node": True,
+            "browser_writes_projection_cache": False,
+        },
+        "sample_node_ids": node_ids,
+        "sample_node_scoped_record_total": node_scoped_record_total,
+        "sample_envelope": envelope,
+        "sample_records": sample_records,
+    }
+
+
 __all__ = [
     "PROJECTION_RECORDS_YJS_KEY",
     "PROJECTION_RECORDS_YJS_PATH",
     "PROJECTION_RECORDS_YJS_ENVELOPE_SCHEMA",
+    "PROJECTION_RECORDS_NODE_MULTIPLICITY_CONTRACT",
     "PROJECTION_RECORDS_YJS_OWNER",
     "PROJECTION_RECORDS_YJS_SCHEMA",
     "PROJECTION_RECORDS_YJS_WRITE_POLICY",
     "build_projection_records_yjs_payload",
     "materialize_projection_records_to_yjs",
     "normalize_projection_record_keys",
+    "projection_records_node_multiplicity_contract_snapshot",
     "read_projection_records_yjs_cache",
 ]
