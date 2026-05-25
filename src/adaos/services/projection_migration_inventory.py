@@ -883,6 +883,7 @@ def _acceptance_swagger_verification() -> dict[str, Any]:
             "interpretation.meaning",
             "progress.server_mvp_percent",
             "progress.full_plan_estimate_percent",
+            "final_acceptance.decision",
             "control_snapshot.result",
             "completion_gates.status",
             "risk_register.risks",
@@ -953,9 +954,9 @@ def _acceptance_traceability_matrix() -> list[dict[str, Any]]:
         },
         {
             "plan_item": "Completion Definition",
-            "api_fields": ["completion_gates", "swagger_verification", "request_examples"],
+            "api_fields": ["completion_gates", "final_acceptance", "swagger_verification", "request_examples"],
             "vkr_use": "Show which completion gates pass and how the result can be manually repeated.",
-            "verification": "Run request_examples.acceptance_summary after adaos api serve and inspect completion_gates.",
+            "verification": "Run request_examples.acceptance_summary after adaos api serve and inspect final_acceptance plus completion_gates.",
         },
     ]
 
@@ -1440,6 +1441,73 @@ def _acceptance_risk_register(
     }
 
 
+def _acceptance_final_acceptance(
+    *,
+    status: str,
+    server_mvp_ready: bool,
+    fail_total: int,
+    warn_total: int,
+    progress: Mapping[str, Any],
+    control_snapshot: Mapping[str, Any],
+    completion_gates: Mapping[str, Any],
+    risk_register: Mapping[str, Any],
+) -> dict[str, Any]:
+    risk_total = int(risk_register.get("risk_total") or 0)
+    if int(fail_total) or not server_mvp_ready:
+        decision = "blocked"
+        final_demo_result = "not_ready"
+    elif int(warn_total) or risk_total:
+        decision = "accept_server_mvp_with_followups"
+        final_demo_result = "ready_with_followups"
+    else:
+        decision = "accept_server_mvp"
+        final_demo_result = "ready"
+
+    return {
+        "decision": decision,
+        "scope": "server-side operational event model MVP",
+        "final_demo_result": final_demo_result,
+        "status_source": status,
+        "accepted_for": [
+            "diploma chapter 2/3 evidence",
+            "Swagger/API demonstration",
+            "server-side projection migration acceptance",
+            "repeatable control snapshot comparison",
+        ],
+        "not_accepted_for": [
+            "full browser client migration",
+            "full Infrascope projection-family split",
+            "top-level node-aware Yjs envelope",
+            "complete legacy projection cleanup",
+        ],
+        "required_evidence": [
+            "server_mvp_ready=true",
+            "fail_total=0",
+            "control_snapshot.kind=projection-migration-control-snapshot",
+            "completion_gates.fail_total=0",
+            "risk_register.status=watch or clear",
+        ],
+        "evidence_fields": [
+            "control_snapshot",
+            "measurement_model",
+            "plan_review",
+            "completion_gates",
+            "risk_register",
+            "defense_summary",
+            "request_examples",
+        ],
+        "progress": {
+            "server_mvp_percent": progress.get("server_mvp_percent"),
+            "full_plan_estimate_percent": progress.get("full_plan_estimate_percent"),
+        },
+        "control_snapshot_kind": control_snapshot.get("kind"),
+        "completion_gate_status": completion_gates.get("status"),
+        "remaining_followup_total": risk_total,
+        "warning_policy": "Warnings are acceptable only when represented in risk_register and completion_gates.",
+        "closing_statement": "The server-side MVP is accepted for the diploma/demo contour when fail_total=0; wider client and cleanup work remains explicit follow-up.",
+    }
+
+
 def projection_migration_acceptance_summary(
     *,
     skills_root: str | Path,
@@ -1559,6 +1627,30 @@ def projection_migration_acceptance_summary(
         warn_total=warn_total,
     )
     risk_register = _acceptance_risk_register(completion_gates=completion_gates, checks=checks)
+    control_snapshot = _acceptance_control_snapshot(
+        status=status,
+        server_mvp_ready=server_mvp_ready,
+        fail_total=fail_total,
+        warn_total=warn_total,
+        metrics=metrics,
+        progress=progress,
+        updated_at=metrics_report["updated_at"],
+    )
+    plan_review = _acceptance_plan_review(
+        status=status,
+        server_mvp_ready=server_mvp_ready,
+        progress=progress,
+    )
+    final_acceptance = _acceptance_final_acceptance(
+        status=status,
+        server_mvp_ready=server_mvp_ready,
+        fail_total=fail_total,
+        warn_total=warn_total,
+        progress=progress,
+        control_snapshot=control_snapshot,
+        completion_gates=completion_gates,
+        risk_register=risk_register,
+    )
     return {
         "ok": server_mvp_ready,
         "status": status,
@@ -1585,22 +1677,11 @@ def projection_migration_acceptance_summary(
             risk_register=risk_register,
         ),
         "progress": progress,
-        "control_snapshot": _acceptance_control_snapshot(
-            status=status,
-            server_mvp_ready=server_mvp_ready,
-            fail_total=fail_total,
-            warn_total=warn_total,
-            metrics=metrics,
-            progress=progress,
-            updated_at=metrics_report["updated_at"],
-        ),
-        "plan_review": _acceptance_plan_review(
-            status=status,
-            server_mvp_ready=server_mvp_ready,
-            progress=progress,
-        ),
+        "control_snapshot": control_snapshot,
+        "plan_review": plan_review,
         "completion_gates": completion_gates,
         "risk_register": risk_register,
+        "final_acceptance": final_acceptance,
         "skills_root": metrics_report["skills_root"],
         "include_non_browser": bool(include_non_browser),
         "check_total": len(checks),

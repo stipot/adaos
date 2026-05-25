@@ -394,6 +394,7 @@ async def publish(payload, webspace_id):
     assert "metrics.migration_readiness_ratio" in summary["manual_steps"][1]["look_at"]
     assert summary["swagger_verification"]["endpoint"] == "/api/node/projection-migration/acceptance-summary"
     assert "server_mvp_ready=true" in summary["swagger_verification"]["expected_ok"]
+    assert "final_acceptance.decision" in summary["swagger_verification"]["inspect_fields"]
     assert "risk_register.risks" in summary["swagger_verification"]["inspect_fields"]
     assert summary["request_examples"]["base_url"] == "http://127.0.0.1:8777"
     assert summary["request_examples"]["examples"][0]["id"] == "acceptance_summary"
@@ -445,6 +446,12 @@ async def publish(payload, webspace_id):
         "risk.browser_multi_demand",
         "risk.legacy_projection_backlog",
     }
+    assert summary["final_acceptance"]["decision"] == "accept_server_mvp_with_followups"
+    assert summary["final_acceptance"]["scope"] == "server-side operational event model MVP"
+    assert summary["final_acceptance"]["progress"]["server_mvp_percent"] == 91.7
+    assert summary["final_acceptance"]["remaining_followup_total"] == 4
+    assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
+    assert "full browser client migration" in summary["final_acceptance"]["not_accepted_for"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
     assert checks["legacy_work_bounded"]["status"] == "warn"
@@ -604,6 +611,10 @@ def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> 
     assert payload["completion_gates"]["warn_total"] >= 1
     assert payload["risk_register"]["risk_total"] >= 3
     assert payload["risk_register"]["risks"][0]["mitigation"]
+    assert payload["final_acceptance"]["decision"] == "accept_server_mvp_with_followups"
+    assert payload["final_acceptance"]["scope"] == "server-side operational event model MVP"
+    assert payload["final_acceptance"]["remaining_followup_total"] >= 3
+    assert "completion_gates" in payload["final_acceptance"]["evidence_fields"]
     assert {item["id"] for item in payload["checks"]} >= {
         "inventory_observable",
         "manifest_contract_guarded",
