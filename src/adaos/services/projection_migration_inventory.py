@@ -1343,6 +1343,16 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             "evidence": ["per-webspace demand selection", "status-card wildcard handler", "Infrascope no-cross-webspace tests"],
         },
         {
+            "id": "core_skill_contract_readiness",
+            "criterion": "core and skills have an inspectable demanded refresh contract before dispatch",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-dispatcher/core-skill-contract",
+                "handler coverage readiness",
+                "core/skill/browser/forbidden ownership split",
+            ],
+        },
+        {
             "id": "named_entity_invalidation",
             "criterion": "named-entity lifecycle changes invalidate consumers without reload-only behavior",
             "status": "warn",

@@ -434,17 +434,22 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 7
+    assert summary["completion_gates"]["gate_total"] == 8
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 4
+    assert summary["completion_gates"]["pass_total"] == 5
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
     assert "demanded ProjectionRecord browser-cache endpoint is implemented" in browser_gate["evidence"]
     assert {item["id"] for item in summary["completion_gates"]["gates"]} >= {
         "browser_multi_demand",
+        "core_skill_contract_readiness",
         "heavy_pilot_shared_abi",
     }
+    core_skill_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["core_skill_contract_readiness"]
+    assert "/api/node/projection-dispatcher/core-skill-contract" in core_skill_gate["evidence"]
     assert summary["risk_register"]["status"] == "watch"
     assert summary["risk_register"]["risk_total"] == 4
     assert {item["id"] for item in summary["risk_register"]["risks"]} >= {
