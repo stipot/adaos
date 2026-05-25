@@ -90,7 +90,7 @@ Current status:
 
 ### 2. Core and Shared Runtime ABI
 
-- [ ] `runtime.event_envelope_abi`: align with the master roadmap's shared event envelope before adding projection-specific metadata
+- [x] `runtime.event_envelope_abi`: align with the master roadmap's shared event envelope before adding projection-specific metadata
 - [ ] `runtime.core_skill_contract`: define the core-to-skill invalidation and refresh contract before browser-specific consumption logic
 - [ ] `runtime.ownership_split`: define which runtime transitions are core-owned and which projection rebuilds are skill-owned
 - [x] `runtime.platform_emitters_defined`: define platform-emitted projections for notifications, warnings, diagnostics, and system errors
@@ -98,6 +98,10 @@ Current status:
 
 Current status:
 
+- `/api/node/event-envelope-contract` exposes the shared operational event
+  envelope ABI, including required legacy event fields, the preferred
+  `_meta.event` metadata path, compatibility rules, ownership split, and a
+  normalized dispatcher-ready example
 - named-entity ABI is already implemented enough to serve as a model for
   contract-first runtime work
 - eventbus backpressure exists for selected hot paths, but does not replace

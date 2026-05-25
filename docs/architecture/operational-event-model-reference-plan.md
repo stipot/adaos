@@ -219,6 +219,10 @@ Required artifacts:
 
 Current status:
 
+- `/api/node/event-envelope-contract` exposes the shared operational event
+  envelope ABI as an inspectable contract with required legacy fields,
+  `_meta.event` metadata, compatibility flags, ownership rules, and a
+  dispatcher-ready normalized example
 - materialized status-card registry is implemented in the node runtime
 - `/api/node/projection-platform-emitters` exposes the status-card platform
   emitter contract for runtime lifecycle, browser shell, notifications, UI

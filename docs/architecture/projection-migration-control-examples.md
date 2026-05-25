@@ -419,6 +419,22 @@ This proves that platform-owned operational surfaces are defined as shared
 ProjectionRecord/status-card emitters instead of another skill-local snapshot
 branch.
 
+For event envelope ABI validation, call `/api/node/event-envelope-contract`.
+The expected evidence is:
+
+- `contract=adaos.operational-event-envelope.v1`
+- `ready_for_mvp=true`
+- `meta_path=_meta.event`
+- `required_fields[]` equals `type`, `source`, `ts`, and `payload`
+- `compatibility.legacy_event_supported=true`
+- `compatibility.nested_meta_preferred=true`
+- `normalized_example.event_id=evt-demo-1`
+- `dispatcher_ready=true`
+
+This proves that the dispatcher-facing event model can accept legacy AdaOS
+events while reading trace, scope, authority, and causal metadata from the
+shared `_meta.event` envelope.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:
