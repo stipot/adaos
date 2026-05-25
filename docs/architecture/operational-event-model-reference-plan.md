@@ -148,6 +148,9 @@ Progress:
   `demanded_only=true` filtering for browser-facing cache updates
 - `/api/node/projection-records/yjs/cache` reads the same Yjs cache back and
   reports schema/fingerprint health for Swagger and operator acceptance checks
+- `data/projectionRecords` now carries a top-level `envelope` block with
+  schema, core owner, write policy, cache role, Yjs path, webspace, node-scope
+  summary, and browser/skill read/write boundaries
 - `/api/node/projection-diagnostics?include_yjs_cache=true` correlates demanded
   projections with the `data/projectionRecords` cache; `materialize_yjs_cache=true`
   can refresh the demanded cache before reporting
@@ -329,6 +332,10 @@ Progress:
 - shared `data/projectionRecords` cache summaries now expose `node_ids` and
   `node_scoped_record_total` while preserving each record's `meta.node_id`
   through Yjs materialization and readback
+- shared `data/projectionRecords` now includes a node-aware top-level
+  `envelope`, and `/api/node/projection-diagnostics?include_yjs_cache=true`
+  exposes `yjs_cache_envelope_ok`, `yjs_cache_envelope`, and
+  `yjs_cache_node_ids` for operator checks
 - legacy `data/<skill>` Yjs branches are now reported with explicit
   compatibility metadata: monolithic roots, single-slot branches, and
   sectioned roots remain transitional read surfaces, but their write policy is
@@ -521,10 +528,10 @@ Use this checklist for every implementation slice touching the event model.
 | Status-card ABI | Platform-emitter family with dedupe/version/staleness | Helper code, materialized registry, runtime card, TTL sweep, and demanded shared projection-record materialization added |
 | Projection record ABI | Canonical record shape | Helper code, deterministic projection-key helpers, shared materialized registry, status-card bridge, diagnostics correlation, `data/projectionRecords` Yjs materialization/readback, and diagnostics cache correlation added |
 | Browser subscription ABI | Full-overwrite demand records | Helper code and server runtime added; browser client hookup remains |
-| Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata plus `data/projectionRecords.node_ids`, `node_scoped_record_total`, and legacy branch compatibility classification; top-level envelope remains |
+| Node-aware Yjs envelope | Reserved top-level ownership shape | `data/projectionRecords` now has a top-level envelope with core ownership, write policy, node-scope summary, and read/write boundaries; wider rollout to non-projection Yjs branches remains |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, session touch, and multi-webspace API isolation tests added; browser client hookup remains |
 | Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |
-| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, and optional Infrascope demanded-card refresh; `/api/node/projection-migration/acceptance-summary` gives a compact MVP readiness report |
+| Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, node-aware cache envelope health, and optional Infrascope demanded-card refresh; `/api/node/projection-migration/acceptance-summary` gives a compact MVP readiness report |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime lifecycle, UI runtime diagnostics, toast notifications, and desktop shell snapshots publish platform status cards through the shared ABI |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |
 | SDK/helper layer | Reusable skill-facing publishing helpers | `adaos.sdk.status` added for status-card publishing |

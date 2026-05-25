@@ -261,13 +261,14 @@ Current checkpoint as of 2026-05-15:
   `registry.named_entities` and now carries schema, path, read-only access
   metadata, write policy, and privacy limits for the current compatibility
   projection
-- the general projection record shape, client subscription shape, and
-  top-level node-owned envelope remain the blocking ABI work before broad
+- the general projection record shape and client subscription shape are present;
+  `data/projectionRecords` now has a top-level node-aware envelope, while
+  cross-branch node-owned Yjs envelopes remain follow-up work before broad
   dispatcher/client migration
 - `data/projectionRecords` now exposes a derived `node_ids` summary plus
-  `node_scoped_record_total` and preserves each record's `meta.node_id`
-  through materialize/readback checks; the top-level node-owned envelope is
-  still a follow-up compatibility break
+  `node_scoped_record_total`, preserves each record's `meta.node_id`, and
+  exposes an `envelope` block with core ownership, write policy, node-scope
+  summary, and read/write boundaries through materialize/readback checks
 - deterministic projection-key helpers now cover status cards, browser
   surfaces (`page`, `widget`, `modal`, `panel`), and node-scoped wrappers,
   so compatibility-era surfaces can converge on one key vocabulary

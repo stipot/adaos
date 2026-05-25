@@ -227,8 +227,8 @@ The `final_acceptance` block is the top-level decision to cite when closing the
 server-side MVP. It says whether the implementation is accepted for the diploma
 and Swagger/API demo, which evidence fields support that decision, and which
 full-plan items remain outside the accepted scope: browser client migration,
-full Infrascope projection-family split, node-aware top-level envelope, and
-complete legacy cleanup.
+full Infrascope projection-family split, cross-branch node-aware Yjs envelope
+rollout, and complete legacy cleanup.
 
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit
@@ -243,8 +243,8 @@ The `progress` block separates two numbers:
 - `server_mvp_percent`: weighted progress for the implemented server-side
   acceptance checks.
 - `full_plan_estimate_percent`: conservative estimate for the wider AdaOS
-  roadmap, including client adapter, full Infrascope split, node top-level Yjs
-  envelope, and legacy cleanup.
+  roadmap, including client adapter, full Infrascope split, cross-branch
+  node-aware Yjs envelope rollout, and legacy cleanup.
 - `completed_groups[]`: already implemented server-side migration groups.
 - `remaining_groups[]`: explicit groups that keep the full-plan estimate below
   the server MVP number.
@@ -263,7 +263,21 @@ whole AdaOS migration is not presented as finished yet.
 The `followup_roadmap` array is intentionally ordered. It starts with the
 browser read path because that is the first user-visible confirmation that the
 new projection cache is consumed by the UI. It then moves to the larger
-Infrascope split, node-aware cache envelope, and final cross-skill cleanup.
+Infrascope split, cross-branch node-aware Yjs envelope rollout, and final
+cross-skill cleanup.
+
+After the node-aware projection cache envelope increment, the Swagger check for
+`/api/node/projection-records/yjs/cache` should include:
+
+- `envelope_ok=true`
+- `envelope.owner=core:projection_records`
+- `envelope.write_policy=core-owned-cache-only`
+- `envelope.node_scope.mode=record-meta-node-id`
+- `node_ids[]` and `node_scoped_record_total`
+
+The same evidence is available in `/api/node/projection-diagnostics` as
+`yjs_cache_envelope_ok`, `yjs_cache_envelope`, and `yjs_cache_node_ids` when
+`include_yjs_cache=true`.
 
 Risk weights:
 

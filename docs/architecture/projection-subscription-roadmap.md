@@ -140,6 +140,9 @@ Current status:
 - shared `data/projectionRecords` Yjs cache now preserves `meta.node_id` and
   reports `node_ids` plus `node_scoped_record_total` so operator diagnostics
   can see node-scoped projection records without parsing every payload entry
+- the same shared cache now writes a top-level `envelope` with core ownership,
+  write policy, node-scope summary, and browser/skill boundary flags; cache
+  readback and projection diagnostics expose `envelope_ok` for Swagger checks
 - `adaos.domain.projection_keys` now fixes deterministic helpers for
   `status-card:<id>`, `projection:<surface>/<id>`, and
   `projection:node/<node_id>/<projection_key>` forms
