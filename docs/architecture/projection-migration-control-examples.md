@@ -140,6 +140,8 @@ Important fields:
   with pass/warn/fail status for each gate
 - `risk_register`: risk/limitation register generated from warning gates and
   remaining acceptance checks
+- `final_acceptance`: final accept/blocked decision for the server-side MVP,
+  including evidence fields, explicit scope, and out-of-scope follow-up work
 - `demo_script`: short explanation block for presenting the acceptance result
 - `defense_summary`: short defense-oriented summary with thesis, proof points,
   metrics to quote, limitations, and closing statement
@@ -220,6 +222,13 @@ The `risk_register` block turns those warnings into demo-ready risk statements.
 Each row names a risk, impact, mitigation, and verification step. It is useful
 for the diploma limitations section because it keeps the MVP claim honest while
 still showing that remaining work is controlled.
+
+The `final_acceptance` block is the top-level decision to cite when closing the
+server-side MVP. It says whether the implementation is accepted for the diploma
+and Swagger/API demo, which evidence fields support that decision, and which
+full-plan items remain outside the accepted scope: browser client migration,
+full Infrascope projection-family split, node-aware top-level envelope, and
+complete legacy cleanup.
 
 The `demo_script` block is the shortest narrative to say during a manual demo:
 it includes the expected result, current result, conclusion, and explicit

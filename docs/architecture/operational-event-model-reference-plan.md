@@ -393,6 +393,10 @@ Progress:
   `remaining_groups`, `remaining_group_details`, `followup_roadmap`, and
   `headline_metrics` so the current status and next milestones can be checked
   without interpreting every low-level metric by hand
+- `acceptance-summary` exposes `final_acceptance`, a top-level accept/blocked
+  decision for the server-side MVP with required evidence, explicit accepted
+  scope, and non-accepted full-plan follow-ups such as browser client
+  migration, full Infrascope split, node-aware envelope, and legacy cleanup
 
 Exit criteria:
 
