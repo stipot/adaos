@@ -434,9 +434,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 8
+    assert summary["completion_gates"]["gate_total"] == 9
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 5
+    assert summary["completion_gates"]["pass_total"] == 6
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -445,7 +445,12 @@ async def publish(payload, webspace_id):
         "browser_multi_demand",
         "core_skill_contract_readiness",
         "heavy_pilot_shared_abi",
+        "platform_emitter_contract",
     }
+    platform_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["platform_emitter_contract"]
+    assert "/api/node/projection-platform-emitters" in platform_gate["evidence"]
     core_skill_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["core_skill_contract_readiness"]

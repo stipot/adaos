@@ -1327,6 +1327,18 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             "evidence": ["runtime", "ui-runtime", "notifications", "desktop-shell status cards"],
         },
         {
+            "id": "platform_emitter_contract",
+            "criterion": "platform-emitted projections are defined through an inspectable shared contract",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-platform-emitters",
+                "runtime lifecycle emitter",
+                "notifications emitter",
+                "UI diagnostics emitter",
+                "browser shell emitter",
+            ],
+        },
+        {
             "id": "browser_multi_demand",
             "criterion": "browser clients can declare multiple active projection demands in one webspace",
             "status": "warn",
