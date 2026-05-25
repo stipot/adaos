@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any, Awaitable, Callable, Mapping
 
-from adaos.domain import EventEnvelope, normalize_event_envelope
+from adaos.domain import Event, EventEnvelope, normalize_event_envelope
 from adaos.services.projection_demand import ProjectionDemandConsumer, projection_demand_consumers
 from adaos.services.projection_records import write_projection_record_if_valid
 
@@ -190,6 +190,103 @@ def _handler_for(projection_key: str) -> ProjectionRefreshHandler | None:
         if not wildcard_matches:
             return None
         return max(wildcard_matches, key=lambda item: len(item[0]))[1]
+
+
+def _handler_match(projection_key: str) -> dict[str, Any]:
+    with _LOCK:
+        if projection_key in _HANDLERS:
+            return {
+                "covered": True,
+                "key": projection_key,
+                "kind": "exact",
+            }
+        wildcard_matches = [
+            token
+            for token in _HANDLERS
+            if token.endswith("*") and projection_key.startswith(token[:-1])
+        ]
+    if not wildcard_matches:
+        return {
+            "covered": False,
+            "key": None,
+            "kind": "none",
+        }
+    key = max(wildcard_matches, key=lambda item: len(item[:-1]))
+    return {
+        "covered": True,
+        "key": key,
+        "kind": "wildcard",
+    }
+
+
+def core_skill_refresh_contract_snapshot(
+    event: Any | None = None,
+    *,
+    webspace_ids: list[str] | tuple[str, ...] | set[str] | None = None,
+    projection_keys: list[str] | tuple[str, ...] | set[str] | None = None,
+    include_hidden: bool = True,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Return the core-to-skill demanded refresh contract without dispatching."""
+
+    ts = float(now if now is not None else time.time())
+    source_event = event or Event(
+        type="projection.core_skill.contract.inspect",
+        payload={},
+        source="projection_dispatcher",
+        ts=ts,
+    )
+    envelope = normalize_event_envelope(source_event)
+    contexts = demanded_projection_refresh_contexts(
+        envelope,
+        webspace_ids=webspace_ids,
+        projection_keys=projection_keys,
+        include_hidden=include_hidden,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+        now=ts,
+    )
+    demands = []
+    covered_total = 0
+    uncovered_total = 0
+    for context in contexts:
+        handler = _handler_match(context.projection_key)
+        if handler["covered"]:
+            covered_total += 1
+        else:
+            uncovered_total += 1
+        demands.append(
+            {
+                "webspace_id": context.webspace_id,
+                "projection_key": context.projection_key,
+                "consumer_total": len(context.consumers),
+                "consumers": [item.to_dict() for item in context.consumers],
+                "handler": handler,
+                "refresh_contract": {
+                    "core_selects_demand": True,
+                    "skill_refreshes_payload": bool(handler["covered"]),
+                    "core_materializes_projection_record": True,
+                    "lifecycle_sequence": ["pending", "refreshing", "ready|stale|error"],
+                    "write_policy": "ProjectionRecord registry -> data/projectionRecords",
+                },
+            }
+        )
+    return {
+        "ok": True,
+        "source": "projection_dispatcher.core_skill_refresh_contract",
+        "contract": "adaos.core-skill-projection-refresh.v1",
+        "event": envelope.to_dict(),
+        "webspace_ids": list(_normalize_webspace_ids(envelope, webspace_ids)),
+        "projection_keys": [str(item or "").strip() for item in projection_keys or [] if str(item or "").strip()],
+        "demand_total": len(demands),
+        "covered_total": covered_total,
+        "uncovered_total": uncovered_total,
+        "demands": demands,
+        "dispatcher": projection_dispatcher_snapshot(),
+        "updated_at": ts,
+    }
 
 
 def _try_begin_refresh(context: ProjectionRefreshContext) -> bool:
@@ -395,6 +492,7 @@ __all__ = [
     "ProjectionRefreshHandler",
     "ProjectionRefreshResult",
     "clear_projection_dispatcher",
+    "core_skill_refresh_contract_snapshot",
     "demanded_projection_refresh_contexts",
     "dispatch_demanded_projection_refresh",
     "projection_dispatcher_snapshot",

@@ -58,6 +58,7 @@ from adaos.services.projection_demand_mapper import build_browser_projection_dem
 from adaos.services.projection_dispatcher import (
     ProjectionRefreshContext,
     ProjectionRefreshResult,
+    core_skill_refresh_contract_snapshot,
     dispatch_demanded_projection_refresh,
     projection_dispatcher_snapshot,
     register_projection_refresh_handler,
@@ -2752,6 +2753,23 @@ async def node_projection_records_yjs_materialize(
 async def node_projection_dispatcher_snapshot() -> dict[str, Any]:
     _ensure_status_card_projection_handlers()
     return projection_dispatcher_snapshot()
+
+
+@router.get("/projection-dispatcher/core-skill-contract", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_core_skill_contract(
+    webspace_id: str | None = None,
+    projection_keys: list[str] | None = Query(default=None),
+    include_hidden: bool = True,
+    include_stale: bool = True,
+) -> dict[str, Any]:
+    _ensure_status_card_projection_handlers()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return core_skill_refresh_contract_snapshot(
+        webspace_ids=[target_webspace_id],
+        projection_keys=projection_keys,
+        include_hidden=include_hidden,
+        include_stale=include_stale,
+    )
 
 
 @router.post("/projection-dispatcher/dispatch", dependencies=[Depends(require_token)])

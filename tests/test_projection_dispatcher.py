@@ -4,6 +4,7 @@ from adaos.domain import Event, make_client_subscription_record, make_projection
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_dispatcher import (
     clear_projection_dispatcher,
+    core_skill_refresh_contract_snapshot,
     demanded_projection_refresh_contexts,
     dispatch_demanded_projection_refresh,
     projection_dispatcher_snapshot,
@@ -112,6 +113,36 @@ def test_dispatcher_can_filter_projection_keys() -> None:
     assert [(item.webspace_id, item.projection_key) for item in contexts] == [
         ("desktop", "projection:hub/overview")
     ]
+
+
+def test_core_skill_refresh_contract_reports_handler_coverage() -> None:
+    _write_demand("desktop", "status-card:runtime")
+    _write_demand("desktop", "projection:missing", consumer_id="widget:missing", session_id="session-2")
+
+    def _handler(context):
+        return {"status": "ready", "data": {"projection_key": context.projection_key}}
+
+    register_projection_refresh_handler("status-card:*", _handler)
+
+    snapshot = core_skill_refresh_contract_snapshot(
+        Event(type="node.status", payload={"webspace_id": "desktop"}, source="test", ts=20.0),
+        now=20.0,
+    )
+
+    demands = {item["projection_key"]: item for item in snapshot["demands"]}
+    assert snapshot["contract"] == "adaos.core-skill-projection-refresh.v1"
+    assert snapshot["demand_total"] == 2
+    assert snapshot["covered_total"] == 1
+    assert snapshot["uncovered_total"] == 1
+    assert demands["status-card:runtime"]["handler"] == {
+        "covered": True,
+        "key": "status-card:*",
+        "kind": "wildcard",
+    }
+    assert demands["projection:missing"]["handler"]["covered"] is False
+    assert demands["status-card:runtime"]["refresh_contract"]["core_selects_demand"] is True
+    assert demands["status-card:runtime"]["refresh_contract"]["skill_refreshes_payload"] is True
+    assert demands["projection:missing"]["refresh_contract"]["skill_refreshes_payload"] is False
 
 
 def test_dispatcher_groups_multiple_clients_into_one_projection_context() -> None:

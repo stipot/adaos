@@ -87,6 +87,41 @@ def test_projection_dispatcher_snapshot_endpoint_is_empty_by_default() -> None:
     assert payload["stats"]["incoming_total"] == 0
 
 
+def test_projection_dispatcher_core_skill_contract_endpoint_reports_demand() -> None:
+    client = _make_client()
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    resp = client.get(
+        "/api/node/projection-dispatcher/core-skill-contract",
+        params={"webspace_id": "desktop"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.core-skill-projection-refresh.v1"
+    assert payload["demand_total"] == 1
+    assert payload["covered_total"] == 1
+    assert payload["demands"][0]["projection_key"] == "status-card:runtime"
+    assert payload["demands"][0]["handler"]["covered"] is True
+    assert payload["demands"][0]["refresh_contract"]["core_selects_demand"] is True
+    assert payload["demands"][0]["refresh_contract"]["core_materializes_projection_record"] is True
+
+
 def test_projection_dispatcher_dispatch_endpoint_selects_demanded_projection() -> None:
     client = _make_client()
     write_client_subscription_record(
