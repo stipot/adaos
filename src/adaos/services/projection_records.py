@@ -194,6 +194,62 @@ def _browser_cache_entry_metadata(
     }
 
 
+def _browser_projection_lifecycle(
+    *,
+    record_payload: Mapping[str, Any] | None,
+    cached: bool,
+) -> dict[str, Any]:
+    meta = record_payload.get("meta") if isinstance(record_payload, Mapping) else None
+    meta_payload = meta if isinstance(meta, Mapping) else {}
+    record_status = str(record_payload.get("status") or "").strip().lower() if cached else None
+    if not cached:
+        state = "pending"
+        reason = "demanded_projection_record_not_materialized"
+    elif record_status in {"loading", "refreshing", "pending"}:
+        state = "refreshing"
+        reason = str(meta_payload.get("lifecycle_reason") or record_status or "refreshing")
+    elif record_status in {"ready", "stale"}:
+        state = record_status
+        reason = str(meta_payload.get("lifecycle_reason") or record_status)
+    else:
+        state = "error"
+        reason = str(meta_payload.get("lifecycle_reason") or record_status or "projection_record_error")
+    return {
+        "state": state,
+        "record_status": record_status,
+        "reason": reason,
+        "ready": state == "ready",
+        "terminal": state in {"ready", "stale", "error"},
+    }
+
+
+def _browser_lifecycle_summary(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    state_order = ["pending", "refreshing", "ready", "stale", "error"]
+    states = {state: 0 for state in state_order}
+    projection_keys_by_state = {state: [] for state in state_order}
+    for entry in entries:
+        lifecycle = entry.get("lifecycle") if isinstance(entry, Mapping) else None
+        lifecycle_payload = lifecycle if isinstance(lifecycle, Mapping) else {}
+        state = str(lifecycle_payload.get("state") or "error").strip().lower()
+        if state not in states:
+            state = "error"
+        projection_key = str(entry.get("projection_key") or "").strip()
+        states[state] += 1
+        if projection_key:
+            projection_keys_by_state[state].append(projection_key)
+    blocking_states = ["pending", "refreshing", "error"]
+    return {
+        "states": states,
+        "projection_keys_by_state": projection_keys_by_state,
+        "ready": all(states[state] == 0 for state in blocking_states),
+        "blocked": any(states[state] > 0 for state in blocking_states),
+        "pending_projection_keys": projection_keys_by_state["pending"],
+        "refreshing_projection_keys": projection_keys_by_state["refreshing"],
+        "stale_projection_keys": projection_keys_by_state["stale"],
+        "error_projection_keys": projection_keys_by_state["error"],
+    }
+
+
 def browser_projection_record_snapshot(
     *,
     webspace_id: str | None = None,
@@ -253,6 +309,10 @@ def browser_projection_record_snapshot(
                     "record": None,
                     "consumer_total": len(consumer_items),
                     "consumers": consumer_items,
+                    "lifecycle": _browser_projection_lifecycle(
+                        record_payload=None,
+                        cached=False,
+                    ),
                     "cache": _browser_cache_entry_metadata(
                         webspace_id=webspace_token or None,
                         client_id=client_token or None,
@@ -273,6 +333,10 @@ def browser_projection_record_snapshot(
                 "record": record_payload,
                 "consumer_total": len(consumer_items),
                 "consumers": consumer_items,
+                "lifecycle": _browser_projection_lifecycle(
+                    record_payload=record_payload,
+                    cached=True,
+                ),
                 "cache": _browser_cache_entry_metadata(
                     webspace_id=webspace_token or None,
                     client_id=client_token or None,
@@ -303,6 +367,7 @@ def browser_projection_record_snapshot(
         }
     )
     etag = f'W/"browser-projection-records:{fingerprint}"'
+    lifecycle_summary = _browser_lifecycle_summary(entries)
 
     return {
         "ok": True,
@@ -324,6 +389,7 @@ def browser_projection_record_snapshot(
         "ready_record_total": sum(1 for item in records.values() if item.get("status") == "ready"),
         "stale_record_total": sum(1 for item in records.values() if item.get("status") == "stale"),
         "error_record_total": sum(1 for item in records.values() if item.get("status") == "error"),
+        "lifecycle_summary": lifecycle_summary,
         "projection_keys": demanded_keys,
         "missing_projection_keys": missing_projection_keys,
         "records": records,

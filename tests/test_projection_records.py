@@ -258,3 +258,63 @@ def test_browser_projection_record_snapshot_can_filter_projection_keys() -> None
     assert snapshot["requested_projection_keys"] == ["status-card:desktop-shell"]
     assert snapshot["projection_keys"] == ["status-card:desktop-shell"]
     assert set(snapshot["records"]) == {"status-card:desktop-shell"}
+
+
+def test_browser_projection_record_snapshot_exposes_lifecycle_summary() -> None:
+    for projection_key, status in [
+        ("status-card:ready", "ready"),
+        ("status-card:loading", "loading"),
+        ("status-card:stale", "stale"),
+    ]:
+        write_projection_record(
+            make_projection_record(
+                projection_key=projection_key,
+                kind="status-card",
+                webspace_id="desktop",
+                status=status,
+                lifecycle_reason=f"{status}_reason",
+                data={"summary": projection_key},
+            )
+        )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key=projection_key,
+                    consumer_id=f"widget:{projection_key}",
+                    consumer_kind="widget",
+                )
+                for projection_key in [
+                    "status-card:ready",
+                    "status-card:loading",
+                    "status-card:stale",
+                    "status-card:missing",
+                ]
+            ],
+        )
+    )
+
+    snapshot = browser_projection_record_snapshot(webspace_id="desktop")
+
+    entries = {entry["projection_key"]: entry for entry in snapshot["entries"]}
+    assert entries["status-card:ready"]["lifecycle"]["state"] == "ready"
+    assert entries["status-card:loading"]["lifecycle"]["state"] == "refreshing"
+    assert entries["status-card:stale"]["lifecycle"]["state"] == "stale"
+    assert entries["status-card:missing"]["lifecycle"]["state"] == "pending"
+    assert snapshot["lifecycle_summary"]["states"] == {
+        "pending": 1,
+        "refreshing": 1,
+        "ready": 1,
+        "stale": 1,
+        "error": 0,
+    }
+    assert snapshot["lifecycle_summary"]["ready"] is False
+    assert snapshot["lifecycle_summary"]["blocked"] is True
+    assert snapshot["lifecycle_summary"]["pending_projection_keys"] == ["status-card:missing"]
+    assert snapshot["lifecycle_summary"]["refreshing_projection_keys"] == ["status-card:loading"]
+    assert snapshot["lifecycle_summary"]["stale_projection_keys"] == ["status-card:stale"]
