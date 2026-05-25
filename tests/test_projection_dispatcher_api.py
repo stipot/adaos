@@ -116,6 +116,10 @@ def test_projection_dispatcher_core_skill_contract_endpoint_reports_demand() -> 
     assert payload["contract"] == "adaos.core-skill-projection-refresh.v1"
     assert payload["demand_total"] == 1
     assert payload["covered_total"] == 1
+    assert payload["uncovered_total"] == 0
+    assert payload["readiness"]["ready_for_dispatch"] is True
+    assert payload["readiness"]["coverage_ratio"] == 1.0
+    assert payload["readiness"]["status"] == "pass"
     assert payload["demands"][0]["projection_key"] == "status-card:runtime"
     assert payload["demands"][0]["handler"]["covered"] is True
     assert "projection demand selection" in payload["demands"][0]["ownership"]["core_owned"]

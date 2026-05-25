@@ -134,6 +134,10 @@ def test_core_skill_refresh_contract_reports_handler_coverage() -> None:
     assert snapshot["demand_total"] == 2
     assert snapshot["covered_total"] == 1
     assert snapshot["uncovered_total"] == 1
+    assert snapshot["uncovered_projection_keys"] == ["projection:missing"]
+    assert snapshot["readiness"]["ready_for_dispatch"] is False
+    assert snapshot["readiness"]["coverage_ratio"] == 0.5
+    assert snapshot["readiness"]["status"] == "warn"
     assert demands["status-card:runtime"]["handler"] == {
         "covered": True,
         "key": "status-card:*",

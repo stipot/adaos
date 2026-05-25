@@ -279,12 +279,14 @@ def core_skill_refresh_contract_snapshot(
     demands = []
     covered_total = 0
     uncovered_total = 0
+    uncovered_projection_keys: list[str] = []
     for context in contexts:
         handler = _handler_match(context.projection_key)
         if handler["covered"]:
             covered_total += 1
         else:
             uncovered_total += 1
+            uncovered_projection_keys.append(context.projection_key)
         demands.append(
             {
                 "webspace_id": context.webspace_id,
@@ -302,6 +304,8 @@ def core_skill_refresh_contract_snapshot(
                 },
             }
         )
+    coverage_ratio = round(float(covered_total) / float(len(demands)), 4) if demands else 1.0
+    ready_for_dispatch = uncovered_total == 0
     return {
         "ok": True,
         "source": "projection_dispatcher.core_skill_refresh_contract",
@@ -312,6 +316,18 @@ def core_skill_refresh_contract_snapshot(
         "demand_total": len(demands),
         "covered_total": covered_total,
         "uncovered_total": uncovered_total,
+        "uncovered_projection_keys": uncovered_projection_keys,
+        "readiness": {
+            "ready_for_dispatch": ready_for_dispatch,
+            "coverage_ratio": coverage_ratio,
+            "status": "pass" if ready_for_dispatch else "warn",
+            "reason": "all demanded projections have refresh handlers"
+            if ready_for_dispatch
+            else "some demanded projections have no refresh handler",
+            "recommended_next_step": None
+            if ready_for_dispatch
+            else "register projection refresh handlers or narrow projection_keys before dispatch",
+        },
         "demands": demands,
         "dispatcher": projection_dispatcher_snapshot(),
         "updated_at": ts,
