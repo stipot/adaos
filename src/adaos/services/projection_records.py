@@ -135,6 +135,8 @@ def _projection_key_filter(values: Iterable[Any] | None) -> set[str] | None:
 def browser_projection_record_snapshot(
     *,
     webspace_id: str | None = None,
+    client_id: str | None = None,
+    session_id: str | None = None,
     projection_keys: Iterable[Any] | None = None,
     include_hidden: bool = True,
     include_stale: bool = True,
@@ -144,6 +146,8 @@ def browser_projection_record_snapshot(
     """Return a browser-facing view of demanded canonical ProjectionRecords."""
 
     webspace_token = str(webspace_id or "").strip()
+    client_token = str(client_id or "").strip()
+    session_token = str(session_id or "").strip()
     requested_keys = _projection_key_filter(projection_keys)
     consumers = projection_demand_consumers(
         webspace_id=webspace_token or None,
@@ -152,6 +156,10 @@ def browser_projection_record_snapshot(
         stale_after_s=stale_after_s,
         now=now,
     )
+    if client_token:
+        consumers = [consumer for consumer in consumers if consumer.client_id == client_token]
+    if session_token:
+        consumers = [consumer for consumer in consumers if consumer.session_id == session_token]
     demanded_keys = sorted(
         {
             consumer.projection_key
@@ -202,9 +210,12 @@ def browser_projection_record_snapshot(
         "ok": True,
         "accepted": True,
         "webspace_id": webspace_token or None,
+        "client_id": client_token or None,
+        "session_id": session_token or None,
         "kind": "browser-demanded-projection-records",
         "read_path": "data/projectionRecords.records[projection_key]",
         "demanded_only": True,
+        "session_scoped": bool(client_token or session_token),
         "include_hidden": bool(include_hidden),
         "include_stale": bool(include_stale),
         "demanded_projection_total": len(demanded_keys),
@@ -223,6 +234,7 @@ def browser_projection_record_snapshot(
             "browser_read": True,
             "browser_write": False,
             "skill_write": False,
+            "client_session_filter": True,
             "write_policy": "core-owned-cache-only",
             "legacy_fallback": "compatibility-only",
         },

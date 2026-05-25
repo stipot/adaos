@@ -140,3 +140,60 @@ def test_browser_projection_record_snapshot_returns_only_demanded_records() -> N
     assert snapshot["records"]["status-card:runtime"]["data"]["summary"] == "runtime ready"
     assert snapshot["cache_contract"]["browser_read"] is True
     assert snapshot["cache_contract"]["browser_write"] is False
+
+
+def test_browser_projection_record_snapshot_can_scope_to_client_session() -> None:
+    for projection_key in ["status-card:runtime", "status-card:desktop-shell"]:
+        write_projection_record(
+            make_projection_record(
+                projection_key=projection_key,
+                kind="status-card",
+                webspace_id="desktop",
+                data={"summary": projection_key},
+            )
+        )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-2",
+            device_id="desktop",
+            session_id="session-2",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:desktop-shell",
+                    consumer_id="widget:desktop-shell",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    snapshot = browser_projection_record_snapshot(
+        webspace_id="desktop",
+        client_id="browser-1",
+        session_id="session-1",
+    )
+
+    assert snapshot["session_scoped"] is True
+    assert snapshot["client_id"] == "browser-1"
+    assert snapshot["session_id"] == "session-1"
+    assert snapshot["projection_keys"] == ["status-card:runtime"]
+    assert set(snapshot["records"]) == {"status-card:runtime"}
+    assert snapshot["cache_contract"]["client_session_filter"] is True

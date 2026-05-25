@@ -2642,6 +2642,8 @@ async def node_projection_records_snapshot(webspace_id: str | None = None) -> di
 @router.get("/projection-records/browser-cache", dependencies=[Depends(require_token)])
 async def node_projection_records_browser_cache(
     webspace_id: str | None = None,
+    client_id: str | None = None,
+    session_id: str | None = None,
     include_hidden: bool = True,
     include_stale: bool = True,
     stale_after_s: float | None = None,
@@ -2649,6 +2651,8 @@ async def node_projection_records_browser_cache(
     target_webspace_id = _coerce_node_webspace_id(webspace_id)
     return browser_projection_record_snapshot(
         webspace_id=target_webspace_id,
+        client_id=client_id,
+        session_id=session_id,
         include_hidden=include_hidden,
         include_stale=include_stale,
         stale_after_s=stale_after_s,

@@ -204,3 +204,65 @@ def test_projection_records_api_exposes_browser_cache_snapshot() -> None:
     assert payload["projection_keys"] == ["status-card:runtime"]
     assert payload["records"]["status-card:runtime"]["data"]["summary"] == "Runtime ready"
     assert payload["cache_contract"]["write_policy"] == "core-owned-cache-only"
+
+
+def test_projection_records_api_filters_browser_cache_by_client_session() -> None:
+    client = _make_client()
+    for projection_key in ["status-card:runtime", "status-card:desktop-shell"]:
+        client.post(
+            "/api/node/projection-records",
+            json={
+                "status": "ready",
+                "data": {"summary": projection_key},
+                "meta": {
+                    "projection_key": projection_key,
+                    "kind": "status-card",
+                    "webspace_id": "desktop",
+                },
+            },
+        )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-2",
+            device_id="desktop",
+            session_id="session-2",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:desktop-shell",
+                    consumer_id="widget:desktop-shell",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    resp = client.get(
+        "/api/node/projection-records/browser-cache",
+        params={"webspace_id": "desktop", "client_id": "browser-1", "session_id": "session-1"},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["session_scoped"] is True
+    assert payload["client_id"] == "browser-1"
+    assert payload["session_id"] == "session-1"
+    assert payload["projection_keys"] == ["status-card:runtime"]
+    assert set(payload["records"]) == {"status-card:runtime"}
