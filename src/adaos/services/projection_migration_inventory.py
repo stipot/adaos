@@ -1102,7 +1102,7 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
         "server_mvp_percent": server_mvp_percent,
         "server_mvp_basis": "pass checks count as complete; warn checks count as half because they are documented follow-up work",
         "full_plan_estimate_percent": full_plan_estimate_percent,
-        "full_plan_basis": "Estimate includes known out-of-scope work: browser client hookup, full Infrascope split, node top-level Yjs envelope, and legacy cleanup.",
+        "full_plan_basis": "Estimate includes known out-of-scope work: browser client hookup, full Infrascope split, cross-branch node-aware Yjs envelope rollout, and legacy cleanup.",
         "completed_groups": [
             "server projection migration inventory",
             "control metrics and recommendations",
@@ -1113,7 +1113,7 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
         "remaining_groups": [
             "browser client adapter and projection cache",
             "full Infrascope projection-family split",
-            "node-aware top-level Yjs envelope",
+            "cross-branch node-aware Yjs envelope rollout",
             "cross-skill migration and legacy cleanup",
         ],
         "remaining_group_details": [
@@ -1128,9 +1128,9 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
                 "verification": "Check Infrascope refresh output and confirm separate projection keys for inventory, topology, inspectors, and status cards.",
             },
             {
-                "group": "node-aware top-level Yjs envelope",
-                "reason": "The MVP proves node-scoped records inside the cache, while a wider top-level envelope remains an integration task.",
-                "verification": "Inspect multi-node projection cache snapshots and confirm that node ownership is visible without reading card internals.",
+                "group": "cross-branch node-aware Yjs envelope rollout",
+                "reason": "The shared projection cache now has a node-aware envelope, while other Yjs branches still need the same ownership pattern.",
+                "verification": "Inspect projection cache and compatibility branches, then confirm node ownership is visible without reading individual payload internals.",
             },
             {
                 "group": "cross-skill migration and legacy cleanup",
@@ -1156,9 +1156,9 @@ def _acceptance_progress(*, checks: list[Mapping[str, Any]], metrics: Mapping[st
             {
                 "order": 3,
                 "milestone": "node_aware_projection_envelope",
-                "group": "node-aware top-level Yjs envelope",
-                "goal": "Expose node ownership at the projection-cache envelope level for multi-node diagnostics.",
-                "exit_check": "Projection cache summaries expose node ownership without reading individual card payloads.",
+                "group": "cross-branch node-aware Yjs envelope rollout",
+                "goal": "Extend the projection-cache envelope pattern to the remaining Yjs compatibility branches.",
+                "exit_check": "Projection cache and compatibility branch summaries expose node ownership without reading individual payload internals.",
             },
             {
                 "order": 4,
@@ -1303,7 +1303,7 @@ def _acceptance_plan_review(
                 "remaining": [
                     "skill-by-skill migration",
                     "legacy cleanup",
-                    "node-aware top-level Yjs envelope",
+                    "cross-branch node-aware Yjs envelope rollout",
                 ],
             },
         ],
@@ -1477,7 +1477,7 @@ def _acceptance_final_acceptance(
         "not_accepted_for": [
             "full browser client migration",
             "full Infrascope projection-family split",
-            "top-level node-aware Yjs envelope",
+            "cross-branch node-aware Yjs envelope rollout",
             "complete legacy projection cleanup",
         ],
         "required_evidence": [
