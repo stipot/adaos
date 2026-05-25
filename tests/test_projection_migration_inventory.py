@@ -434,9 +434,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 12
+    assert summary["completion_gates"]["gate_total"] == 13
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 9
+    assert summary["completion_gates"]["pass_total"] == 10
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -448,6 +448,7 @@ async def publish(payload, webspace_id):
         "event_envelope_contract",
         "heavy_pilot_shared_abi",
         "platform_emitter_contract",
+        "runtime_ownership_contract",
         "surface_lifecycle_contract",
     }
     browser_contract_gate = {
@@ -464,6 +465,13 @@ async def publish(payload, webspace_id):
     assert summary["surface_lifecycle_contract"]["contract"] == "adaos.browser-surface-lifecycle-subscriptions.v1"
     assert summary["surface_lifecycle_contract"]["ready_for_mvp"] is True
     assert summary["surface_lifecycle_contract"]["sample_subscription_total"] == 5
+    ownership_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["runtime_ownership_contract"]
+    assert "/api/node/projection-runtime-ownership" in ownership_gate["evidence"]
+    assert summary["runtime_ownership_contract"]["contract"] == "adaos.projection-runtime-ownership.v1"
+    assert summary["runtime_ownership_contract"]["ready_for_mvp"] is True
+    assert summary["runtime_ownership_contract"]["boundary_total"] == 5
     event_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["event_envelope_contract"]
@@ -496,6 +504,7 @@ async def publish(payload, webspace_id):
     assert "browser_demand_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "event_envelope" in summary["final_acceptance"]["evidence_fields"]
     assert "platform_emitters" in summary["final_acceptance"]["evidence_fields"]
+    assert "runtime_ownership_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "surface_lifecycle_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "full browser client migration" in summary["final_acceptance"]["not_accepted_for"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"

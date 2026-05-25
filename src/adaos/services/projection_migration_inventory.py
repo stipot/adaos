@@ -10,6 +10,7 @@ import yaml
 from adaos.domain import client_subscription_contract_snapshot, event_envelope_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.projection_demand_mapper import browser_surface_lifecycle_contract_snapshot
+from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
 from adaos.services.scenario.projection_registry import inspect_projection_manifest_entries
 
 
@@ -1385,6 +1386,18 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             ],
         },
         {
+            "id": "runtime_ownership_contract",
+            "criterion": "core, browser, skill, and platform projection responsibilities have an inspectable ownership split",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-runtime-ownership",
+                "core demand and materialization ownership",
+                "browser subscription-only ownership",
+                "skill payload refresh ownership",
+                "forbidden direct cache writes",
+            ],
+        },
+        {
             "id": "dispatcher_no_cross_webspace_churn",
             "criterion": "the dispatcher refreshes demanded projections without cross-webspace churn",
             "status": "pass",
@@ -1560,6 +1573,7 @@ def _acceptance_final_acceptance(
             "browser_demand_contract",
             "event_envelope",
             "platform_emitters",
+            "runtime_ownership_contract",
             "surface_lifecycle_contract",
         ],
         "progress": {
@@ -1597,6 +1611,7 @@ def projection_migration_acceptance_summary(
     browser_demand_contract = client_subscription_contract_snapshot(now=metrics_report.get("updated_at"))
     event_envelope = event_envelope_contract_snapshot(now=metrics_report.get("updated_at"))
     platform_emitters = platform_emitter_contract_snapshot(now=metrics_report.get("updated_at"))
+    runtime_ownership_contract = projection_runtime_ownership_contract_snapshot(now=metrics_report.get("updated_at"))
     surface_lifecycle_contract = browser_surface_lifecycle_contract_snapshot(now=metrics_report.get("updated_at"))
     metric_names = {str(item.get("metric") or "") for item in metrics_report.get("metric_definitions", [])}
     reserved_cache_target_total = int(metrics.get("reserved_cache_manifest_target_total") or 0)
@@ -1753,6 +1768,7 @@ def projection_migration_acceptance_summary(
         "browser_demand_contract": browser_demand_contract,
         "event_envelope": event_envelope,
         "platform_emitters": platform_emitters,
+        "runtime_ownership_contract": runtime_ownership_contract,
         "surface_lifecycle_contract": surface_lifecycle_contract,
         "risk_register": risk_register,
         "final_acceptance": final_acceptance,
