@@ -7,6 +7,7 @@ from typing import Any, Iterable, Mapping
 
 import yaml
 
+from adaos.domain import event_envelope_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.scenario.projection_registry import inspect_projection_manifest_entries
 
@@ -1328,6 +1329,17 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             "evidence": ["runtime", "ui-runtime", "notifications", "desktop-shell status cards"],
         },
         {
+            "id": "event_envelope_contract",
+            "criterion": "operational events have an inspectable shared envelope ABI before dispatcher-specific metadata",
+            "status": "pass",
+            "evidence": [
+                "/api/node/event-envelope-contract",
+                "_meta.event metadata path",
+                "legacy event compatibility",
+                "dispatcher-ready normalized example",
+            ],
+        },
+        {
             "id": "platform_emitter_contract",
             "criterion": "platform-emitted projections are defined through an inspectable shared contract",
             "status": "pass",
@@ -1522,6 +1534,7 @@ def _acceptance_final_acceptance(
             "risk_register",
             "defense_summary",
             "request_examples",
+            "event_envelope",
             "platform_emitters",
         ],
         "progress": {
@@ -1556,6 +1569,7 @@ def projection_migration_acceptance_summary(
         now=metrics_report.get("updated_at"),
     )
     metrics = _mapping(metrics_report.get("metrics"))
+    event_envelope = event_envelope_contract_snapshot(now=metrics_report.get("updated_at"))
     platform_emitters = platform_emitter_contract_snapshot(now=metrics_report.get("updated_at"))
     metric_names = {str(item.get("metric") or "") for item in metrics_report.get("metric_definitions", [])}
     reserved_cache_target_total = int(metrics.get("reserved_cache_manifest_target_total") or 0)
@@ -1709,6 +1723,7 @@ def projection_migration_acceptance_summary(
         "control_snapshot": control_snapshot,
         "plan_review": plan_review,
         "completion_gates": completion_gates,
+        "event_envelope": event_envelope,
         "platform_emitters": platform_emitters,
         "risk_register": risk_register,
         "final_acceptance": final_acceptance,

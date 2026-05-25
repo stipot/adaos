@@ -434,9 +434,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 9
+    assert summary["completion_gates"]["gate_total"] == 10
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 6
+    assert summary["completion_gates"]["pass_total"] == 7
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -444,9 +444,17 @@ async def publish(payload, webspace_id):
     assert {item["id"] for item in summary["completion_gates"]["gates"]} >= {
         "browser_multi_demand",
         "core_skill_contract_readiness",
+        "event_envelope_contract",
         "heavy_pilot_shared_abi",
         "platform_emitter_contract",
     }
+    event_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["event_envelope_contract"]
+    assert "/api/node/event-envelope-contract" in event_gate["evidence"]
+    assert summary["event_envelope"]["contract"] == "adaos.operational-event-envelope.v1"
+    assert summary["event_envelope"]["dispatcher_ready"] is True
+    assert summary["event_envelope"]["meta_path"] == "_meta.event"
     platform_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["platform_emitter_contract"]
@@ -469,6 +477,7 @@ async def publish(payload, webspace_id):
     assert summary["final_acceptance"]["progress"]["server_mvp_percent"] == 91.7
     assert summary["final_acceptance"]["remaining_followup_total"] == 4
     assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
+    assert "event_envelope" in summary["final_acceptance"]["evidence_fields"]
     assert "platform_emitters" in summary["final_acceptance"]["evidence_fields"]
     assert "full browser client migration" in summary["final_acceptance"]["not_accepted_for"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
