@@ -58,6 +58,7 @@ from adaos.services.projection_demand_mapper import (
     browser_surface_lifecycle_contract_snapshot,
     build_browser_projection_demand_record,
 )
+from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
 from adaos.services.projection_dispatcher import (
     ProjectionRefreshContext,
     ProjectionRefreshResult,
@@ -2508,6 +2509,11 @@ async def node_projection_platform_emitters() -> dict[str, Any]:
 @router.get("/event-envelope-contract", dependencies=[Depends(require_token)])
 async def node_event_envelope_contract() -> dict[str, Any]:
     return event_envelope_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-runtime-ownership", dependencies=[Depends(require_token)])
+async def node_projection_runtime_ownership() -> dict[str, Any]:
+    return projection_runtime_ownership_contract_snapshot(now=time.time())
 
 
 @router.post("/status-cards/runtime/refresh", dependencies=[Depends(require_token)])
