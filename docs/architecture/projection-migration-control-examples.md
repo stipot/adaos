@@ -217,6 +217,9 @@ The `completion_gates` block converts the plan's Completion Definition into a
 checklist. `pass` gates are already covered by the server-side MVP, while
 `warn` gates name follow-up work such as direct browser hookup, named-entity
 consumer invalidation, and full event producer/client test migration.
+The `core_skill_contract_readiness` gate should be `pass` when
+`/api/node/projection-dispatcher/core-skill-contract` exposes handler coverage,
+readiness metrics, and the core/skill/browser ownership split.
 
 The `risk_register` block turns those warnings into demo-ready risk statements.
 Each row names a risk, impact, mitigation, and verification step. It is useful

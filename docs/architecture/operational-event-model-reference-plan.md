@@ -418,7 +418,9 @@ Progress:
   Infrascope split, node-envelope, and cleanup follow-ups
 - `acceptance-summary` exposes `completion_gates`, a pass/warn/fail checklist
   derived from this Completion Definition so server-ready gates and remaining
-  follow-ups can be read directly from Swagger
+  follow-ups can be read directly from Swagger; the checklist includes
+  `core_skill_contract_readiness` for the inspectable core-to-skill refresh
+  contract and ownership split
 - `acceptance-summary` exposes `risk_register`, generated from warning gates
   and acceptance checks, with risk, impact, mitigation, and verification text
   for diploma limitations and demo notes
@@ -564,7 +566,7 @@ Use this checklist for every implementation slice touching the event model.
 | Browser subscription ABI | Full-overwrite demand records | Helper code, server runtime, browser-state mapper, session touch, demanded ProjectionRecord browser-cache endpoint, client/session scoped browser-cache reads, projection-key filtered browser-cache reads, ETag/If-None-Match validation, and per-entry cache metadata added; browser client adapter hookup remains |
 | Node-aware Yjs envelope | Reserved top-level ownership shape | `data/projectionRecords` now has a top-level envelope with core ownership, write policy, node-scope summary, and read/write boundaries; wider rollout to non-projection Yjs branches remains |
 | Client demand runtime | Page/widget/modal/pinned consumers | Server registry/API/mapper, browser-state mapper, stale marking, session touch, and multi-webspace API isolation tests added; browser client hookup remains |
-| Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, core-skill refresh contract snapshot, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |
+| Shared dispatcher | Per-webspace demanded refresh | Base dispatcher/API, core-skill refresh contract snapshot, acceptance gate, status-card wildcard handler, canonical record materialization, Yjs projection-record cache write/readback, Infrascope-specific demanded refresh handler, and multi-consumer grouping tests added |
 | Operator diagnostics | Demand/dispatcher/status-card correlation | `/api/node/projection-diagnostics` correlates demand, dispatcher handlers, status cards, shared materialized ProjectionRecords, optional demanded materialization, optional Yjs projection-record cache, node-aware cache envelope health, and optional Infrascope demanded-card refresh; `/api/node/projection-migration/acceptance-summary` gives a compact MVP readiness report |
 | Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Runtime lifecycle, UI runtime diagnostics, toast notifications, and desktop shell snapshots publish platform status cards through the shared ABI |
 | Thin reliability summary | Poll-safe status summary over registry | `mode=thin`, registry version, `since_version`, cache hints, ETag headers, `If-None-Match`, telemetry, payload comparison, telemetry reset, and optional Infrascope card refresh added |

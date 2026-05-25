@@ -114,6 +114,10 @@ Current status:
   `ownership` block with core-owned, skill-owned, browser-owned, and forbidden
   responsibilities, plus a `readiness` summary with coverage ratio and
   uncovered projection keys
+- `/api/node/projection-migration/acceptance-summary` includes
+  `core_skill_contract_readiness` in `completion_gates`, so the final MVP
+  report now checks this contract alongside browser demand and dispatcher
+  coverage
 
 ### 3. Projection ABI
 
