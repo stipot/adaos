@@ -451,6 +451,9 @@ async def publish(payload, webspace_id):
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["platform_emitter_contract"]
     assert "/api/node/projection-platform-emitters" in platform_gate["evidence"]
+    assert summary["platform_emitters"]["contract"] == "adaos.platform-emitters.status-card.v1"
+    assert summary["platform_emitters"]["ready_for_mvp"] is True
+    assert "status-card:notifications" in summary["platform_emitters"]["projection_keys"]
     core_skill_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["core_skill_contract_readiness"]
@@ -466,6 +469,7 @@ async def publish(payload, webspace_id):
     assert summary["final_acceptance"]["progress"]["server_mvp_percent"] == 91.7
     assert summary["final_acceptance"]["remaining_followup_total"] == 4
     assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
+    assert "platform_emitters" in summary["final_acceptance"]["evidence_fields"]
     assert "full browser client migration" in summary["final_acceptance"]["not_accepted_for"]
     assert checks["manifest_contract_guarded"]["status"] == "pass"
     assert checks["shared_bridge_present"]["status"] == "pass"
