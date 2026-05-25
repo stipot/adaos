@@ -323,6 +323,19 @@ evidence is:
 This is useful for a widget-level adapter that wants to refresh only its own
 ProjectionRecord while keeping the wider browser demand set intact.
 
+For browser-cache HTTP cache validation, repeat the same request with the
+previous response's `ETag` as `If-None-Match`. The expected evidence is:
+
+- the first response contains `cache.key`, `cache.fingerprint`, `cache.etag`,
+  and `cache.if_none_match_supported=true`
+- the HTTP response has `Cache-Control: no-cache`
+- the HTTP response has the same `ETag` value as `cache.etag`
+- the second matching request returns `304 Not Modified`
+- the `304` response preserves the same `ETag`
+
+This lets a browser adapter poll or refresh demanded ProjectionRecords without
+forcing downstream widget work when the demanded snapshot has not changed.
+
 Risk weights:
 
 | Risk | Weight |

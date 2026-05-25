@@ -155,6 +155,8 @@ Current status:
   so one browser session can read only its own demanded ProjectionRecords
 - the same read path supports repeated `projection_keys` query filters for
   widget-level reads without changing the browser's full demand set
+- browser-cache responses now include `cache.key`, `fingerprint`, `etag`, and
+  support `If-None-Match` with `304 Not Modified`
 - direct Angular client adapter hookup remains pending because the client
   submodule is not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before
