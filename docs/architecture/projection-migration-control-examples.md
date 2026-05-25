@@ -435,6 +435,12 @@ This proves that the dispatcher-facing event model can accept legacy AdaOS
 events while reading trace, scope, authority, and causal metadata from the
 shared `_meta.event` envelope.
 
+The same contract is embedded in
+`/api/node/projection-migration/acceptance-summary` under `event_envelope` and
+also appears as the `event_envelope_contract` completion gate. For the final
+MVP report, verify that `event_envelope.dispatcher_ready=true` and
+`final_acceptance.evidence_fields[]` includes `event_envelope`.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

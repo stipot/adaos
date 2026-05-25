@@ -102,6 +102,9 @@ Current status:
   envelope ABI, including required legacy event fields, the preferred
   `_meta.event` metadata path, compatibility rules, ownership split, and a
   normalized dispatcher-ready example
+- `/api/node/projection-migration/acceptance-summary` includes
+  `event_envelope_contract` in `completion_gates` and embeds the
+  `event_envelope` evidence block for the final server-side MVP report
 - named-entity ABI is already implemented enough to serve as a model for
   contract-first runtime work
 - eventbus backpressure exists for selected hot paths, but does not replace

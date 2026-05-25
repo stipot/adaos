@@ -451,6 +451,9 @@ Progress:
 - `acceptance-summary` embeds `platform_emitters` as final evidence for the
   platform-owned status-card contract, so the MVP report can be checked from
   one Swagger response without opening the dedicated emitter endpoint
+- `acceptance-summary` embeds `event_envelope` and checks
+  `event_envelope_contract`, so the final MVP report proves that operational
+  events have a shared dispatcher-ready envelope ABI
 
 Exit criteria:
 
