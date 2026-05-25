@@ -336,6 +336,22 @@ previous response's `ETag` as `If-None-Match`. The expected evidence is:
 This lets a browser adapter poll or refresh demanded ProjectionRecords without
 forcing downstream widget work when the demanded snapshot has not changed.
 
+For browser-cache per-entry validation, inspect the same response's `entries[]`
+and aggregate entry maps. The expected evidence is:
+
+- every `entries[]` item has `cache.key`, `cache.fingerprint`, and `cache.etag`
+- `entry_cache_keys[]` contains one cache key per demanded projection
+- `entry_fingerprints` maps each demanded `projection_key` to the entry-level
+  fingerprint
+- `entry_etags` maps each demanded `projection_key` to the entry-level weak
+  ETag
+- missing demanded records carry
+  `cache.missing_reason=demanded_projection_record_not_materialized`
+
+This gives the future browser adapter a stable per-widget signal: the whole
+snapshot can be validated through HTTP `ETag`, while each demanded
+ProjectionRecord can still be compared independently.
+
 Risk weights:
 
 | Risk | Weight |

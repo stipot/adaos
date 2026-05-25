@@ -287,6 +287,9 @@ Current checkpoint as of 2026-05-15:
 - browser-cache responses carry `ETag` cache metadata and accept
   `If-None-Match`, returning `304 Not Modified` when the demanded snapshot is
   unchanged
+- browser-cache entries also carry per-demanded-projection cache metadata:
+  entry cache key, fingerprint, ETag, source, record metadata, and a stable
+  missing-record reason
 - skill and scenario `data_projections` manifests now share the
   `adaos.data-projections.v1` target contract, including optional
   `projection_key` and explicit rejection of direct manifest targets to

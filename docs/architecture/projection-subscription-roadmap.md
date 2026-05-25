@@ -157,6 +157,9 @@ Current status:
   widget-level reads without changing the browser's full demand set
 - browser-cache responses now include `cache.key`, `fingerprint`, `etag`, and
   support `If-None-Match` with `304 Not Modified`
+- browser-cache entries now expose per-projection `cache.key`, `fingerprint`,
+  `etag`, and missing-record reasons, plus aggregate `entry_fingerprints` and
+  `entry_etags` maps for widget-level comparison
 - direct Angular client adapter hookup remains pending because the client
   submodule is not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before
