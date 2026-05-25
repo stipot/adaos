@@ -11,6 +11,10 @@ from adaos.domain import (
 )
 
 
+SURFACE_LIFECYCLE_CONTRACT = "adaos.browser-surface-lifecycle-subscriptions.v1"
+SURFACE_LIFECYCLE_INPUT_GROUPS = ("page", "widgets", "modals", "pinnedPanels")
+
+
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
@@ -154,7 +158,72 @@ def build_browser_projection_demand_record(
     )
 
 
+def browser_surface_lifecycle_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the browser surface-to-subscription mapping contract."""
+
+    sample_record = build_browser_projection_demand_record(
+        client_id="browser-1",
+        device_id="desktop",
+        session_id="session-1",
+        webspace_id="desktop",
+        role="operator",
+        updated_at=float(now if now is not None else 0.0),
+        page={
+            "id": "infrascope",
+            "projectionKeys": ["projection:hub/overview", "projection:hub/inventory"],
+        },
+        widgets=[
+            {
+                "id": "infra-state",
+                "projection_key": "status-card:runtime",
+                "nodeId": "node-a",
+                "params": {"compact": True},
+            }
+        ],
+        modals=[
+            {
+                "id": "runtime-details",
+                "projection_key": "projection:hub/object-inspector",
+                "consumerId": "modal:runtime-details",
+                "visible": False,
+            }
+        ],
+        pinned_panels=[
+            {
+                "id": "runtime-pinned",
+                "projection_key": "status-card:runtime",
+            }
+        ],
+    )
+    sample = sample_record.to_dict()
+    subscriptions = list(sample.get("subscriptions") or [])
+    return {
+        "contract": SURFACE_LIFECYCLE_CONTRACT,
+        "ready_for_mvp": True,
+        "input_groups": list(SURFACE_LIFECYCLE_INPUT_GROUPS),
+        "mapping_rules": {
+            "page": "Maps page projectionKeys to consumer_kind=page.",
+            "widgets": "Maps mounted widgets to consumer_kind=widget and preserves params/node scope.",
+            "modals": "Maps open or hidden modals to consumer_kind=modal and uses visible=false as visibility=hidden.",
+            "pinnedPanels": "Maps pinned panels to consumer_kind=pinned-panel and forces pinned=true.",
+            "missing_projection_key": "Consumers without projection_key, projectionKeys, or demands are ignored.",
+        },
+        "server_endpoint": "/api/node/projection-demand/browser-state",
+        "output_contract": "adaos.client-projection-subscription.v1",
+        "sample_record": sample,
+        "sample_subscription_total": len(subscriptions),
+        "sample_consumer_kinds": sorted({str(item.get("consumer_kind") or "") for item in subscriptions}),
+        "sample_projection_keys": [str(item.get("projection_key") or "") for item in subscriptions],
+        "direct_client_hookup": {
+            "status": "pending",
+            "reason": "Angular/browser client adapter is outside the initialized checkout.",
+        },
+    }
+
+
 __all__ = [
+    "SURFACE_LIFECYCLE_CONTRACT",
+    "browser_surface_lifecycle_contract_snapshot",
     "build_browser_projection_demand_record",
     "projection_subscriptions_from_browser_consumers",
 ]

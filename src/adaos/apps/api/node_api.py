@@ -54,7 +54,10 @@ from adaos.services.projection_demand import (
     touch_client_subscription_record,
     write_client_subscription_record,
 )
-from adaos.services.projection_demand_mapper import build_browser_projection_demand_record
+from adaos.services.projection_demand_mapper import (
+    browser_surface_lifecycle_contract_snapshot,
+    build_browser_projection_demand_record,
+)
 from adaos.services.projection_dispatcher import (
     ProjectionRefreshContext,
     ProjectionRefreshResult,
@@ -2252,6 +2255,11 @@ async def node_projection_demand_snapshot(
 @router.get("/projection-demand/contract", dependencies=[Depends(require_token)])
 async def node_projection_demand_contract() -> dict[str, Any]:
     return client_subscription_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-demand/surface-lifecycle-contract", dependencies=[Depends(require_token)])
+async def node_projection_demand_surface_lifecycle_contract() -> dict[str, Any]:
+    return browser_surface_lifecycle_contract_snapshot(now=time.time())
 
 
 @router.post("/projection-demand/client", dependencies=[Depends(require_token)])

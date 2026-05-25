@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from adaos.services.projection_demand_mapper import build_browser_projection_demand_record
+from adaos.services.projection_demand_mapper import (
+    browser_surface_lifecycle_contract_snapshot,
+    build_browser_projection_demand_record,
+)
 
 
 def test_browser_demand_mapper_maps_page_widget_modal_and_pinned_panel() -> None:
@@ -71,3 +74,18 @@ def test_browser_demand_mapper_ignores_consumers_without_projection_key() -> Non
     )
 
     assert record.to_dict()["subscriptions"] == []
+
+
+def test_surface_lifecycle_contract_snapshot_exposes_mapping_rules() -> None:
+    snapshot = browser_surface_lifecycle_contract_snapshot(now=40.0)
+
+    assert snapshot["contract"] == "adaos.browser-surface-lifecycle-subscriptions.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["input_groups"] == ["page", "widgets", "modals", "pinnedPanels"]
+    assert snapshot["server_endpoint"] == "/api/node/projection-demand/browser-state"
+    assert snapshot["output_contract"] == "adaos.client-projection-subscription.v1"
+    assert snapshot["sample_record"]["updated_at"] == 40.0
+    assert snapshot["sample_subscription_total"] == 5
+    assert snapshot["sample_consumer_kinds"] == ["modal", "page", "pinned-panel", "widget"]
+    assert "projection:hub/object-inspector" in snapshot["sample_projection_keys"]
+    assert snapshot["direct_client_hookup"]["status"] == "pending"

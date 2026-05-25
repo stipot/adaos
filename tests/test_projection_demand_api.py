@@ -82,6 +82,21 @@ def test_projection_demand_contract_endpoint_exposes_client_subscription_abi() -
     assert "projection:hub/object-inspector" in payload["sample_projection_keys"]
 
 
+def test_projection_demand_surface_lifecycle_contract_endpoint_exposes_mapping() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/projection-demand/surface-lifecycle-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.browser-surface-lifecycle-subscriptions.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["server_endpoint"] == "/api/node/projection-demand/browser-state"
+    assert payload["output_contract"] == "adaos.client-projection-subscription.v1"
+    assert payload["sample_subscription_total"] == 5
+    assert "pinned-panel" in payload["sample_consumer_kinds"]
+
+
 def test_projection_demand_api_get_and_delete_snapshot() -> None:
     client = _make_client()
     client.post(
