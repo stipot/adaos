@@ -459,6 +459,24 @@ The same evidence is embedded in
 `browser_demand_contract`, and the `browser_demand_contract` completion gate
 must pass for the server-side MVP report.
 
+For surface lifecycle mapping validation, call
+`/api/node/projection-demand/surface-lifecycle-contract`. The expected evidence
+is:
+
+- `contract=adaos.browser-surface-lifecycle-subscriptions.v1`
+- `ready_for_mvp=true`
+- `input_groups[]` equals `page`, `widgets`, `modals`, and `pinnedPanels`
+- `server_endpoint=/api/node/projection-demand/browser-state`
+- `output_contract=adaos.client-projection-subscription.v1`
+- `sample_subscription_total=5`
+- `sample_consumer_kinds[]` includes `page`, `widget`, `modal`, and
+  `pinned-panel`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`surface_lifecycle_contract`, and the `surface_lifecycle_contract` completion
+gate must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

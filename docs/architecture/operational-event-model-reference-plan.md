@@ -227,6 +227,9 @@ Current status:
   subscription ABI for demanded projections, including required fields,
   replace-full-session write policy, pinned/visibility semantics, and registry
   endpoints
+- `/api/node/projection-demand/surface-lifecycle-contract` exposes the
+  server-side mapping from page, widget, modal, and pinned panel lifecycle
+  state into canonical projection subscriptions
 - materialized status-card registry is implemented in the node runtime
 - `/api/node/projection-platform-emitters` exposes the status-card platform
   emitter contract for runtime lifecycle, browser shell, notifications, UI
@@ -461,6 +464,9 @@ Progress:
 - `acceptance-summary` embeds `browser_demand_contract` and checks
   `browser_demand_contract`, so the final MVP report proves that browser demand
   records have a stable client subscription ABI
+- `acceptance-summary` embeds `surface_lifecycle_contract` and checks
+  `surface_lifecycle_contract`, so the final MVP report proves that browser
+  surface lifecycle state has a stable mapping into projection subscriptions
 
 Exit criteria:
 

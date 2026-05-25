@@ -161,7 +161,7 @@ Next active projection task:
 
 - [x] `client.subscription_registry`: add browser-side projection subscription registry support
 - [x] `client.full_subscription_overwrite`: make each client write its full active subscription set on change
-- [ ] `client.surface_lifecycle_to_subscriptions`: ensure modal open/close, widget mount/unmount, and visibility changes update the client subscription record
+- [x] `client.surface_lifecycle_to_subscriptions`: ensure modal open/close, widget mount/unmount, and visibility changes update the client subscription record
 - [x] `client.multi_projection_support`: add support for multiple active projections in one webspace
 - [ ] `client.node_multiplicity_ready`: prepare the browser to consume node multiplicity from shared Yjs instead of assuming one anonymous node view
 - [x] `client.soft_session_sanitation`: keep stale-client cleanup as a soft client/session sanitation mechanism, not as projection activity logic
@@ -200,6 +200,13 @@ Current status:
   registry contract for Swagger checks, including the client/session identity,
   demanded `projection_key`, consumer identity, pinned state, visibility, and
   optional node scope
+- `/api/node/projection-demand/surface-lifecycle-contract` fixes the
+  server-side surface lifecycle mapping contract for page, widget, modal, and
+  pinned panel consumers; direct Angular client adapter hookup remains pending,
+  but the server now exposes the canonical mapping shape through Swagger
+- `/api/node/projection-migration/acceptance-summary` includes
+  `surface_lifecycle_contract` in `completion_gates` and embeds the evidence
+  block for one-response MVP verification
 - direct Angular client adapter hookup remains pending because the client
   submodule is not initialized in this checkout
 - avoid adding another browser-local cache or modal-specific registry before
