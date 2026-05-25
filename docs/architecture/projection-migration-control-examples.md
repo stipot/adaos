@@ -384,6 +384,10 @@ For the core-to-skill refresh contract, call
   `refresh_contract.core_materializes_projection_record=true`
 - `covered_total` and `uncovered_total` summarize handler coverage before the
   actual dispatch runs
+- `uncovered_projection_keys[]` names demanded projections without handlers
+- `readiness.coverage_ratio` reports handler coverage for the demanded set
+- `readiness.ready_for_dispatch=true` only when every demanded projection is
+  covered
 
 This is the Swagger-facing proof that core owns demand selection and canonical
 materialization, while skill/platform handlers own payload refresh.

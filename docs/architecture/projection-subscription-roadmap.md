@@ -112,7 +112,8 @@ Current status:
   ownership split between core demand selection, skill payload refresh, and
   core ProjectionRecord materialization; each demand now carries an explicit
   `ownership` block with core-owned, skill-owned, browser-owned, and forbidden
-  responsibilities
+  responsibilities, plus a `readiness` summary with coverage ratio and
+  uncovered projection keys
 
 ### 3. Projection ABI
 

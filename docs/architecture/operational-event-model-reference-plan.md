@@ -153,7 +153,8 @@ Progress:
   coverage, and the ownership split where core selects demand and materializes
   ProjectionRecords while skill/platform handlers refresh payloads; each demand
   carries an explicit `ownership` block with core-owned, skill-owned,
-  browser-owned, and forbidden responsibilities
+  browser-owned, and forbidden responsibilities, plus readiness metrics for
+  handler coverage and uncovered projection keys
 - projection-family wildcard handlers are implemented; `status-card:*` is the
   first platform handler family
 - canonical `ProjectionRecord` results can now be materialized in a shared
