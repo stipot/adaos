@@ -7,7 +7,7 @@ from typing import Any, Iterable, Mapping
 
 import yaml
 
-from adaos.domain import event_envelope_contract_snapshot
+from adaos.domain import client_subscription_contract_snapshot, event_envelope_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.scenario.projection_registry import inspect_projection_manifest_entries
 
@@ -1362,6 +1362,17 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             "followup": "Direct browser client hookup remains outside the server-side MVP.",
         },
         {
+            "id": "browser_demand_contract",
+            "criterion": "browser-written projection demand has an inspectable client subscription ABI",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-demand/contract",
+                "replace-full-session write policy",
+                "pinned and visibility semantics",
+                "browser-state mapping endpoint",
+            ],
+        },
+        {
             "id": "dispatcher_no_cross_webspace_churn",
             "criterion": "the dispatcher refreshes demanded projections without cross-webspace churn",
             "status": "pass",
@@ -1534,6 +1545,7 @@ def _acceptance_final_acceptance(
             "risk_register",
             "defense_summary",
             "request_examples",
+            "browser_demand_contract",
             "event_envelope",
             "platform_emitters",
         ],
@@ -1569,6 +1581,7 @@ def projection_migration_acceptance_summary(
         now=metrics_report.get("updated_at"),
     )
     metrics = _mapping(metrics_report.get("metrics"))
+    browser_demand_contract = client_subscription_contract_snapshot(now=metrics_report.get("updated_at"))
     event_envelope = event_envelope_contract_snapshot(now=metrics_report.get("updated_at"))
     platform_emitters = platform_emitter_contract_snapshot(now=metrics_report.get("updated_at"))
     metric_names = {str(item.get("metric") or "") for item in metrics_report.get("metric_definitions", [])}
@@ -1723,6 +1736,7 @@ def projection_migration_acceptance_summary(
         "control_snapshot": control_snapshot,
         "plan_review": plan_review,
         "completion_gates": completion_gates,
+        "browser_demand_contract": browser_demand_contract,
         "event_envelope": event_envelope,
         "platform_emitters": platform_emitters,
         "risk_register": risk_register,
