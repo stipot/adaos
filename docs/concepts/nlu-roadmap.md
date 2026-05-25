@@ -1,6 +1,6 @@
 # NLU Roadmap Checklist
 
-Current implementation estimate: **89%** for the practical AdaOS NLU roadmap.
+Current implementation estimate: **90%** for the practical AdaOS NLU roadmap.
 The target architecture now treats Neural NLU as a default-installed provider,
 but the productionization checklist remains mostly open.
 
@@ -147,7 +147,7 @@ but the productionization checklist remains mostly open.
   `evidence`.
 - [x] Add confidence gates for accept/abstain/reject.
 - [x] Add neural abstain/error fallback to Rasa.
-- [ ] Route Rasa miss/low confidence to NLU Teacher.
+- [x] Route Rasa miss/low confidence to NLU Teacher.
 
 ### Notebook Approach Port
 
@@ -233,6 +233,10 @@ but the productionization checklist remains mostly open.
 - Trace items are persisted to `data.nlu_trace.items[]` for the future UI timeline.
 - Neural bridge records node-local aggregate usage stats in `state/nlu/neural_usage.json`, including latency,
   confidence bands, accept/abstain/reject counts, fallback ratio, canonicalization buckets, and review samples.
+- Rasa miss/low-confidence fallback now enriches `nlp.intent.not_obtained`
+  with Rasa evidence (`intent`, `confidence`, `slots`, `entities`,
+  `intent_ranking`, `_raw`), and the Teacher bridge forwards that evidence in
+  `nlp.teacher.request`.
 - Neural service skill now declares service-owned venv execution and keeps Torch/Numpy dependencies outside the hub root venv.
 - Neural artifacts now include `intent_map.json` so notebook labels can map to AdaOS canonical intents and optional
   action ids while evidence preserves the original source label.

@@ -17,6 +17,11 @@ The hub NLU pipeline uses:
 - `nlp.intent.detected { intent, confidence, slots, text, webspace_id, request_id, via }`
 - `nlp.intent.not_obtained { reason, text, webspace_id, request_id, via }`
 
+Rasa miss/low-confidence events may also include provider evidence:
+`intent`, `confidence`, `slots`, `entities`, `intent_ranking`, and `_raw`.
+The Teacher bridge preserves these fields in `nlp.teacher.request.request` so
+operators can see the failed candidate and ranking while correcting examples.
+
 ## Rasa NLU service skill
 
 - Skill: `.adaos/workspace/skills/rasa_nlu_service_skill`
@@ -61,6 +66,11 @@ The hub root venv must not install upstream `rasa==3.6.x`.
 Rasa bridge records service issues when parsing fails or times out:
 - issue types: `rasa_failed`, `rasa_timeout`
 - storage: `state/services/rasa_nlu_service_skill/issues.json`
+
+No-intent and low-confidence Rasa parses are not service issues. They emit
+`nlp.intent.not_obtained` with the Rasa candidate, confidence, extracted slots,
+entities, top ranking, and raw result. When `ADAOS_NLU_TEACHER=1`, the Teacher
+bridge stores and forwards that evidence in `nlp.teacher.request`.
 
 If `service.self_managed.doctor.enabled: true`, these issues can also trigger:
 - `skill.service.doctor.request` events (with log tail)

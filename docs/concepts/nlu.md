@@ -182,14 +182,23 @@ long-term fallback.
    - calls the installed `rasa_nlu_service_skill`;
    - remains a supported long-term fallback, especially for ambiguous neural
      outputs and domains where Rasa training data is already stronger;
-   - can be disabled on weak devices if neural/regex coverage is sufficient.
+   - can be disabled on weak devices if neural/regex coverage is sufficient;
+   - on no-intent or low-confidence parses, emits `nlp.intent.not_obtained`
+     with Rasa evidence (`intent`, `confidence`, `slots`, `entities`,
+     `intent_ranking`, `_raw`) so Teacher can review the actual failed
+     candidate instead of only the raw phrase.
 7. If an intent is found:
    - `nlp.intent.detected { intent, confidence, slots, text, webspace_id, request_id, via }`
 8. If intent is not obtained:
    - `nlp.intent.not_obtained { reason, text, via, webspace_id, request_id }`
+     plus optional provider evidence for Rasa misses/low-confidence parses
+     (`intent`, `confidence`, `slots`, `entities`, `intent_ranking`, `_raw`)
    - Router emits a human-friendly `io.out.chat.append` and records the request for NLU Teacher.
 9. If teacher is enabled:
    - `nlp.teacher.request { webspace_id, request }` is emitted for teacher runtimes.
+   - The Teacher bridge preserves provider evidence from `not_obtained`
+     events in `request`, allowing UI/LLM review to show why Rasa rejected the
+     candidate.
 
 ## Runtime trace
 

@@ -114,6 +114,70 @@ async def test_rasa_service_bridge_disabled_emits_not_obtained(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_rasa_service_bridge_low_confidence_emits_not_obtained_with_evidence(monkeypatch):
+    from adaos.services.nlu import rasa_service_bridge as bridge
+
+    emitted = []
+
+    class Supervisor:
+        async def refresh_discovered(self, force=False):
+            return None
+
+        async def start(self, name):
+            raise AssertionError("healthy service should not be restarted")
+
+        def resolve_base_url(self, name):
+            return "http://127.0.0.1:18092"
+
+    monkeypatch.setattr(bridge, "_MIN_CONFIDENCE", 0.6)
+    monkeypatch.setattr(bridge, "get_ctx", lambda: SimpleNamespace(bus=object()))
+    monkeypatch.setattr(bridge, "get_service_supervisor", lambda: Supervisor())
+    monkeypatch.setattr(bridge, "_service_health_ok", lambda base_url: True)
+    monkeypatch.setattr(
+        bridge,
+        "_http_post_json",
+        lambda url, payload, *, timeout_ms: {
+            "ok": True,
+            "result": {
+                "intent": {"name": "weather.get_forecast", "confidence": 0.42},
+                "entities": [{"entity": "city", "value": "moscow"}],
+                "intent_ranking": [
+                    {"name": "weather.get_forecast", "confidence": 0.42},
+                    {"name": "desktop.open_modal", "confidence": 0.18},
+                ],
+            },
+        },
+    )
+    monkeypatch.setattr(bridge, "bus_emit", lambda _bus, event, payload, source=None: emitted.append((event, payload, source)))
+
+    await bridge._parse_and_emit(
+        text="weather in moscow",
+        webspace_id="ws1",
+        request_id="rid-low",
+        meta={"trace": "test"},
+    )
+
+    assert emitted[0][0] == "nlu.trace.stage"
+    assert emitted[0][1]["status"] == "miss"
+    assert emitted[0][1]["reason"] == "rasa_low_confidence"
+    event, payload, source = emitted[-1]
+    assert event == "nlp.intent.not_obtained"
+    assert source == "nlu.rasa"
+    assert payload["reason"] == "rasa_low_confidence"
+    assert payload["intent"] == "weather.get_forecast"
+    assert payload["confidence"] == 0.42
+    assert payload["slots"] == {"city": "moscow"}
+    assert payload["entities"] == [{"entity": "city", "value": "moscow"}]
+    assert payload["intent_ranking"] == [
+        {"name": "weather.get_forecast", "confidence": 0.42},
+        {"name": "desktop.open_modal", "confidence": 0.18},
+    ]
+    assert payload["webspace_id"] == "ws1"
+    assert payload["request_id"] == "rid-low"
+    assert payload["_meta"] == {"trace": "test"}
+
+
+@pytest.mark.anyio
 async def test_rasa_training_bridge_records_successful_training(monkeypatch, tmp_path):
     from adaos.services.nlu import rasa_training_bridge as bridge
 

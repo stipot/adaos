@@ -53,6 +53,7 @@ def _emit_not_obtained(
     request_id: str | None,
     meta: Mapping[str, Any],
     reason: str,
+    result: Mapping[str, Any] | None = None,
 ) -> None:
     out: Dict[str, Any] = {"reason": reason, "text": text, "via": "rasa"}
     if webspace_id:
@@ -61,6 +62,25 @@ def _emit_not_obtained(
         out["request_id"] = request_id
     if isinstance(meta, Mapping) and meta:
         out["_meta"] = dict(meta)
+    if isinstance(result, Mapping):
+        intent = result.get("intent")
+        if isinstance(intent, str) and intent.strip():
+            out["intent"] = intent.strip()
+        confidence = result.get("confidence")
+        if isinstance(confidence, (int, float)):
+            out["confidence"] = float(confidence)
+        slots = result.get("slots")
+        if isinstance(slots, Mapping) and slots:
+            out["slots"] = dict(slots)
+        entities = result.get("entities")
+        if isinstance(entities, list) and entities:
+            out["entities"] = list(entities)
+        ranking = result.get("intent_ranking")
+        if isinstance(ranking, list) and ranking:
+            out["intent_ranking"] = list(ranking[:5])
+        raw = result.get("raw")
+        if isinstance(raw, Mapping) and raw:
+            out["_raw"] = dict(raw)
     bus_emit(ctx.bus, "nlp.intent.not_obtained", out, source="nlu.rasa")
 
 
@@ -335,6 +355,7 @@ async def _parse_and_emit(
             request_id=request_id,
             meta=meta,
             reason=str(result.get("reason") or "rasa_failed"),
+            result=result,
         )
         return
 
