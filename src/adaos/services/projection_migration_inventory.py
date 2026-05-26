@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping
 import yaml
 
 from adaos.domain import client_subscription_contract_snapshot, event_envelope_contract_snapshot
+from adaos.services.infrascope_status_cards import infrascope_projection_family_contract_snapshot
 from adaos.services.projection_demand_restore import projection_demand_restore_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.projection_demand_mapper import browser_surface_lifecycle_contract_snapshot
@@ -1477,6 +1478,17 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             "evidence": ["Infrascope status-card adapter", "demanded-only refresh", "projection diagnostics correlation"],
         },
         {
+            "id": "infrascope_projection_family_contract",
+            "criterion": "Infrascope overview, inventory, inspectors, topology, and modal/widget payloads are split into explicit projection families",
+            "status": "pass",
+            "evidence": [
+                "/api/node/status-cards/infrascope/projection-family-contract",
+                "status-card:infrascope-* projection family",
+                "inspector details stay lazy",
+                "no Infrascope-specific projection ABI",
+            ],
+        },
+        {
             "id": "acceptance_test_coverage",
             "criterion": "acceptance tests cover event envelope compatibility, multi-consumer demand, multi-webspace dispatch, platform emitter lifecycle, and pressure observability",
             "status": "warn",
@@ -1625,6 +1637,7 @@ def _acceptance_final_acceptance(
             "demand_restore_contract",
             "dispatcher_memory_contract",
             "event_envelope",
+            "infrascope_projection_family_contract",
             "node_multiplicity_contract",
             "platform_emitters",
             "runtime_ownership_contract",
@@ -1667,6 +1680,9 @@ def projection_migration_acceptance_summary(
     demand_restore_contract = projection_demand_restore_contract_snapshot(now=metrics_report.get("updated_at"))
     dispatcher_memory_contract = projection_dispatcher_memory_contract_snapshot(now=metrics_report.get("updated_at"))
     event_envelope = event_envelope_contract_snapshot(now=metrics_report.get("updated_at"))
+    infrascope_projection_family_contract = infrascope_projection_family_contract_snapshot(
+        now=metrics_report.get("updated_at")
+    )
     node_multiplicity_contract = projection_records_node_multiplicity_contract_snapshot(
         now=metrics_report.get("updated_at")
     )
@@ -1830,6 +1846,7 @@ def projection_migration_acceptance_summary(
         "demand_restore_contract": demand_restore_contract,
         "dispatcher_memory_contract": dispatcher_memory_contract,
         "event_envelope": event_envelope,
+        "infrascope_projection_family_contract": infrascope_projection_family_contract,
         "node_multiplicity_contract": node_multiplicity_contract,
         "platform_emitters": platform_emitters,
         "runtime_ownership_contract": runtime_ownership_contract,
