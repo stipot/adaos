@@ -434,9 +434,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 19
+    assert summary["completion_gates"]["gate_total"] == 20
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 16
+    assert summary["completion_gates"]["pass_total"] == 17
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -451,6 +451,7 @@ async def publish(payload, webspace_id):
         "event_envelope_contract",
         "heavy_pilot_shared_abi",
         "infrascope_demanded_only_contract",
+        "infrascope_platform_errors_contract",
         "infrascope_projection_family_contract",
         "node_multiplicity_contract",
         "platform_emitter_contract",
@@ -537,6 +538,14 @@ async def publish(payload, webspace_id):
     assert summary["infrascope_demanded_only_contract"]["ready_for_mvp"] is True
     assert summary["infrascope_demanded_only_contract"]["selection_rules"]["webspace_scoped"] is True
     assert summary["infrascope_demanded_only_contract"]["boundaries"]["cross_webspace_churn"] is False
+    infrascope_errors_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["infrascope_platform_errors_contract"]
+    assert "/api/node/status-cards/infrascope/platform-errors-contract" in infrascope_errors_gate["evidence"]
+    assert summary["infrascope_platform_errors_contract"]["contract"] == "adaos.infrascope.platform-errors.v1"
+    assert summary["infrascope_platform_errors_contract"]["ready_for_mvp"] is True
+    assert summary["infrascope_platform_errors_contract"]["separation_rules"]["not_hidden_inside_data_infrascope"] is True
+    assert summary["infrascope_platform_errors_contract"]["boundaries"]["direct_yjs_write"] is False
     core_skill_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["core_skill_contract_readiness"]
@@ -558,6 +567,7 @@ async def publish(payload, webspace_id):
     assert "dispatcher_memory_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "event_envelope" in summary["final_acceptance"]["evidence_fields"]
     assert "infrascope_demanded_only_contract" in summary["final_acceptance"]["evidence_fields"]
+    assert "infrascope_platform_errors_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "infrascope_projection_family_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "node_multiplicity_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "platform_emitters" in summary["final_acceptance"]["evidence_fields"]
