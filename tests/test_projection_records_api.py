@@ -92,6 +92,22 @@ def test_projection_records_node_multiplicity_contract_endpoint_exposes_browser_
     assert payload["browser_rules"]["do_not_assume_single_anonymous_node"] is True
 
 
+def test_projection_records_browser_adapter_contract_endpoint_exposes_cache_rules() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/projection-records/browser-adapter-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.projection-records.browser-adapter.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["source_of_truth"]["api_read_path"] == "/api/node/projection-records/browser-cache"
+    assert payload["adapter_rules"]["read_projection_records"] is True
+    assert payload["adapter_rules"]["read_monolithic_scenario_snapshot"] == "compatibility-only"
+    assert payload["adapter_rules"]["avoid_observe_deep_data"] is True
+    assert "entry_etags" in payload["evidence"]
+
+
 def test_projection_records_api_materializes_yjs_cache(monkeypatch) -> None:
     client = _make_client()
     from adaos.apps.api import node_api

@@ -19,6 +19,7 @@ _DEFAULT_STATS: dict[str, float | int | None] = {
     "last_write_latency_ms": None,
 }
 _STATS: dict[str, float | int | None] = dict(_DEFAULT_STATS)
+PROJECTION_RECORD_BROWSER_ADAPTER_CONTRACT = "adaos.projection-records.browser-adapter.v1"
 
 
 def _record_key(record: ProjectionRecord) -> tuple[str, str]:
@@ -424,7 +425,65 @@ def browser_projection_record_snapshot(
     }
 
 
+def browser_projection_adapter_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the browser adapter contract for ProjectionRecord reads."""
+
+    return {
+        "contract": PROJECTION_RECORD_BROWSER_ADAPTER_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": float(now if now is not None else time.time()),
+        "source_of_truth": {
+            "canonical_yjs_path": "data/projectionRecords",
+            "api_read_path": "/api/node/projection-records/browser-cache",
+            "demand_source": "/api/node/projection-demand",
+            "materialize_path": "/api/node/projection-records/yjs/materialize",
+        },
+        "adapter_rules": {
+            "read_projection_records": True,
+            "read_monolithic_scenario_snapshot": "compatibility-only",
+            "write_projection_records_from_browser": False,
+            "write_projection_records_from_skill": False,
+            "cache_by_projection_key": True,
+            "reuse_cached_views": True,
+            "prefer_nested_projection_path": True,
+            "avoid_observe_deep_data": True,
+        },
+        "cache_model": {
+            "browser_cache_key": "browser-projection-records:{webspace_id}:{client_id}:{session_id}:{projection_keys}",
+            "entry_cache_key": "browser-projection-records:{webspace_id}:{client_id}:{session_id}:{projection_key}",
+            "entry_fingerprints": "entry_fingerprints[projection_key]",
+            "entry_etags": "entry_etags[projection_key]",
+            "if_none_match": "supported",
+            "cache_policy": "no-cache with stable ETag comparison",
+        },
+        "read_flow": [
+            "browser declares active projection demand",
+            "core materializes demanded ProjectionRecords",
+            "adapter reads browser-cache or data/projectionRecords.records[projection_key]",
+            "adapter reuses entry cache when fingerprint/etag is unchanged",
+            "adapter observes only projectionRecords or a stable projection-key path where available",
+        ],
+        "lifecycle_states": ["pending", "refreshing", "ready", "stale", "error"],
+        "roadmap_items": [
+            "yjs.adapter_projection_records",
+            "yjs.cache_by_projection_key",
+            "yjs.reuse_cached_views",
+            "yjs.reduce_broad_observers",
+        ],
+        "evidence": [
+            "/api/node/projection-records/browser-cache",
+            "browser_projection_record_snapshot",
+            "entries[].cache.key",
+            "entry_fingerprints",
+            "entry_etags",
+            "lifecycle_summary",
+        ],
+    }
+
+
 __all__ = [
+    "PROJECTION_RECORD_BROWSER_ADAPTER_CONTRACT",
+    "browser_projection_adapter_contract_snapshot",
     "browser_projection_record_snapshot",
     "clear_projection_record_registry",
     "get_projection_record",

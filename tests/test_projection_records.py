@@ -3,6 +3,7 @@ from __future__ import annotations
 from adaos.domain import make_client_subscription_record, make_projection_record, make_projection_subscription
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
 from adaos.services.projection_records import (
+    browser_projection_adapter_contract_snapshot,
     browser_projection_record_snapshot,
     clear_projection_record_registry,
     get_projection_record,
@@ -15,6 +16,21 @@ from adaos.services.projection_records import (
 def setup_function() -> None:
     clear_projection_record_registry()
     clear_projection_demand_registry()
+
+
+def test_browser_projection_adapter_contract_snapshot_exposes_adapter_rules() -> None:
+    snapshot = browser_projection_adapter_contract_snapshot(now=90.0)
+
+    assert snapshot["contract"] == "adaos.projection-records.browser-adapter.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["updated_at"] == 90.0
+    assert snapshot["source_of_truth"]["canonical_yjs_path"] == "data/projectionRecords"
+    assert snapshot["adapter_rules"]["read_projection_records"] is True
+    assert snapshot["adapter_rules"]["cache_by_projection_key"] is True
+    assert snapshot["adapter_rules"]["reuse_cached_views"] is True
+    assert snapshot["adapter_rules"]["avoid_observe_deep_data"] is True
+    assert snapshot["cache_model"]["if_none_match"] == "supported"
+    assert "yjs.reduce_broad_observers" in snapshot["roadmap_items"]
 
 
 def test_projection_record_registry_writes_and_reads_canonical_records() -> None:

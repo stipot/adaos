@@ -71,6 +71,7 @@ from adaos.services.projection_dispatcher import (
 )
 from adaos.services.projection_diagnostics import projection_operator_diagnostics
 from adaos.services.projection_records import (
+    browser_projection_adapter_contract_snapshot,
     browser_projection_record_snapshot,
     get_projection_record,
     projection_record_registry_snapshot,
@@ -2705,6 +2706,11 @@ async def node_projection_records_browser_cache(
     if _if_none_match_matches(if_none_match, response.headers["ETag"]):
         return Response(status_code=304, headers=dict(response.headers))
     return payload
+
+
+@router.get("/projection-records/browser-adapter-contract", dependencies=[Depends(require_token)])
+async def node_projection_records_browser_adapter_contract() -> dict[str, Any]:
+    return browser_projection_adapter_contract_snapshot(now=time.time())
 
 
 @router.get("/projection-records/item", dependencies=[Depends(require_token)])
