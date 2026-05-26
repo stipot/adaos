@@ -545,6 +545,24 @@ The same evidence is embedded in
 `demand_restore_contract`, and the `demand_restore_contract` completion gate
 must pass for the server-side MVP report.
 
+For browser adapter validation, call
+`/api/node/projection-records/browser-adapter-contract`. The expected evidence
+is:
+
+- `contract=adaos.projection-records.browser-adapter.v1`
+- `ready_for_mvp=true`
+- `source_of_truth.canonical_yjs_path=data/projectionRecords`
+- `source_of_truth.api_read_path=/api/node/projection-records/browser-cache`
+- `adapter_rules.cache_by_projection_key=true`
+- `adapter_rules.reuse_cached_views=true`
+- `adapter_rules.avoid_observe_deep_data=true`
+- `cache_model.if_none_match=supported`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`browser_adapter_contract`, and the `browser_adapter_contract` completion gate
+must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

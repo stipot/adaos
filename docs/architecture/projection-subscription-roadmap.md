@@ -265,10 +265,10 @@ Current status:
 
 ### 6. Yjs Granularity and Client Adapter
 
-- [ ] `yjs.adapter_projection_records`: update the client-side Yjs adapter to read projection records instead of one giant scenario snapshot
-- [ ] `yjs.cache_by_projection_key`: cache projection payloads by `projection_key`
-- [ ] `yjs.reuse_cached_views`: reuse cached payloads when switching back to recently materialized views
-- [ ] `yjs.reduce_broad_observers`: avoid broad `observeDeep(data)` patterns where a stable nested projection path is available
+- [x] `yjs.adapter_projection_records`: update the client-side Yjs adapter to read projection records instead of one giant scenario snapshot
+- [x] `yjs.cache_by_projection_key`: cache projection payloads by `projection_key`
+- [x] `yjs.reuse_cached_views`: reuse cached payloads when switching back to recently materialized views
+- [x] `yjs.reduce_broad_observers`: avoid broad `observeDeep(data)` patterns where a stable nested projection path is available
 - [x] `yjs.legacy_compat_rules`: document the compatibility rules for legacy plain-JSON projection branches during migration
 - [x] `yjs.named_entity_registry_reference`: use `registry.named_entities` as an implemented read-only compatibility reference for projection fingerprinting and privacy limits
 
@@ -281,6 +281,14 @@ Current status:
 - legacy plain-JSON branches are allowed as transitional read surfaces only;
   new writes are expected to flow through `ProjectionRecord` materialization
   and stable `projection_key` values
+- `/api/node/projection-records/browser-adapter-contract` exposes the browser
+  adapter read rules for `data/projectionRecords`, including cache by
+  `projection_key`, reuse by entry ETag/fingerprint, compatibility-only legacy
+  snapshot fallback, and the rule to prefer stable nested projection paths over
+  broad `observeDeep(data)` observers
+- `/api/node/projection-migration/acceptance-summary` includes
+  `browser_adapter_contract` in `completion_gates` and embeds the
+  `browser_adapter_contract` evidence block for one-response MVP verification
 - `data/projectionRecords` is explicitly classified as the core-owned
   canonical cache rather than another skill-owned monolithic branch
 - control metrics now expose `legacy_compatible_root_total` and
