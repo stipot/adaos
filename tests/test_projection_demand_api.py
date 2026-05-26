@@ -97,6 +97,20 @@ def test_projection_demand_surface_lifecycle_contract_endpoint_exposes_mapping()
     assert "pinned-panel" in payload["sample_consumer_kinds"]
 
 
+def test_projection_demand_restore_contract_endpoint_exposes_startup_rules() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/projection-demand/restore-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.projection-demand.restore-from-yjs.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["runtime_helpers"]["projection_runtime"] == "ProjectionRuntime.restore_active_demand"
+    assert payload["restore_modes"][1]["active_state"] == "active_receivers"
+    assert payload["boundaries"]["restore_writes_yjs_directly"] is False
+
+
 def test_projection_demand_api_get_and_delete_snapshot() -> None:
     client = _make_client()
     client.post(
