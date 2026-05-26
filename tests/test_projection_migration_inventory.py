@@ -434,9 +434,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 14
+    assert summary["completion_gates"]["gate_total"] == 15
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 11
+    assert summary["completion_gates"]["pass_total"] == 12
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -445,6 +445,7 @@ async def publish(payload, webspace_id):
         "browser_demand_contract",
         "browser_multi_demand",
         "core_skill_contract_readiness",
+        "dispatcher_memory_contract",
         "event_envelope_contract",
         "heavy_pilot_shared_abi",
         "node_multiplicity_contract",
@@ -480,6 +481,13 @@ async def publish(payload, webspace_id):
     assert summary["node_multiplicity_contract"]["contract"] == "adaos.projection-records.node-multiplicity.v1"
     assert summary["node_multiplicity_contract"]["ready_for_mvp"] is True
     assert summary["node_multiplicity_contract"]["browser_rules"]["do_not_assume_single_anonymous_node"] is True
+    memory_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["dispatcher_memory_contract"]
+    assert "/api/node/projection-dispatcher/memory-contract" in memory_gate["evidence"]
+    assert summary["dispatcher_memory_contract"]["contract"] == "adaos.projection-dispatcher.memory-vs-yjs.v1"
+    assert summary["dispatcher_memory_contract"]["ready_for_mvp"] is True
+    assert summary["dispatcher_memory_contract"]["dispatcher_boundaries"]["handler_writes_yjs_directly"] is False
     event_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["event_envelope_contract"]
@@ -510,6 +518,7 @@ async def publish(payload, webspace_id):
     assert summary["final_acceptance"]["remaining_followup_total"] == 4
     assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
     assert "browser_demand_contract" in summary["final_acceptance"]["evidence_fields"]
+    assert "dispatcher_memory_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "event_envelope" in summary["final_acceptance"]["evidence_fields"]
     assert "node_multiplicity_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "platform_emitters" in summary["final_acceptance"]["evidence_fields"]
