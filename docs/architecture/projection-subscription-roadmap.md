@@ -355,7 +355,7 @@ Current status:
 - [x] `infrascope.stop_full_inspector_snapshot`: stop pre-materializing all inspectors into one Yjs snapshot
 - [x] `infrascope.demanded_only_per_webspace`: publish only the projections actively demanded by each webspace
 - [x] `infrascope.shared_payload_access_metadata`: verify that owner and guest use the same payload but can still receive different display/action treatment through access metadata
-- [ ] `infrascope.platform_errors_separate`: publish platform-originated warnings and materialization errors as separate operator-facing projections instead of hiding them inside one skill snapshot
+- [x] `infrascope.platform_errors_separate`: publish platform-originated warnings and materialization errors as separate operator-facing projections instead of hiding them inside one skill snapshot
 
 Current status:
 
@@ -378,6 +378,14 @@ Current status:
 - `/api/node/projection-migration/acceptance-summary` includes
   `infrascope_demanded_only_contract` in `completion_gates` and embeds the
   evidence block for one-response MVP verification
+- `/api/node/status-cards/infrascope/platform-errors-contract` exposes
+  separate platform warning and materialization-error status-card projections:
+  `status-card:infrascope-platform-warning` and
+  `status-card:infrascope-materialization-error`
+- `/api/node/projection-migration/acceptance-summary` includes
+  `infrascope_platform_errors_contract` in `completion_gates`, proving that
+  platform-originated failures are not hidden inside the skill-owned
+  `data/infrascope` domain snapshot
 
 ### 9. Cross-Skill Rollout
 

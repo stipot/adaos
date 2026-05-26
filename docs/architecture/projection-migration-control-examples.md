@@ -601,6 +601,25 @@ The same evidence is embedded in
 `infrascope_demanded_only_contract` completion gate must pass for the
 server-side MVP report.
 
+For Infrascope platform error validation, call
+`/api/node/status-cards/infrascope/platform-errors-contract`. The expected
+evidence is:
+
+- `contract=adaos.infrascope.platform-errors.v1`
+- `ready_for_mvp=true`
+- `projection_keys[]` includes
+  `status-card:infrascope-materialization-error`
+- `separation_rules.not_embedded_in_skill_snapshot=true`
+- `separation_rules.not_hidden_inside_data_infrascope=true`
+- `boundaries.skill_payload_remains_domain_snapshot=true`
+- `boundaries.direct_yjs_write=false`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`infrascope_platform_errors_contract`, and the
+`infrascope_platform_errors_contract` completion gate must pass for the
+server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:
