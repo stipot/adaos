@@ -234,7 +234,7 @@ Current status:
 - [x] `dispatcher.skill_projection_sdk`: implement the shared skill-facing
   projection runtime SDK so skills do not open-code projection executors,
   stream receiver routing, fingerprint maps, or dirty-section dispatch
-- [ ] `dispatcher.memory_richer_than_yjs`: allow skills and platform services to keep richer semantic caches in memory than they publish into Yjs
+- [x] `dispatcher.memory_richer_than_yjs`: allow skills and platform services to keep richer semantic caches in memory than they publish into Yjs
 - [x] `dispatcher.lifecycle_exposed`: expose projection lifecycle transitions through the shared projection record
 - [x] `dispatcher.pressure_observable`: preserve eventbus/rebuild/stream pressure counters when dispatcher coalesces or suppresses work
 
@@ -246,7 +246,14 @@ Current status:
   and pressure state through API
 - wildcard projection-family handlers are supported; `status-card:*` is now
   backed by the materialized status-card registry
-- Yjs projection record writes remain the next integration step
+- `/api/node/projection-dispatcher/memory-contract` exposes the rule that
+  handlers may keep rich semantic state in memory while publishing only compact
+  canonical ProjectionRecords into `data/projectionRecords`
+- `/api/node/projection-migration/acceptance-summary` includes
+  `dispatcher_memory_contract` in `completion_gates` and embeds the evidence
+  block for one-response MVP verification
+- Yjs projection record writes remain a compatibility cleanup and client
+  adapter integration step
 
 ### 6. Yjs Granularity and Client Adapter
 

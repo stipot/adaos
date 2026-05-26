@@ -511,6 +511,22 @@ The same evidence is embedded in
 `node_multiplicity_contract`, and the `node_multiplicity_contract` completion
 gate must pass for the server-side MVP report.
 
+For dispatcher memory-vs-Yjs validation, call
+`/api/node/projection-dispatcher/memory-contract`. The expected evidence is:
+
+- `contract=adaos.projection-dispatcher.memory-vs-yjs.v1`
+- `ready_for_mvp=true`
+- `memory_allowed[]` includes rich semantic source snapshots
+- `yjs_publication.path=data/projectionRecords`
+- `dispatcher_boundaries.core_materializes_record=true`
+- `dispatcher_boundaries.handler_writes_yjs_directly=false`
+- `dispatcher_boundaries.browser_writes_yjs_cache=false`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`dispatcher_memory_contract`, and the `dispatcher_memory_contract` completion
+gate must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

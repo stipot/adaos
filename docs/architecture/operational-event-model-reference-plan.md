@@ -237,6 +237,9 @@ Current status:
   browser-facing node multiplicity contract for the shared ProjectionRecord
   cache, including `node_ids`, `node_scoped_record_total`, `records[*].meta.node_id`,
   and `envelope.node_scope`
+- `/api/node/projection-dispatcher/memory-contract` exposes the dispatcher
+  rule that handlers may keep rich semantic state in memory while publishing
+  only compact canonical ProjectionRecords into Yjs
 - materialized status-card registry is implemented in the node runtime
 - `/api/node/projection-platform-emitters` exposes the status-card platform
   emitter contract for runtime lifecycle, browser shell, notifications, UI
@@ -480,6 +483,9 @@ Progress:
 - `acceptance-summary` embeds `node_multiplicity_contract` and checks
   `node_multiplicity_contract`, so the final MVP report proves that browser
   consumers can read node multiplicity from shared ProjectionRecord metadata
+- `acceptance-summary` embeds `dispatcher_memory_contract` and checks
+  `dispatcher_memory_contract`, so the final MVP report proves that rich
+  handler memory and compact Yjs publication are separated explicitly
 
 Exit criteria:
 
