@@ -301,7 +301,7 @@ Current status:
 ### 7. Early Pilot Sequence
 
 - [x] `pilot.status_cards_first`: implement status cards as the first small platform-emitter projection family
-- [ ] `pilot.platform_surfaces_first`: prepare `web_desktop` and the shared platform surfaces first: notifications, diagnostics, workspace manager, and related modals
+- [x] `pilot.platform_surfaces_first`: prepare `web_desktop` and the shared platform surfaces first: notifications, diagnostics, workspace manager, and related modals
 - [x] `pilot.platform_emitter_validated`: validate platform-as-emitter semantics before migrating one heavy skill
 - [ ] `pilot.infrascope_after_prereqs`: migrate `Infrascope` only after the core/runtime and client projection contracts are in place
 - [x] `pilot.infrastate_aligned`: align `infrastate`-style shared operational overlays with the same contract
@@ -316,6 +316,10 @@ Current status:
   status-card projection records
 - `/api/node/status-cards` materializes the built-in runtime lifecycle card by
   default, and `/api/node/status-cards/runtime/refresh` refreshes it explicitly
+- `/api/node/projection-platform-emitters` now exposes `surface_readiness` and
+  `pilot_order`, proving that `web_desktop`, notifications, diagnostics,
+  workspace-manager coverage, and related modal demand semantics are prepared
+  before the heavy skill pilot sequence
 - `/api/node/infrastate/snapshot` now publishes first `infrastate` status-card
   projections for summary, operations, realtime, Yjs, and core-update sections
 - `/api/node/projection-diagnostics` now correlates active demand, dispatcher

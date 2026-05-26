@@ -571,6 +571,9 @@ For the final MVP report, verify that:
 - `platform_emitters.ready_for_mvp=true`
 - `platform_emitters.projection_keys[]` includes
   `status-card:notifications`
+- `platform_emitters.surface_readiness.web_desktop.status=ready`
+- `platform_emitters.surface_readiness.related_modals.status=contract_ready`
+- `platform_emitters.pilot_order[]` ends with `heavy_skill_pilot`
 - `final_acceptance.evidence_fields[]` includes `platform_emitters`
 
 Risk weights:
