@@ -25,6 +25,7 @@ from adaos.services.scenario.projection_registry import inspect_projection_manif
 
 
 PROJECTION_RECORDS_COMPAT_BRANCH = "data/projectionRecords"
+PROJECTION_ROLLOUT_CONTRACT = "adaos.projection-rollout.shared-contract.v1"
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -793,6 +794,90 @@ def projection_migration_recommendations(
         "recommendation_total": len(recommendations),
         "items": recommendations,
         "updated_at": inventory["updated_at"],
+    }
+
+
+def projection_rollout_shared_contract_snapshot(
+    *,
+    skills_root: str | Path,
+    include_non_browser: bool = False,
+    limit: int = 10,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Return the cross-skill rollout contract for migrating remaining skills."""
+
+    metrics_report = projection_migration_metrics(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        now=now,
+    )
+    recommendations = projection_migration_recommendations(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        limit=limit,
+        now=metrics_report.get("updated_at"),
+    )
+    metrics = _mapping(metrics_report.get("metrics"))
+    items = [
+        {
+            "skill_id": str(item.get("skill_id") or ""),
+            "priority_score": int(item.get("priority_score") or 0),
+            "risk": item.get("risk"),
+            "recommended_next_step": item.get("recommended_next_step"),
+            "action_ids": [str(action.get("id") or "") for action in item.get("actions", []) if isinstance(action, Mapping)],
+        }
+        for item in recommendations.get("items", [])
+        if isinstance(item, Mapping)
+    ]
+    return {
+        "contract": PROJECTION_ROLLOUT_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": metrics_report.get("updated_at"),
+        "skills_root": metrics_report.get("skills_root"),
+        "include_non_browser": bool(include_non_browser),
+        "strategy": "migrate remaining skills onto the shared projection/subscription contract in recommendation order",
+        "source_endpoints": {
+            "inventory": "/api/node/projection-migration/monolith-inventory",
+            "metrics": "/api/node/projection-migration/metrics",
+            "recommendations": "/api/node/projection-migration/recommendations",
+        },
+        "selection_rules": {
+            "prioritize_high_risk_monoliths": True,
+            "replace_direct_ctx_subnet_writes": True,
+            "replace_local_fingerprint_caches": True,
+            "replace_local_executor_bridges": True,
+            "require_projection_keyed_manifest_targets": True,
+            "use_status_card_or_sdk_bridge_first": True,
+        },
+        "migration_steps": [
+            "inspect monolithic Yjs roots and local projection shims",
+            "rank skills by risk and shared bridge availability",
+            "declare projection_key targets or stream/status-card receivers",
+            "route payload refresh through shared SDK/runtime helpers",
+            "verify metrics trend toward lower monolith exposure and local shim pressure",
+        ],
+        "metrics": {
+            "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
+            "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
+            "legacy_pressure_score": metrics.get("legacy_pressure_score"),
+            "local_shim_pressure_score": metrics.get("local_shim_pressure_score"),
+            "manifest_projection_key_coverage_ratio": metrics.get("manifest_projection_key_coverage_ratio"),
+            "reserved_cache_manifest_target_total": metrics.get("reserved_cache_manifest_target_total"),
+        },
+        "recommendation_total": int(recommendations.get("recommendation_total") or 0),
+        "recommended_items": items,
+        "boundaries": {
+            "does_not_remove_legacy_paths_yet": True,
+            "does_not_require_skill_specific_abi": True,
+            "uses_shared_projection_record_cache": True,
+            "cleanup_requires_green_acceptance_summary": True,
+        },
+        "evidence": [
+            "projection_migration_monolith_inventory",
+            "projection_migration_metrics",
+            "projection_migration_recommendations",
+            "adaos.data-projections.v1 manifest contract",
+        ],
     }
 
 
@@ -1923,4 +2008,5 @@ __all__ = [
     "projection_migration_metrics",
     "projection_migration_monolith_inventory",
     "projection_migration_recommendations",
+    "projection_rollout_shared_contract_snapshot",
 ]

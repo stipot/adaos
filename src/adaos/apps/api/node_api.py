@@ -88,6 +88,7 @@ from adaos.services.projection_migration_inventory import (
     projection_migration_metrics,
     projection_migration_monolith_inventory,
     projection_migration_recommendations,
+    projection_rollout_shared_contract_snapshot,
 )
 from adaos.services.projection_pilot_readiness import projection_pilot_readiness_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
@@ -2460,6 +2461,20 @@ async def node_projection_migration_recommendations(
     ctx = get_ctx()
     skills_root = Path(ctx.paths.skills_dir())
     return projection_migration_recommendations(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        limit=limit,
+    )
+
+
+@router.get("/projection-migration/rollout-contract", dependencies=[Depends(require_token)])
+async def node_projection_migration_rollout_contract(
+    include_non_browser: bool = False,
+    limit: int = 10,
+) -> dict[str, Any]:
+    ctx = get_ctx()
+    skills_root = Path(ctx.paths.skills_dir())
+    return projection_rollout_shared_contract_snapshot(
         skills_root=skills_root,
         include_non_browser=include_non_browser,
         limit=limit,

@@ -16,6 +16,7 @@ from adaos.services.projection_migration_inventory import (
     projection_migration_metrics,
     projection_migration_monolith_inventory,
     projection_migration_recommendations,
+    projection_rollout_shared_contract_snapshot,
 )
 
 
@@ -354,6 +355,47 @@ async def publish(payload, webspace_id):
     assert report["items"][1]["recommended_next_step"] == "split_monolithic_root_behind_shared_bridge"
 
 
+def test_projection_rollout_shared_contract_snapshot_uses_recommendations(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+        handler_text="""
+from adaos.sdk.data import ctx_subnet
+
+_projection_fingerprints: dict[str, str] = {}
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("voice_chat.state", payload, webspace_id=webspace_id)
+""",
+    )
+    _write_skill(
+        root,
+        "prompt_engineer_skill",
+        skill_yaml=_static_skill_yaml(),
+        webui={"apps": [{"id": "prompt_app"}]},
+    )
+
+    snapshot = projection_rollout_shared_contract_snapshot(
+        skills_root=root,
+        include_non_browser=True,
+        limit=5,
+        now=100.0,
+    )
+
+    assert snapshot["contract"] == "adaos.projection-rollout.shared-contract.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["selection_rules"]["prioritize_high_risk_monoliths"] is True
+    assert snapshot["selection_rules"]["require_projection_keyed_manifest_targets"] is True
+    assert snapshot["metrics"]["monolith_exposure_ratio"] == 1.0
+    assert snapshot["recommendation_total"] == 1
+    assert snapshot["recommended_items"][0]["skill_id"] == "voice_chat_skill"
+    assert "replace_direct_ctx_subnet_write" in snapshot["recommended_items"][0]["action_ids"]
+    assert snapshot["boundaries"]["does_not_remove_legacy_paths_yet"] is True
+
+
 def test_projection_migration_acceptance_summary_marks_server_mvp_ready_with_followups(tmp_path: Path) -> None:
     root = tmp_path / "skills"
     _write_skill(
@@ -687,6 +729,35 @@ async def publish(payload, webspace_id):
     assert payload["recommendation_total"] == 1
     assert payload["items"][0]["skill_id"] == "voice_chat_skill"
     assert payload["items"][0]["actions"][0]["category"] == "monolith"
+
+
+def test_projection_rollout_contract_api_uses_workspace_skills() -> None:
+    ctx = get_ctx()
+    root = Path(ctx.paths.skills_dir())
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+        handler_text="""
+from adaos.sdk.data import ctx_subnet
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("voice_chat.state", payload, webspace_id=webspace_id)
+""",
+    )
+    client = _make_api_client()
+
+    response = client.get("/api/node/projection-migration/rollout-contract?limit=1")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["contract"] == "adaos.projection-rollout.shared-contract.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["source_endpoints"]["recommendations"] == "/api/node/projection-migration/recommendations"
+    assert payload["recommendation_total"] == 1
+    assert payload["recommended_items"][0]["skill_id"] == "voice_chat_skill"
+    assert payload["boundaries"]["does_not_require_skill_specific_abi"] is True
 
 
 def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> None:
