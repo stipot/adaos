@@ -620,6 +620,22 @@ The same evidence is embedded in
 `infrascope_platform_errors_contract` completion gate must pass for the
 server-side MVP report.
 
+For pilot readiness validation, call
+`/api/node/projection-pilot/readiness-contract`. The expected evidence is:
+
+- `contract=adaos.projection-pilot.readiness.v1`
+- `ready_for_mvp=true`
+- `infrascope_after_prereqs.status=ready_after_prereqs`
+- `dev_scenario_followup.scenario_id=prompt_engineer_scenario`
+- `dev_scenario_followup.skill_id=prompt_engineer_skill`
+- `simple_skills_deferred.status=deferred_until_adapter_stable`
+- `boundaries.does_not_create_pilot_specific_abi=true`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`pilot_readiness_contract`, and the `pilot_readiness_contract` completion gate
+must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

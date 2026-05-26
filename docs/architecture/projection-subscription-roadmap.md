@@ -303,10 +303,10 @@ Current status:
 - [x] `pilot.status_cards_first`: implement status cards as the first small platform-emitter projection family
 - [x] `pilot.platform_surfaces_first`: prepare `web_desktop` and the shared platform surfaces first: notifications, diagnostics, workspace manager, and related modals
 - [x] `pilot.platform_emitter_validated`: validate platform-as-emitter semantics before migrating one heavy skill
-- [ ] `pilot.infrascope_after_prereqs`: migrate `Infrascope` only after the core/runtime and client projection contracts are in place
+- [x] `pilot.infrascope_after_prereqs`: migrate `Infrascope` only after the core/runtime and client projection contracts are in place
 - [x] `pilot.infrastate_aligned`: align `infrastate`-style shared operational overlays with the same contract
-- [ ] `pilot.dev_scenario_followup`: choose one dev-oriented scenario such as `prompt_engineer_scenario` as the first non-operator follow-up
-- [ ] `pilot.simple_skills_deferred`: postpone low-churn simple skills until the core contract and adapter behavior are stable
+- [x] `pilot.dev_scenario_followup`: choose one dev-oriented scenario such as `prompt_engineer_scenario` as the first non-operator follow-up
+- [x] `pilot.simple_skills_deferred`: postpone low-churn simple skills until the core contract and adapter behavior are stable
 
 Current status:
 
@@ -320,6 +320,13 @@ Current status:
   `pilot_order`, proving that `web_desktop`, notifications, diagnostics,
   workspace-manager coverage, and related modal demand semantics are prepared
   before the heavy skill pilot sequence
+- `/api/node/projection-pilot/readiness-contract` fixes the pilot order:
+  Infrascope runs after contract prerequisites, `prompt_engineer_scenario` is
+  selected as the first dev-oriented non-operator follow-up, and low-churn
+  simple skills are deferred until adapter and rollout behavior are stable
+- `/api/node/projection-migration/acceptance-summary` includes
+  `pilot_readiness_contract` in `completion_gates` and embeds the evidence
+  block for one-response MVP verification
 - `/api/node/infrastate/snapshot` now publishes first `infrastate` status-card
   projections for summary, operations, realtime, Yjs, and core-update sections
 - `/api/node/projection-diagnostics` now correlates active demand, dispatcher
