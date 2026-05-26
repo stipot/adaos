@@ -122,6 +122,16 @@ def _canon(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "").strip())
 
 
+def _canonical_city(value: str) -> str | None:
+    token = _canon(value).lower()
+    if not token:
+        return None
+    for city, pattern in CITY_PATTERNS:
+        if pattern.fullmatch(token):
+            return city
+    return None
+
+
 def _merge_spans(spans: list[tuple[int, int, str, str]]) -> list[tuple[int, int, str, str]]:
     merged: list[tuple[int, int, str, str]] = []
     for span in sorted(spans, key=lambda x: (x[0], x[1])):
@@ -172,8 +182,15 @@ def mask_entities(text: str) -> MaskResult:
     out = list(raw)
     for a, b, placeholder, slot in sorted(_merge_spans(spans), key=lambda item: -item[0]):
         value = raw[a:b]
-        slots.setdefault(slot, []).append(value.strip())
-        slots.setdefault(f"{slot}_canon", []).append(_canon(value))
+        surface = value.strip()
+        if slot == "city":
+            canonical = _canonical_city(surface) or _canon(surface)
+            slots.setdefault(slot, []).append(canonical)
+            slots.setdefault("city_raw", []).append(surface)
+            slots.setdefault("city_canon", []).append(canonical)
+        else:
+            slots.setdefault(slot, []).append(surface)
+            slots.setdefault(f"{slot}_canon", []).append(_canon(surface))
         out[a:b] = list(placeholder)
     return MaskResult(original=raw, masked=_canon("".join(out)), slots=slots)
 
@@ -1210,7 +1227,7 @@ class Detector:
         return {
             "ok": True,
             "service": "neural_nlu_service_skill",
-            "version": "0.2.10",
+            "version": "0.2.11",
             "torch_available": torch is not None,
             "faiss_available": faiss is not None,
             "model_loaded": bool(engine),

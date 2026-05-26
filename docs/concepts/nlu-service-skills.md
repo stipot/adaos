@@ -75,6 +75,11 @@ model-facing masked text, score components, matched examples when the example
 index is available, and intent mapping details such as the original
 `source_intent`.
 
+Entity slots returned by the provider should be canonical where the provider
+has a stable resolver. Weather city extraction, for example, returns
+`slots.city = "москва"` for both `погода москва` and `погода в москве`, while
+preserving the request surface form in `slots.city_raw`.
+
 Target artifacts are service-owned runtime data:
 
 - `model.pt`

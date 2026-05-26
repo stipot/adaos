@@ -47,6 +47,12 @@ It returns the frozen provider contract under both the top-level response and
 }
 ```
 
+For built-in city extraction the provider returns canonical city slots. For
+example, both `погода москва` and `погода в москве` produce
+`slots.city = "москва"`; the surface form from the request is preserved in
+`slots.city_raw`, and `slots.city_canon` repeats the canonical value for
+diagnostics and migration compatibility.
+
 ## Artifacts
 
 Preferred node-level layout:

@@ -50,6 +50,22 @@ def test_detector_masks_canonicalized_text_and_slots(monkeypatch, tmp_path):
     assert result["evidence"]["entity_resolution"]["resolved_entities"][0]["canonical_ref"] == "device:member:node-1"
 
 
+def test_detector_canonicalizes_weather_city_slots():
+    module = _load_detector_module()
+
+    plain = module.mask_entities("погода москва")
+    inflected = module.mask_entities("погода в москве")
+
+    assert plain.masked == "погода {city}"
+    assert plain.slots["city"] == ["москва"]
+    assert plain.slots["city_raw"] == ["москва"]
+    assert plain.slots["city_canon"] == ["москва"]
+    assert inflected.masked == "погода в {city}"
+    assert inflected.slots["city"] == ["москва"]
+    assert inflected.slots["city_raw"] == ["москве"]
+    assert inflected.slots["city_canon"] == ["москва"]
+
+
 def test_detector_prefers_faiss_pairs_when_index_backend_is_faiss(monkeypatch):
     module = _load_detector_module()
     detector = object.__new__(module.Detector)
@@ -153,7 +169,7 @@ def test_detector_health_exposes_faiss_and_index_backend(monkeypatch, tmp_path):
 
     health = detector.health()
 
-    assert health["version"] == "0.2.10"
+    assert health["version"] == "0.2.11"
     assert "faiss_available" in health
     assert health["example_index"] == "faiss_disk"
     assert health["example_index_backend"] == "faiss"
