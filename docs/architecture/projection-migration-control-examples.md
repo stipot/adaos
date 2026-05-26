@@ -582,6 +582,25 @@ The same evidence is embedded in
 `infrascope_projection_family_contract` completion gate must pass for the
 server-side MVP report.
 
+For Infrascope demanded-only validation, call
+`/api/node/status-cards/infrascope/demanded-only-contract`. The expected
+evidence is:
+
+- `contract=adaos.infrascope.demanded-only-refresh.v1`
+- `ready_for_mvp=true`
+- `selection_rules.projection_key_family=status-card:infrascope-*`
+- `selection_rules.demanded_only_flag=demanded_only=true`
+- `selection_rules.webspace_scoped=true`
+- `boundaries.publishes_only_requested_cards=true`
+- `boundaries.cross_webspace_churn=false`
+- `boundaries.full_infrascope_refresh_required=false`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`infrascope_demanded_only_contract`, and the
+`infrascope_demanded_only_contract` completion gate must pass for the
+server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:
