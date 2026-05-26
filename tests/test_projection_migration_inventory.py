@@ -476,9 +476,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 21
+    assert summary["completion_gates"]["gate_total"] == 22
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 18
+    assert summary["completion_gates"]["pass_total"] == 19
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -498,6 +498,7 @@ async def publish(payload, webspace_id):
         "node_multiplicity_contract",
         "pilot_readiness_contract",
         "platform_emitter_contract",
+        "rollout_shared_contract",
         "runtime_ownership_contract",
         "surface_lifecycle_contract",
     }
@@ -573,6 +574,14 @@ async def publish(payload, webspace_id):
     assert summary["pilot_readiness_contract"]["ready_for_mvp"] is True
     assert summary["pilot_readiness_contract"]["dev_scenario_followup"]["scenario_id"] == "prompt_engineer_scenario"
     assert summary["pilot_readiness_contract"]["simple_skills_deferred"]["status"] == "deferred_until_adapter_stable"
+    rollout_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["rollout_shared_contract"]
+    assert "/api/node/projection-migration/rollout-contract" in rollout_gate["evidence"]
+    assert summary["rollout_shared_contract"]["contract"] == "adaos.projection-rollout.shared-contract.v1"
+    assert summary["rollout_shared_contract"]["ready_for_mvp"] is True
+    assert summary["rollout_shared_contract"]["selection_rules"]["prioritize_high_risk_monoliths"] is True
+    assert summary["rollout_shared_contract"]["boundaries"]["does_not_remove_legacy_paths_yet"] is True
     infrascope_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["infrascope_projection_family_contract"]
@@ -623,6 +632,7 @@ async def publish(payload, webspace_id):
     assert "node_multiplicity_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "pilot_readiness_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "platform_emitters" in summary["final_acceptance"]["evidence_fields"]
+    assert "rollout_shared_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "runtime_ownership_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "surface_lifecycle_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "full browser client migration" in summary["final_acceptance"]["not_accepted_for"]

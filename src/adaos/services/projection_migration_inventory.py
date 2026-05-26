@@ -1579,6 +1579,17 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             ],
         },
         {
+            "id": "rollout_shared_contract",
+            "criterion": "remaining skills have a ranked migration path onto the shared projection/subscription contract",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-migration/rollout-contract",
+                "/api/node/projection-migration/recommendations",
+                "migration readiness metrics",
+                "does not remove legacy paths yet",
+            ],
+        },
+        {
             "id": "infrascope_projection_family_contract",
             "criterion": "Infrascope overview, inventory, inspectors, topology, and modal/widget payloads are split into explicit projection families",
             "status": "pass",
@@ -1766,6 +1777,7 @@ def _acceptance_final_acceptance(
             "node_multiplicity_contract",
             "platform_emitters",
             "pilot_readiness_contract",
+            "rollout_shared_contract",
             "runtime_ownership_contract",
             "surface_lifecycle_contract",
         ],
@@ -1820,6 +1832,12 @@ def projection_migration_acceptance_summary(
     )
     platform_emitters = platform_emitter_contract_snapshot(now=metrics_report.get("updated_at"))
     pilot_readiness_contract = projection_pilot_readiness_contract_snapshot(now=metrics_report.get("updated_at"))
+    rollout_shared_contract = projection_rollout_shared_contract_snapshot(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        limit=top_limit,
+        now=metrics_report.get("updated_at"),
+    )
     runtime_ownership_contract = projection_runtime_ownership_contract_snapshot(now=metrics_report.get("updated_at"))
     surface_lifecycle_contract = browser_surface_lifecycle_contract_snapshot(now=metrics_report.get("updated_at"))
     metric_names = {str(item.get("metric") or "") for item in metrics_report.get("metric_definitions", [])}
@@ -1985,6 +2003,7 @@ def projection_migration_acceptance_summary(
         "node_multiplicity_contract": node_multiplicity_contract,
         "platform_emitters": platform_emitters,
         "pilot_readiness_contract": pilot_readiness_contract,
+        "rollout_shared_contract": rollout_shared_contract,
         "runtime_ownership_contract": runtime_ownership_contract,
         "surface_lifecycle_contract": surface_lifecycle_contract,
         "risk_register": risk_register,
