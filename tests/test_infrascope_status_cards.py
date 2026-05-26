@@ -4,6 +4,7 @@ import pytest
 
 from adaos.services.infrascope_status_cards import (
     build_infrascope_status_card_specs,
+    infrascope_demanded_only_contract_snapshot,
     infrascope_projection_family_contract_snapshot,
     normalize_infrascope_status_card_ids,
     publish_infrascope_status_cards,
@@ -137,6 +138,21 @@ def test_infrascope_projection_family_contract_snapshot_exposes_split_rules() ->
     families = {item["id"]: item for item in snapshot["families"]}
     assert families["infrascope-inspectors"]["details_receiver"] == "infrascope.inspector.local"
     assert families["infrascope-topology"]["demand_filterable"] is True
+
+
+def test_infrascope_demanded_only_contract_snapshot_exposes_selection_rules() -> None:
+    snapshot = infrascope_demanded_only_contract_snapshot(now=110.0)
+
+    assert snapshot["contract"] == "adaos.infrascope.demanded-only-refresh.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["updated_at"] == 110.0
+    assert snapshot["refresh_endpoint"] == "/api/node/status-cards/infrascope/refresh"
+    assert snapshot["selection_rules"]["demanded_only_flag"] == "demanded_only=true"
+    assert snapshot["selection_rules"]["implicit_card_ids"] == "demanded_projection_keys(webspace_id)"
+    assert snapshot["selection_rules"]["webspace_scoped"] is True
+    assert snapshot["boundaries"]["publishes_only_requested_cards"] is True
+    assert snapshot["boundaries"]["cross_webspace_churn"] is False
+    assert "requested_card_ids" in snapshot["response_fields"]
 
 
 def test_publish_infrascope_status_cards_uses_shared_registry_and_owner() -> None:

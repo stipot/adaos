@@ -20,6 +20,7 @@ INFRASCOPE_STATUS_CARD_IDS = (
     "infrascope-topology",
 )
 INFRASCOPE_PROJECTION_FAMILY_CONTRACT = "adaos.infrascope.projection-families.v1"
+INFRASCOPE_DEMANDED_ONLY_CONTRACT = "adaos.infrascope.demanded-only-refresh.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +167,52 @@ def infrascope_projection_family_contract_snapshot(*, now: float | None = None) 
         "evidence": [
             "build_infrascope_status_card_specs",
             "publish_infrascope_status_cards",
+            "/api/node/status-cards/infrascope/refresh",
+            "status-card:infrascope-* dispatcher handler",
+        ],
+    }
+
+
+def infrascope_demanded_only_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the Infrascope demanded-only refresh contract."""
+
+    return {
+        "contract": INFRASCOPE_DEMANDED_ONLY_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": float(now if now is not None else 0.0),
+        "source": "adaos.apps.api.node_api._refresh_infrascope_status_cards",
+        "refresh_endpoint": "/api/node/status-cards/infrascope/refresh",
+        "diagnostics_endpoint": "/api/node/projection-diagnostics",
+        "thin_summary_endpoint": "/api/node/reliability/summary",
+        "dispatcher_handler": "status-card:infrascope-*",
+        "demand_source": "/api/node/projection-demand",
+        "selection_rules": {
+            "projection_key_family": "status-card:infrascope-*",
+            "demanded_only_flag": "demanded_only=true",
+            "explicit_card_ids_override": "card_ids selects a stable subset",
+            "implicit_card_ids": "demanded_projection_keys(webspace_id)",
+            "no_demand_result": "skipped with reason=infrascope_demand_not_found",
+            "webspace_scoped": True,
+        },
+        "response_fields": [
+            "demanded_only",
+            "requested_card_ids",
+            "card_total",
+            "cards[].id",
+            "cards[].webspace_id",
+            "skipped",
+            "reason",
+        ],
+        "boundaries": {
+            "publishes_only_requested_cards": True,
+            "cross_webspace_churn": False,
+            "full_infrascope_refresh_required": False,
+            "legacy_snapshot_read_compatibility": True,
+            "browser_writes_projection_cache": False,
+        },
+        "evidence": [
+            "_refresh_infrascope_status_cards(demanded_only=True)",
+            "demanded_projection_keys(webspace_id)",
             "/api/node/status-cards/infrascope/refresh",
             "status-card:infrascope-* dispatcher handler",
         ],
@@ -545,10 +592,12 @@ def publish_infrascope_status_cards(
 
 __all__ = [
     "INFRASCOPE_STATUS_CARD_IDS",
+    "INFRASCOPE_DEMANDED_ONLY_CONTRACT",
     "INFRASCOPE_PROJECTION_FAMILY_CONTRACT",
     "INFRASCOPE_STATUS_OWNER",
     "InfrascopeStatusCardSpec",
     "build_infrascope_status_card_specs",
+    "infrascope_demanded_only_contract_snapshot",
     "infrascope_projection_family_contract_snapshot",
     "infrascope_card_id_from_projection_key",
     "normalize_infrascope_status_card_ids",

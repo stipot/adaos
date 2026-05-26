@@ -142,6 +142,21 @@ def test_status_card_api_exposes_infrascope_projection_family_contract() -> None
     assert payload["boundaries"]["pre_materialize_all_inspector_details"] is False
 
 
+def test_status_card_api_exposes_infrascope_demanded_only_contract() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/status-cards/infrascope/demanded-only-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.infrascope.demanded-only-refresh.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["selection_rules"]["projection_key_family"] == "status-card:infrascope-*"
+    assert payload["selection_rules"]["no_demand_result"] == "skipped with reason=infrascope_demand_not_found"
+    assert payload["boundaries"]["cross_webspace_churn"] is False
+    assert payload["boundaries"]["full_infrascope_refresh_required"] is False
+
+
 def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     client = _make_client()
 
