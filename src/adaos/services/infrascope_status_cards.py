@@ -19,8 +19,13 @@ INFRASCOPE_STATUS_CARD_IDS = (
     "infrascope-inspectors",
     "infrascope-topology",
 )
+INFRASCOPE_PLATFORM_STATUS_CARD_IDS = (
+    "infrascope-platform-warning",
+    "infrascope-materialization-error",
+)
 INFRASCOPE_PROJECTION_FAMILY_CONTRACT = "adaos.infrascope.projection-families.v1"
 INFRASCOPE_DEMANDED_ONLY_CONTRACT = "adaos.infrascope.demanded-only-refresh.v1"
+INFRASCOPE_PLATFORM_ERRORS_CONTRACT = "adaos.infrascope.platform-errors.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +56,7 @@ def infrascope_card_id_from_projection_key(value: Any) -> str:
     token = str(value or "").strip()
     if token.startswith("status-card:"):
         token = token.removeprefix("status-card:")
-    return token if token in INFRASCOPE_STATUS_CARD_IDS else ""
+    return token if token in INFRASCOPE_STATUS_CARD_IDS or token in INFRASCOPE_PLATFORM_STATUS_CARD_IDS else ""
 
 
 def normalize_infrascope_status_card_ids(values: Iterable[Any] | None) -> list[str] | None:
@@ -217,6 +222,91 @@ def infrascope_demanded_only_contract_snapshot(*, now: float | None = None) -> d
             "status-card:infrascope-* dispatcher handler",
         ],
     }
+
+
+def infrascope_platform_errors_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the Infrascope platform-originated warning/error projection contract."""
+
+    return {
+        "contract": INFRASCOPE_PLATFORM_ERRORS_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": float(now if now is not None else 0.0),
+        "source": "adaos.services.infrascope_status_cards",
+        "owner": "core:infrascope-platform",
+        "projection_keys": [f"status-card:{card_id}" for card_id in INFRASCOPE_PLATFORM_STATUS_CARD_IDS],
+        "cards": [
+            {
+                "id": "infrascope-platform-warning",
+                "projection_key": "status-card:infrascope-platform-warning",
+                "kind": "platform-warning",
+                "status": "warning",
+                "source": "platform warning or degraded dependency",
+            },
+            {
+                "id": "infrascope-materialization-error",
+                "projection_key": "status-card:infrascope-materialization-error",
+                "kind": "materialization-error",
+                "status": "error",
+                "source": "ProjectionRecord materialization or Infrascope refresh failure",
+            },
+        ],
+        "separation_rules": {
+            "not_embedded_in_skill_snapshot": True,
+            "not_hidden_inside_data_infrascope": True,
+            "uses_shared_status_card_abi": True,
+            "operator_visible_projection": True,
+            "details_are_lazy": True,
+        },
+        "boundaries": {
+            "platform_owns_warning_card": True,
+            "skill_payload_remains_domain_snapshot": True,
+            "browser_writes_projection_cache": False,
+            "direct_yjs_write": False,
+        },
+        "evidence": [
+            "publish_infrascope_platform_status_card",
+            "status-card:infrascope-platform-warning",
+            "status-card:infrascope-materialization-error",
+            "ProjectionRecord(status,data,meta,error)",
+        ],
+    }
+
+
+def publish_infrascope_platform_status_card(
+    *,
+    webspace_id: str,
+    status: str,
+    summary: str,
+    reason: str,
+    source: str,
+    card_id: str = "infrascope-platform-warning",
+    updated_at: float | None = None,
+) -> StatusCard:
+    """Publish an Infrascope platform warning/error as its own status card."""
+
+    normalized_card_id = infrascope_card_id_from_projection_key(card_id)
+    if normalized_card_id not in INFRASCOPE_PLATFORM_STATUS_CARD_IDS:
+        raise ValueError("unsupported infrascope platform status card")
+    return status_sdk.publish_status(
+        id=normalized_card_id,
+        owner="core:infrascope-platform",
+        kind="materialization-error" if normalized_card_id.endswith("error") else "platform-warning",
+        webspace_id=webspace_id,
+        status=status,
+        summary=summary,
+        scope={
+            "webspace_id": webspace_id,
+            "section": "infrascope-platform",
+            "reason": reason,
+            "source": source,
+        },
+        details_ref={
+            "kind": "api",
+            "path": "/api/node/projection-diagnostics",
+            "params": {"webspace_id": webspace_id, "include_infrascope": True},
+        },
+        updated_at=updated_at,
+    )
 
 
 def _status_token(value: Any) -> str:
@@ -593,13 +683,17 @@ def publish_infrascope_status_cards(
 __all__ = [
     "INFRASCOPE_STATUS_CARD_IDS",
     "INFRASCOPE_DEMANDED_ONLY_CONTRACT",
+    "INFRASCOPE_PLATFORM_ERRORS_CONTRACT",
+    "INFRASCOPE_PLATFORM_STATUS_CARD_IDS",
     "INFRASCOPE_PROJECTION_FAMILY_CONTRACT",
     "INFRASCOPE_STATUS_OWNER",
     "InfrascopeStatusCardSpec",
     "build_infrascope_status_card_specs",
     "infrascope_demanded_only_contract_snapshot",
+    "infrascope_platform_errors_contract_snapshot",
     "infrascope_projection_family_contract_snapshot",
     "infrascope_card_id_from_projection_key",
     "normalize_infrascope_status_card_ids",
+    "publish_infrascope_platform_status_card",
     "publish_infrascope_status_cards",
 ]

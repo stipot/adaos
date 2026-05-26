@@ -102,6 +102,7 @@ from adaos.services.status_card_registry import (
 )
 from adaos.services.infrascope_status_cards import (
     infrascope_demanded_only_contract_snapshot,
+    infrascope_platform_errors_contract_snapshot,
     infrascope_projection_family_contract_snapshot,
     normalize_infrascope_status_card_ids,
     publish_infrascope_status_cards,
@@ -2648,6 +2649,11 @@ async def node_status_cards_infrascope_projection_family_contract() -> dict[str,
 @router.get("/status-cards/infrascope/demanded-only-contract", dependencies=[Depends(require_token)])
 async def node_status_cards_infrascope_demanded_only_contract() -> dict[str, Any]:
     return infrascope_demanded_only_contract_snapshot(now=time.time())
+
+
+@router.get("/status-cards/infrascope/platform-errors-contract", dependencies=[Depends(require_token)])
+async def node_status_cards_infrascope_platform_errors_contract() -> dict[str, Any]:
+    return infrascope_platform_errors_contract_snapshot(now=time.time())
 
 
 @router.get("/status-cards/{card_id}/projection", dependencies=[Depends(require_token)])

@@ -5,8 +5,10 @@ import pytest
 from adaos.services.infrascope_status_cards import (
     build_infrascope_status_card_specs,
     infrascope_demanded_only_contract_snapshot,
+    infrascope_platform_errors_contract_snapshot,
     infrascope_projection_family_contract_snapshot,
     normalize_infrascope_status_card_ids,
+    publish_infrascope_platform_status_card,
     publish_infrascope_status_cards,
 )
 from adaos.services.status_card_registry import clear_status_card_registry, status_card_registry_snapshot
@@ -153,6 +155,44 @@ def test_infrascope_demanded_only_contract_snapshot_exposes_selection_rules() ->
     assert snapshot["boundaries"]["publishes_only_requested_cards"] is True
     assert snapshot["boundaries"]["cross_webspace_churn"] is False
     assert "requested_card_ids" in snapshot["response_fields"]
+
+
+def test_infrascope_platform_errors_contract_snapshot_exposes_separate_cards() -> None:
+    snapshot = infrascope_platform_errors_contract_snapshot(now=120.0)
+
+    assert snapshot["contract"] == "adaos.infrascope.platform-errors.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["updated_at"] == 120.0
+    assert snapshot["owner"] == "core:infrascope-platform"
+    assert snapshot["projection_keys"] == [
+        "status-card:infrascope-platform-warning",
+        "status-card:infrascope-materialization-error",
+    ]
+    assert snapshot["separation_rules"]["not_hidden_inside_data_infrascope"] is True
+    assert snapshot["separation_rules"]["uses_shared_status_card_abi"] is True
+    assert snapshot["boundaries"]["skill_payload_remains_domain_snapshot"] is True
+
+
+def test_publish_infrascope_platform_status_card_uses_separate_projection() -> None:
+    card = publish_infrascope_platform_status_card(
+        webspace_id="desktop",
+        card_id="infrascope-materialization-error",
+        status="error",
+        summary="Infrascope refresh failed",
+        reason="projection_materialization_failed",
+        source="status-card-refresh",
+        updated_at=30.0,
+    )
+    snapshot = status_card_registry_snapshot(webspace_id="desktop", now=31.0)
+
+    assert card.id == "infrascope-materialization-error"
+    assert card.owner == "core:infrascope-platform"
+    assert card.kind == "materialization-error"
+    assert card.status == "offline"
+    assert card.scope["reason"] == "projection_materialization_failed"
+    assert snapshot["card_total"] == 1
+    assert snapshot["cards"][0]["id"] == "infrascope-materialization-error"
+    assert snapshot["cards"][0]["details_ref"]["path"] == "/api/node/projection-diagnostics"
 
 
 def test_publish_infrascope_status_cards_uses_shared_registry_and_owner() -> None:

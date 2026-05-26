@@ -157,6 +157,21 @@ def test_status_card_api_exposes_infrascope_demanded_only_contract() -> None:
     assert payload["boundaries"]["full_infrascope_refresh_required"] is False
 
 
+def test_status_card_api_exposes_infrascope_platform_errors_contract() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/status-cards/infrascope/platform-errors-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.infrascope.platform-errors.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["owner"] == "core:infrascope-platform"
+    assert "status-card:infrascope-materialization-error" in payload["projection_keys"]
+    assert payload["separation_rules"]["not_embedded_in_skill_snapshot"] is True
+    assert payload["boundaries"]["direct_yjs_write"] is False
+
+
 def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     client = _make_client()
 
