@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping
 import yaml
 
 from adaos.domain import client_subscription_contract_snapshot, event_envelope_contract_snapshot
+from adaos.services.projection_demand_restore import projection_demand_restore_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.projection_demand_mapper import browser_surface_lifecycle_contract_snapshot
 from adaos.services.projection_dispatcher import projection_dispatcher_memory_contract_snapshot
@@ -1423,6 +1424,17 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             ],
         },
         {
+            "id": "demand_restore_contract",
+            "criterion": "active projection demand can be restored into runtime memory from the shared demand registry",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-demand/restore-contract",
+                "ProjectionRuntime.restore_active_demand",
+                "StreamRuntime.restore_active_demand",
+                "active demand registry",
+            ],
+        },
+        {
             "id": "dispatcher_no_cross_webspace_churn",
             "criterion": "the dispatcher refreshes demanded projections without cross-webspace churn",
             "status": "pass",
@@ -1596,6 +1608,7 @@ def _acceptance_final_acceptance(
             "defense_summary",
             "request_examples",
             "browser_demand_contract",
+            "demand_restore_contract",
             "dispatcher_memory_contract",
             "event_envelope",
             "node_multiplicity_contract",
@@ -1636,6 +1649,7 @@ def projection_migration_acceptance_summary(
     )
     metrics = _mapping(metrics_report.get("metrics"))
     browser_demand_contract = client_subscription_contract_snapshot(now=metrics_report.get("updated_at"))
+    demand_restore_contract = projection_demand_restore_contract_snapshot(now=metrics_report.get("updated_at"))
     dispatcher_memory_contract = projection_dispatcher_memory_contract_snapshot(now=metrics_report.get("updated_at"))
     event_envelope = event_envelope_contract_snapshot(now=metrics_report.get("updated_at"))
     node_multiplicity_contract = projection_records_node_multiplicity_contract_snapshot(
@@ -1797,6 +1811,7 @@ def projection_migration_acceptance_summary(
         "plan_review": plan_review,
         "completion_gates": completion_gates,
         "browser_demand_contract": browser_demand_contract,
+        "demand_restore_contract": demand_restore_contract,
         "dispatcher_memory_contract": dispatcher_memory_contract,
         "event_envelope": event_envelope,
         "node_multiplicity_contract": node_multiplicity_contract,

@@ -434,9 +434,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 15
+    assert summary["completion_gates"]["gate_total"] == 16
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 12
+    assert summary["completion_gates"]["pass_total"] == 13
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -445,6 +445,7 @@ async def publish(payload, webspace_id):
         "browser_demand_contract",
         "browser_multi_demand",
         "core_skill_contract_readiness",
+        "demand_restore_contract",
         "dispatcher_memory_contract",
         "event_envelope_contract",
         "heavy_pilot_shared_abi",
@@ -488,6 +489,13 @@ async def publish(payload, webspace_id):
     assert summary["dispatcher_memory_contract"]["contract"] == "adaos.projection-dispatcher.memory-vs-yjs.v1"
     assert summary["dispatcher_memory_contract"]["ready_for_mvp"] is True
     assert summary["dispatcher_memory_contract"]["dispatcher_boundaries"]["handler_writes_yjs_directly"] is False
+    restore_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["demand_restore_contract"]
+    assert "/api/node/projection-demand/restore-contract" in restore_gate["evidence"]
+    assert summary["demand_restore_contract"]["contract"] == "adaos.projection-demand.restore-from-yjs.v1"
+    assert summary["demand_restore_contract"]["ready_for_mvp"] is True
+    assert summary["demand_restore_contract"]["boundaries"]["restore_writes_yjs_directly"] is False
     event_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["event_envelope_contract"]
@@ -518,6 +526,7 @@ async def publish(payload, webspace_id):
     assert summary["final_acceptance"]["remaining_followup_total"] == 4
     assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
     assert "browser_demand_contract" in summary["final_acceptance"]["evidence_fields"]
+    assert "demand_restore_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "dispatcher_memory_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "event_envelope" in summary["final_acceptance"]["evidence_fields"]
     assert "node_multiplicity_contract" in summary["final_acceptance"]["evidence_fields"]
