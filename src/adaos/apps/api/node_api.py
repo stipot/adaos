@@ -89,6 +89,7 @@ from adaos.services.projection_migration_inventory import (
     projection_migration_monolith_inventory,
     projection_migration_recommendations,
 )
+from adaos.services.projection_pilot_readiness import projection_pilot_readiness_contract_snapshot
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.status_card_details import request_status_card_details_refresh
 from adaos.services.status_card_registry import (
@@ -2516,6 +2517,11 @@ async def node_status_cards_snapshot(
 @router.get("/projection-platform-emitters", dependencies=[Depends(require_token)])
 async def node_projection_platform_emitters() -> dict[str, Any]:
     return platform_emitter_contract_snapshot()
+
+
+@router.get("/projection-pilot/readiness-contract", dependencies=[Depends(require_token)])
+async def node_projection_pilot_readiness_contract() -> dict[str, Any]:
+    return projection_pilot_readiness_contract_snapshot(now=time.time())
 
 
 @router.get("/event-envelope-contract", dependencies=[Depends(require_token)])
