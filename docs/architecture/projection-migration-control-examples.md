@@ -636,6 +636,23 @@ The same evidence is embedded in
 `pilot_readiness_contract`, and the `pilot_readiness_contract` completion gate
 must pass for the server-side MVP report.
 
+For cross-skill rollout validation, call
+`/api/node/projection-migration/rollout-contract`. The expected evidence is:
+
+- `contract=adaos.projection-rollout.shared-contract.v1`
+- `ready_for_mvp=true`
+- `selection_rules.prioritize_high_risk_monoliths=true`
+- `selection_rules.require_projection_keyed_manifest_targets=true`
+- `metrics.migration_readiness_ratio` is present
+- `recommended_items[]` contains ranked skill migration actions when backlog
+  exists
+- `boundaries.does_not_remove_legacy_paths_yet=true`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`rollout_shared_contract`, and the `rollout_shared_contract` completion gate
+must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

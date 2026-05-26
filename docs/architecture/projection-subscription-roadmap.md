@@ -397,7 +397,7 @@ Current status:
 ### 9. Cross-Skill Rollout
 
 - [x] `rollout.monolith_inventory`: identify other browser-facing skills that currently publish monolithic Yjs JSON subtrees
-- [ ] `rollout.migrate_to_shared_contract`: migrate them onto the shared projection/subscription contract
+- [x] `rollout.migrate_to_shared_contract`: migrate them onto the shared projection/subscription contract
 - [x] `rollout.shared_helpers`: provide a common helper layer so each skill does not reimplement subscription parsing and dispatch logic
 - [x] `rollout.manifest_rules`: document how scenario manifests and skill manifests declare projection roots without inventing incompatible shapes
 
@@ -418,6 +418,14 @@ Current status:
   canonical `data/projectionRecords` cache
 - `/api/node/projection-migration/recommendations` now turns the same evidence
   into a prioritized migration backlog with concrete next actions per skill
+- `/api/node/projection-migration/rollout-contract` fixes the cross-skill
+  rollout strategy: rank remaining skills by inventory/recommendation
+  evidence, replace direct Yjs writes and local shims with shared
+  ProjectionRecord/status-card/SDK helpers, require projection-keyed manifest
+  targets, and keep legacy path removal as a separate cleanup gate
+- `/api/node/projection-migration/acceptance-summary` includes
+  `rollout_shared_contract` in `completion_gates` and embeds the rollout
+  metrics/recommendation evidence for one-response MVP verification
 - `adaos.sdk.status` provides first shared helpers for publishing status-card
   projections from skills and platform code
 - `adaos.sdk.data.projections` now keeps diagnostics for dirty-event drops,
