@@ -17,6 +17,7 @@ from adaos.services.projection_demand_restore import projection_demand_restore_c
 from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.projection_demand_mapper import browser_surface_lifecycle_contract_snapshot
 from adaos.services.projection_dispatcher import projection_dispatcher_memory_contract_snapshot
+from adaos.services.projection_pilot_readiness import projection_pilot_readiness_contract_snapshot
 from adaos.services.projection_record_yjs import projection_records_node_multiplicity_contract_snapshot
 from adaos.services.projection_records import browser_projection_adapter_contract_snapshot
 from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
@@ -1482,6 +1483,17 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             "evidence": ["Infrascope status-card adapter", "demanded-only refresh", "projection diagnostics correlation"],
         },
         {
+            "id": "pilot_readiness_contract",
+            "criterion": "pilot order selects Infrascope after prerequisites, prompt_engineer_scenario as the dev follow-up, and defers low-churn simple skills",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-pilot/readiness-contract",
+                "prompt_engineer_scenario",
+                "simple skills deferred",
+                "acceptance summary gate source",
+            ],
+        },
+        {
             "id": "infrascope_projection_family_contract",
             "criterion": "Infrascope overview, inventory, inspectors, topology, and modal/widget payloads are split into explicit projection families",
             "status": "pass",
@@ -1668,6 +1680,7 @@ def _acceptance_final_acceptance(
             "infrascope_projection_family_contract",
             "node_multiplicity_contract",
             "platform_emitters",
+            "pilot_readiness_contract",
             "runtime_ownership_contract",
             "surface_lifecycle_contract",
         ],
@@ -1721,6 +1734,7 @@ def projection_migration_acceptance_summary(
         now=metrics_report.get("updated_at")
     )
     platform_emitters = platform_emitter_contract_snapshot(now=metrics_report.get("updated_at"))
+    pilot_readiness_contract = projection_pilot_readiness_contract_snapshot(now=metrics_report.get("updated_at"))
     runtime_ownership_contract = projection_runtime_ownership_contract_snapshot(now=metrics_report.get("updated_at"))
     surface_lifecycle_contract = browser_surface_lifecycle_contract_snapshot(now=metrics_report.get("updated_at"))
     metric_names = {str(item.get("metric") or "") for item in metrics_report.get("metric_definitions", [])}
@@ -1885,6 +1899,7 @@ def projection_migration_acceptance_summary(
         "infrascope_projection_family_contract": infrascope_projection_family_contract,
         "node_multiplicity_contract": node_multiplicity_contract,
         "platform_emitters": platform_emitters,
+        "pilot_readiness_contract": pilot_readiness_contract,
         "runtime_ownership_contract": runtime_ownership_contract,
         "surface_lifecycle_contract": surface_lifecycle_contract,
         "risk_register": risk_register,
