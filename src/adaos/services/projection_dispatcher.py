@@ -72,6 +72,7 @@ class ProjectionDispatchReport:
 
 
 ProjectionRefreshHandler = Callable[[ProjectionRefreshContext], Any | Awaitable[Any]]
+PROJECTION_DISPATCHER_MEMORY_CONTRACT = "adaos.projection-dispatcher.memory-vs-yjs.v1"
 
 
 _LOCK = RLock()
@@ -334,6 +335,50 @@ def core_skill_refresh_contract_snapshot(
     }
 
 
+def projection_dispatcher_memory_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the dispatcher rule that memory may be richer than Yjs publication."""
+
+    return {
+        "contract": PROJECTION_DISPATCHER_MEMORY_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": float(now if now is not None else time.time()),
+        "principle": "Handlers may keep rich semantic state in memory, but publish only compact canonical ProjectionRecords.",
+        "memory_allowed": [
+            "domain-specific source snapshots",
+            "inspection indexes",
+            "handler-local debounce/coalescing state",
+            "temporary error context",
+            "semantic objects richer than the published view",
+        ],
+        "yjs_publication": {
+            "path": "data/projectionRecords",
+            "record_shape": ["status", "data", "meta", "error"],
+            "write_owner": "core:projection_records",
+            "write_policy": "ProjectionRecord registry -> Yjs cache materialization",
+        },
+        "dispatcher_boundaries": {
+            "handler_input": "ProjectionRefreshContext with event, webspace_id, projection_key, and consumers",
+            "handler_output": "ProjectionRefreshResult or ProjectionRecord-shaped mapping",
+            "core_materializes_record": True,
+            "handler_writes_yjs_directly": False,
+            "browser_reads_yjs_cache": True,
+            "browser_writes_yjs_cache": False,
+        },
+        "compaction_rules": [
+            "Publish demanded projections only.",
+            "Keep projection data consumer-oriented and serializable.",
+            "Store node scope and access metadata in ProjectionRecord.meta.",
+            "Expose detailed diagnostics through separate operator/status-card projections when needed.",
+        ],
+        "evidence": [
+            "/api/node/projection-dispatcher",
+            "/api/node/projection-dispatcher/core-skill-contract",
+            "/api/node/projection-records/yjs/cache",
+            "/api/node/projection-runtime-ownership",
+        ],
+    }
+
+
 def _try_begin_refresh(context: ProjectionRefreshContext) -> bool:
     key = (context.webspace_id, context.projection_key)
     with _LOCK:
@@ -540,6 +585,7 @@ __all__ = [
     "core_skill_refresh_contract_snapshot",
     "demanded_projection_refresh_contexts",
     "dispatch_demanded_projection_refresh",
+    "projection_dispatcher_memory_contract_snapshot",
     "projection_dispatcher_snapshot",
     "register_projection_refresh_handler",
     "registered_projection_refresh_handlers",

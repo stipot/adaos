@@ -7,6 +7,7 @@ from adaos.services.projection_dispatcher import (
     core_skill_refresh_contract_snapshot,
     demanded_projection_refresh_contexts,
     dispatch_demanded_projection_refresh,
+    projection_dispatcher_memory_contract_snapshot,
     projection_dispatcher_snapshot,
     register_projection_refresh_handler,
 )
@@ -151,6 +152,19 @@ def test_core_skill_refresh_contract_reports_handler_coverage() -> None:
     assert demands["status-card:runtime"]["refresh_contract"]["core_selects_demand"] is True
     assert demands["status-card:runtime"]["refresh_contract"]["skill_refreshes_payload"] is True
     assert demands["projection:missing"]["refresh_contract"]["skill_refreshes_payload"] is False
+
+
+def test_dispatcher_memory_contract_allows_rich_memory_but_compact_yjs() -> None:
+    snapshot = projection_dispatcher_memory_contract_snapshot(now=70.0)
+
+    assert snapshot["contract"] == "adaos.projection-dispatcher.memory-vs-yjs.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["updated_at"] == 70.0
+    assert "domain-specific source snapshots" in snapshot["memory_allowed"]
+    assert snapshot["yjs_publication"]["path"] == "data/projectionRecords"
+    assert snapshot["dispatcher_boundaries"]["handler_writes_yjs_directly"] is False
+    assert snapshot["dispatcher_boundaries"]["browser_writes_yjs_cache"] is False
+    assert "/api/node/projection-runtime-ownership" in snapshot["evidence"]
 
 
 def test_dispatcher_groups_multiple_clients_into_one_projection_context() -> None:

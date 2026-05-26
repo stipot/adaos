@@ -163,6 +163,20 @@ def test_projection_dispatcher_core_skill_contract_endpoint_reports_demand() -> 
     assert payload["demands"][0]["refresh_contract"]["core_materializes_projection_record"] is True
 
 
+def test_projection_dispatcher_memory_contract_endpoint_exposes_publication_boundary() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/projection-dispatcher/memory-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.projection-dispatcher.memory-vs-yjs.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["yjs_publication"]["path"] == "data/projectionRecords"
+    assert payload["dispatcher_boundaries"]["core_materializes_record"] is True
+    assert payload["dispatcher_boundaries"]["handler_writes_yjs_directly"] is False
+
+
 def test_projection_dispatcher_dispatch_endpoint_selects_demanded_projection() -> None:
     client = _make_client()
     write_client_subscription_record(

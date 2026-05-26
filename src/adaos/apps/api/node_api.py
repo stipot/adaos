@@ -64,6 +64,7 @@ from adaos.services.projection_dispatcher import (
     ProjectionRefreshResult,
     core_skill_refresh_contract_snapshot,
     dispatch_demanded_projection_refresh,
+    projection_dispatcher_memory_contract_snapshot,
     projection_dispatcher_snapshot,
     register_projection_refresh_handler,
 )
@@ -2806,6 +2807,11 @@ async def node_projection_dispatcher_core_skill_contract(
         include_hidden=include_hidden,
         include_stale=include_stale,
     )
+
+
+@router.get("/projection-dispatcher/memory-contract", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_memory_contract() -> dict[str, Any]:
+    return projection_dispatcher_memory_contract_snapshot(now=time.time())
 
 
 @router.post("/projection-dispatcher/dispatch", dependencies=[Depends(require_token)])
