@@ -4,6 +4,7 @@ import pytest
 
 from adaos.services.infrascope_status_cards import (
     build_infrascope_status_card_specs,
+    infrascope_projection_family_contract_snapshot,
     normalize_infrascope_status_card_ids,
     publish_infrascope_status_cards,
 )
@@ -118,6 +119,24 @@ def test_build_infrascope_status_card_specs_identifies_first_projection_families
     assert by_id["infrascope-topology"].status == "online"
     assert by_id["infrascope-topology"].scope["edge_total"] == 1
     assert by_id["infrascope-topology"].details_ref["receiver"] == "infrascope.inspector_field.topology.local"
+
+
+def test_infrascope_projection_family_contract_snapshot_exposes_split_rules() -> None:
+    snapshot = infrascope_projection_family_contract_snapshot(now=100.0)
+
+    assert snapshot["contract"] == "adaos.infrascope.projection-families.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["updated_at"] == 100.0
+    assert snapshot["owner"] == "skill:infrascope_skill"
+    assert snapshot["family_total"] == 9
+    assert "status-card:infrascope-overview" in snapshot["projection_keys"]
+    assert "inspectors" in snapshot["sections"]
+    assert snapshot["boundaries"]["uses_shared_status_card_abi"] is True
+    assert snapshot["boundaries"]["introduces_infrascope_specific_abi"] is False
+    assert snapshot["boundaries"]["pre_materialize_all_inspector_details"] is False
+    families = {item["id"]: item for item in snapshot["families"]}
+    assert families["infrascope-inspectors"]["details_receiver"] == "infrascope.inspector.local"
+    assert families["infrascope-topology"]["demand_filterable"] is True
 
 
 def test_publish_infrascope_status_cards_uses_shared_registry_and_owner() -> None:

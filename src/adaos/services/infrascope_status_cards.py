@@ -19,6 +19,7 @@ INFRASCOPE_STATUS_CARD_IDS = (
     "infrascope-inspectors",
     "infrascope-topology",
 )
+INFRASCOPE_PROJECTION_FAMILY_CONTRACT = "adaos.infrascope.projection-families.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +64,112 @@ def normalize_infrascope_status_card_ids(values: Iterable[Any] | None) -> list[s
             card_ids.append(card_id)
             seen.add(card_id)
     return card_ids
+
+
+def _family_contract_item(card_id: str, *, section: str, payload_role: str, receiver: str) -> dict[str, Any]:
+    return {
+        "id": card_id,
+        "section": section,
+        "projection_key": f"status-card:{card_id}",
+        "payload_role": payload_role,
+        "details_receiver": receiver,
+        "status_card": True,
+        "demand_filterable": True,
+    }
+
+
+def infrascope_projection_family_contract_snapshot(*, now: float | None = None) -> dict[str, Any]:
+    """Return the Infrascope projection-family split contract."""
+
+    families = [
+        _family_contract_item(
+            "infrascope-overview",
+            section="overview",
+            payload_role="thin overview state and tool-backed details",
+            receiver="infrascope_skill",
+        ),
+        _family_contract_item(
+            "infrascope-incidents",
+            section="overview.active_incidents",
+            payload_role="active incident count and stream details",
+            receiver="infrascope.overview.active_incidents",
+        ),
+        _family_contract_item(
+            "infrascope-inventory",
+            section="inventory",
+            payload_role="inventory object counts and stream details",
+            receiver="infrascope.inventory.all",
+        ),
+        _family_contract_item(
+            "infrascope-operations",
+            section="operations",
+            payload_role="active operation count and stream details",
+            receiver="infrascope.operations.active",
+        ),
+        _family_contract_item(
+            "infrascope-browsers",
+            section="inventory.browsers",
+            payload_role="browser session status and stream details",
+            receiver="infrascope.inventory.browsers",
+        ),
+        _family_contract_item(
+            "infrascope-runtimes",
+            section="inventory.runtimes",
+            payload_role="runtime status and stream details",
+            receiver="infrascope.inventory.runtimes",
+        ),
+        _family_contract_item(
+            "infrascope-registry",
+            section="inventory.skills+inventory.scenarios",
+            payload_role="skill/scenario registry status and stream details",
+            receiver="infrascope.inventory.skills",
+        ),
+        _family_contract_item(
+            "infrascope-inspectors",
+            section="inspectors",
+            payload_role="inspector aggregate and object-scoped stream details",
+            receiver="infrascope.inspector.local",
+        ),
+        _family_contract_item(
+            "infrascope-topology",
+            section="topology",
+            payload_role="topology edge count and topology stream details",
+            receiver="infrascope.inspector_field.topology.local",
+        ),
+    ]
+    return {
+        "contract": INFRASCOPE_PROJECTION_FAMILY_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": float(now if now is not None else 0.0),
+        "source": "adaos.services.infrascope_status_cards",
+        "owner": INFRASCOPE_STATUS_OWNER,
+        "legacy_snapshot_path": "data/infrascope",
+        "projection_family": "status-card:infrascope-*",
+        "family_total": len(families),
+        "projection_keys": [str(item["projection_key"]) for item in families],
+        "sections": [str(item["section"]) for item in families],
+        "families": families,
+        "split_rules": {
+            "overview": "thin status-card projection with tool-backed details",
+            "inventory": "inventory count projection with stream-backed object list",
+            "inspectors": "aggregate inspector projection; object details remain lazy stream/tool payloads",
+            "topology": "topology count projection; graph edges are details, not always-on card payload",
+            "modal_widget_payloads": "modal/widget consumers declare projection demand and read demanded ProjectionRecords",
+        },
+        "boundaries": {
+            "uses_shared_status_card_abi": True,
+            "introduces_infrascope_specific_abi": False,
+            "direct_browser_cache_write": False,
+            "legacy_snapshot_read_compatibility": True,
+            "pre_materialize_all_inspector_details": False,
+        },
+        "evidence": [
+            "build_infrascope_status_card_specs",
+            "publish_infrascope_status_cards",
+            "/api/node/status-cards/infrascope/refresh",
+            "status-card:infrascope-* dispatcher handler",
+        ],
+    }
 
 
 def _status_token(value: Any) -> str:
@@ -438,9 +545,11 @@ def publish_infrascope_status_cards(
 
 __all__ = [
     "INFRASCOPE_STATUS_CARD_IDS",
+    "INFRASCOPE_PROJECTION_FAMILY_CONTRACT",
     "INFRASCOPE_STATUS_OWNER",
     "InfrascopeStatusCardSpec",
     "build_infrascope_status_card_specs",
+    "infrascope_projection_family_contract_snapshot",
     "infrascope_card_id_from_projection_key",
     "normalize_infrascope_status_card_ids",
     "publish_infrascope_status_cards",

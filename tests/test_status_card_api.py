@@ -127,6 +127,21 @@ def test_projection_platform_emitters_endpoint_exposes_contract() -> None:
     assert "status-card:ui-runtime" in payload["projection_keys"]
 
 
+def test_status_card_api_exposes_infrascope_projection_family_contract() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/status-cards/infrascope/projection-family-contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.infrascope.projection-families.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["family_total"] == 9
+    assert "status-card:infrascope-topology" in payload["projection_keys"]
+    assert payload["boundaries"]["introduces_infrascope_specific_abi"] is False
+    assert payload["boundaries"]["pre_materialize_all_inspector_details"] is False
+
+
 def test_status_card_api_can_refresh_runtime_card_explicitly() -> None:
     client = _make_client()
 

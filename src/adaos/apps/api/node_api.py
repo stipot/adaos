@@ -101,6 +101,7 @@ from adaos.services.status_card_registry import (
     sweep_status_card_registry,
 )
 from adaos.services.infrascope_status_cards import (
+    infrascope_projection_family_contract_snapshot,
     normalize_infrascope_status_card_ids,
     publish_infrascope_status_cards,
 )
@@ -2636,6 +2637,11 @@ async def node_status_cards_refresh_infrascope(
         "cards": refresh["cards"],
         "snapshot": status_card_registry_snapshot(webspace_id=target_webspace_id),
     }
+
+
+@router.get("/status-cards/infrascope/projection-family-contract", dependencies=[Depends(require_token)])
+async def node_status_cards_infrascope_projection_family_contract() -> dict[str, Any]:
+    return infrascope_projection_family_contract_snapshot(now=time.time())
 
 
 @router.get("/status-cards/{card_id}/projection", dependencies=[Depends(require_token)])
