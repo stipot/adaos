@@ -351,11 +351,29 @@ Current status:
 ### 8. Infrascope Migration Slice
 
 - [x] `infrascope.status_card_adapter_first`: map overview, active incidents, inventory, operations, browser runtime, runtime, and registry sections into shared status cards
-- [ ] `infrascope.split_projection_families`: split `overview`, `inventory`, `inspector`, `topology`, and modal/widget payloads into separate projections
-- [ ] `infrascope.stop_full_inspector_snapshot`: stop pre-materializing all inspectors into one Yjs snapshot
+- [x] `infrascope.split_projection_families`: split `overview`, `inventory`, `inspector`, `topology`, and modal/widget payloads into separate projections
+- [x] `infrascope.stop_full_inspector_snapshot`: stop pre-materializing all inspectors into one Yjs snapshot
 - [ ] `infrascope.demanded_only_per_webspace`: publish only the projections actively demanded by each webspace
 - [x] `infrascope.shared_payload_access_metadata`: verify that owner and guest use the same payload but can still receive different display/action treatment through access metadata
 - [ ] `infrascope.platform_errors_separate`: publish platform-originated warnings and materialization errors as separate operator-facing projections instead of hiding them inside one skill snapshot
+
+Current status:
+
+- `/api/node/status-cards/infrascope/projection-family-contract` exposes the
+  explicit Infrascope projection-family split for overview, incidents,
+  inventory, operations, browsers, runtimes, registry, inspectors, and
+  topology
+- inspector and topology details remain lazy stream/tool details behind
+  status-card ProjectionRecords, so the shared card payload no longer
+  pre-materializes every inspector object as an always-on Yjs card snapshot
+- the contract declares shared status-card ABI reuse and rejects a separate
+  Infrascope-specific projection ABI
+- `/api/node/projection-migration/acceptance-summary` includes
+  `infrascope_projection_family_contract` in `completion_gates` and embeds the
+  evidence block for one-response MVP verification
+- demanded-only per-webspace refresh already exists for status-card refresh,
+  but remains a separate roadmap item until it is represented as its own
+  Infrascope completion gate
 
 ### 9. Cross-Skill Rollout
 

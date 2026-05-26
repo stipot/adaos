@@ -563,6 +563,25 @@ The same evidence is embedded in
 `browser_adapter_contract`, and the `browser_adapter_contract` completion gate
 must pass for the server-side MVP report.
 
+For Infrascope projection family validation, call
+`/api/node/status-cards/infrascope/projection-family-contract`. The expected
+evidence is:
+
+- `contract=adaos.infrascope.projection-families.v1`
+- `ready_for_mvp=true`
+- `family_total=9`
+- `projection_keys[]` includes `status-card:infrascope-overview` and
+  `status-card:infrascope-topology`
+- `boundaries.uses_shared_status_card_abi=true`
+- `boundaries.introduces_infrascope_specific_abi=false`
+- `boundaries.pre_materialize_all_inspector_details=false`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`infrascope_projection_family_contract`, and the
+`infrascope_projection_family_contract` completion gate must pass for the
+server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:
