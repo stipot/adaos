@@ -434,15 +434,16 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 16
+    assert summary["completion_gates"]["gate_total"] == 17
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 13
+    assert summary["completion_gates"]["pass_total"] == 14
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
     assert "demanded ProjectionRecord browser-cache endpoint is implemented" in browser_gate["evidence"]
     assert {item["id"] for item in summary["completion_gates"]["gates"]} >= {
         "browser_demand_contract",
+        "browser_adapter_contract",
         "browser_multi_demand",
         "core_skill_contract_readiness",
         "demand_restore_contract",
@@ -461,6 +462,14 @@ async def publish(payload, webspace_id):
     assert summary["browser_demand_contract"]["contract"] == "adaos.client-projection-subscription.v1"
     assert summary["browser_demand_contract"]["ready_for_mvp"] is True
     assert summary["browser_demand_contract"]["write_policy"]["mode"] == "replace_full_client_session_set"
+    browser_adapter_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["browser_adapter_contract"]
+    assert "/api/node/projection-records/browser-adapter-contract" in browser_adapter_gate["evidence"]
+    assert summary["browser_adapter_contract"]["contract"] == "adaos.projection-records.browser-adapter.v1"
+    assert summary["browser_adapter_contract"]["ready_for_mvp"] is True
+    assert summary["browser_adapter_contract"]["adapter_rules"]["cache_by_projection_key"] is True
+    assert summary["browser_adapter_contract"]["adapter_rules"]["avoid_observe_deep_data"] is True
     surface_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["surface_lifecycle_contract"]
@@ -525,6 +534,7 @@ async def publish(payload, webspace_id):
     assert summary["final_acceptance"]["progress"]["server_mvp_percent"] == 91.7
     assert summary["final_acceptance"]["remaining_followup_total"] == 4
     assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
+    assert "browser_adapter_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "browser_demand_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "demand_restore_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "dispatcher_memory_contract" in summary["final_acceptance"]["evidence_fields"]

@@ -13,6 +13,7 @@ from adaos.services.platform_emitters import platform_emitter_contract_snapshot
 from adaos.services.projection_demand_mapper import browser_surface_lifecycle_contract_snapshot
 from adaos.services.projection_dispatcher import projection_dispatcher_memory_contract_snapshot
 from adaos.services.projection_record_yjs import projection_records_node_multiplicity_contract_snapshot
+from adaos.services.projection_records import browser_projection_adapter_contract_snapshot
 from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
 from adaos.services.scenario.projection_registry import inspect_projection_manifest_entries
 
@@ -1435,6 +1436,18 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             ],
         },
         {
+            "id": "browser_adapter_contract",
+            "criterion": "browser adapters read demanded ProjectionRecords through projection-key scoped cache rules",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-records/browser-adapter-contract",
+                "/api/node/projection-records/browser-cache",
+                "cache by projection_key",
+                "reuse cached views by ETag/fingerprint",
+                "avoid broad observeDeep(data)",
+            ],
+        },
+        {
             "id": "dispatcher_no_cross_webspace_churn",
             "criterion": "the dispatcher refreshes demanded projections without cross-webspace churn",
             "status": "pass",
@@ -1607,6 +1620,7 @@ def _acceptance_final_acceptance(
             "risk_register",
             "defense_summary",
             "request_examples",
+            "browser_adapter_contract",
             "browser_demand_contract",
             "demand_restore_contract",
             "dispatcher_memory_contract",
@@ -1648,6 +1662,7 @@ def projection_migration_acceptance_summary(
         now=metrics_report.get("updated_at"),
     )
     metrics = _mapping(metrics_report.get("metrics"))
+    browser_adapter_contract = browser_projection_adapter_contract_snapshot(now=metrics_report.get("updated_at"))
     browser_demand_contract = client_subscription_contract_snapshot(now=metrics_report.get("updated_at"))
     demand_restore_contract = projection_demand_restore_contract_snapshot(now=metrics_report.get("updated_at"))
     dispatcher_memory_contract = projection_dispatcher_memory_contract_snapshot(now=metrics_report.get("updated_at"))
@@ -1810,6 +1825,7 @@ def projection_migration_acceptance_summary(
         "control_snapshot": control_snapshot,
         "plan_review": plan_review,
         "completion_gates": completion_gates,
+        "browser_adapter_contract": browser_adapter_contract,
         "browser_demand_contract": browser_demand_contract,
         "demand_restore_contract": demand_restore_contract,
         "dispatcher_memory_contract": dispatcher_memory_contract,
