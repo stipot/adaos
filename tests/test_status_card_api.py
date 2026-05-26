@@ -121,6 +121,9 @@ def test_projection_platform_emitters_endpoint_exposes_contract() -> None:
     assert payload["emitter_total"] == 4
     assert payload["coverage"]["runtime_lifecycle"] is True
     assert payload["coverage"]["notifications"] is True
+    assert payload["surface_readiness"]["web_desktop"]["status"] == "ready"
+    assert payload["surface_readiness"]["related_modals"]["status"] == "contract_ready"
+    assert payload["pilot_order"][-1] == "heavy_skill_pilot"
     assert "status-card:ui-runtime" in payload["projection_keys"]
 
 

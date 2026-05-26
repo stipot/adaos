@@ -85,6 +85,33 @@ def platform_emitter_contract_snapshot(*, now: float | None = None) -> dict[str,
     ]
     categories = sorted({str(item["category"]) for item in emitters})
     projection_keys = [str(item["projection_key"]) for item in emitters]
+    surface_readiness = {
+        "web_desktop": {
+            "status": "ready",
+            "projection_key": f"{_STATUS_CARD_FAMILY}:{DESKTOP_STATUS_CARD_ID}",
+            "evidence": ["desktop-shell status card", "web_desktop_snapshot"],
+        },
+        "notifications": {
+            "status": "ready",
+            "projection_key": f"{_STATUS_CARD_FAMILY}:{NOTIFICATIONS_STATUS_CARD_ID}",
+            "evidence": ["notifications status card", "io_web.toast"],
+        },
+        "diagnostics": {
+            "status": "ready",
+            "projection_key": f"{_STATUS_CARD_FAMILY}:{UI_RUNTIME_STATUS_CARD_ID}",
+            "evidence": ["ui-runtime diagnostics status card", "ui_runtime_diagnostics"],
+        },
+        "workspace_manager": {
+            "status": "covered_by_desktop_shell",
+            "projection_key": f"{_STATUS_CARD_FAMILY}:{DESKTOP_STATUS_CARD_ID}",
+            "evidence": ["desktop shell surface", "shared status-card ABI"],
+        },
+        "related_modals": {
+            "status": "contract_ready",
+            "projection_key": f"{_STATUS_CARD_FAMILY}:{DESKTOP_STATUS_CARD_ID}",
+            "evidence": ["browser surface lifecycle contract", "pinned/modal demand semantics"],
+        },
+    }
     return {
         "ok": True,
         "source": "adaos.platform_emitters",
@@ -101,6 +128,17 @@ def platform_emitter_contract_snapshot(*, now: float | None = None) -> dict[str,
             "diagnostics": "diagnostics" in categories,
             "system_errors": "diagnostics" in categories or "notifications" in categories,
         },
+        "surface_readiness": surface_readiness,
+        "surface_ready_total": sum(1 for item in surface_readiness.values() if item["status"] in {"ready", "covered_by_desktop_shell", "contract_ready"}),
+        "pilot_order": [
+            "runtime_lifecycle",
+            "web_desktop",
+            "notifications",
+            "diagnostics",
+            "workspace_manager",
+            "related_modals",
+            "heavy_skill_pilot",
+        ],
         "ready_for_mvp": len(emitters) >= 4,
         "updated_at": float(now if now is not None else time.time()),
     }

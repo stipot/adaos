@@ -116,6 +116,11 @@ def test_platform_emitter_contract_snapshot_defines_status_card_emitters() -> No
         "status-card:notifications",
         "status-card:ui-runtime",
     ]
+    assert snapshot["surface_ready_total"] == 5
+    assert snapshot["surface_readiness"]["web_desktop"]["status"] == "ready"
+    assert snapshot["surface_readiness"]["workspace_manager"]["status"] == "covered_by_desktop_shell"
+    assert snapshot["surface_readiness"]["related_modals"]["status"] == "contract_ready"
+    assert snapshot["pilot_order"][-1] == "heavy_skill_pilot"
     emitters = {item["id"]: item for item in snapshot["emitters"]}
     assert emitters["runtime"]["owner"] == "core:runtime"
     assert emitters["notifications"]["contract"]["browser_write"] is False
