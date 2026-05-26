@@ -527,6 +527,24 @@ The same evidence is embedded in
 `dispatcher_memory_contract`, and the `dispatcher_memory_contract` completion
 gate must pass for the server-side MVP report.
 
+For active demand restore validation, call
+`/api/node/projection-demand/restore-contract`. The expected evidence is:
+
+- `contract=adaos.projection-demand.restore-from-yjs.v1`
+- `ready_for_mvp=true`
+- `runtime_helpers.projection_runtime=ProjectionRuntime.restore_active_demand`
+- `runtime_helpers.stream_runtime=StreamRuntime.restore_active_demand`
+- `restore_modes[]` includes `active_projection_demand` and
+  `active_receivers`
+- `skip_reasons[]` includes hidden/stale/filter and missing slot/receiver
+  cases
+- `boundaries.restore_writes_yjs_directly=false`
+
+The same evidence is embedded in
+`/api/node/projection-migration/acceptance-summary` under
+`demand_restore_contract`, and the `demand_restore_contract` completion gate
+must pass for the server-side MVP report.
+
 The same evidence is embedded in
 `/api/node/projection-migration/acceptance-summary` under `platform_emitters`.
 For the final MVP report, verify that:

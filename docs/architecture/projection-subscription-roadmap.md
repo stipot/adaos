@@ -91,10 +91,10 @@ Current status:
 ### 2. Core and Shared Runtime ABI
 
 - [x] `runtime.event_envelope_abi`: align with the master roadmap's shared event envelope before adding projection-specific metadata
-- [ ] `runtime.core_skill_contract`: define the core-to-skill invalidation and refresh contract before browser-specific consumption logic
+- [x] `runtime.core_skill_contract`: define the core-to-skill invalidation and refresh contract before browser-specific consumption logic
 - [x] `runtime.ownership_split`: define which runtime transitions are core-owned and which projection rebuilds are skill-owned
 - [x] `runtime.platform_emitters_defined`: define platform-emitted projections for notifications, warnings, diagnostics, and system errors
-- [ ] `runtime.restore_demand_from_yjs`: define startup restoration rules for core and skills reading active demand from Yjs
+- [x] `runtime.restore_demand_from_yjs`: define startup restoration rules for core and skills reading active demand from Yjs
 
 Current status:
 
@@ -138,6 +138,14 @@ Current status:
   `core_skill_contract_readiness` in `completion_gates`, so the final MVP
   report now checks this contract alongside browser demand and dispatcher
   coverage
+- `/api/node/projection-demand/restore-contract` exposes startup restoration
+  rules for rebuilding projection-runtime and stream-runtime memory from the
+  active demand registry, including webspace/prefix/visibility filters,
+  projection-to-slot mapping, receiver mapping, skip reasons, and the rule
+  that restore logic does not write Yjs directly
+- `/api/node/projection-migration/acceptance-summary` includes
+  `demand_restore_contract` in `completion_gates` and embeds the
+  `demand_restore_contract` evidence block for one-response MVP verification
 - the same acceptance summary now includes `platform_emitter_contract`, tying
   the platform emitter endpoint to the final server-side MVP gate list
 - the acceptance summary also embeds `platform_emitters` as final evidence, so
