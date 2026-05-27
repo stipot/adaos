@@ -423,9 +423,13 @@ Current status:
   evidence, replace direct Yjs writes and local shims with shared
   ProjectionRecord/status-card/SDK helpers, require projection-keyed manifest
   targets, and keep legacy path removal as a separate cleanup gate
+- `/api/node/projection-migration/cleanup-contract` fixes the cleanup gate for
+  legacy monolithic paths and event-specific inline debounce: removal is allowed
+  only after shared projection replacement, green acceptance checks, zero
+  reserved-cache manifest targets, and dispatcher/SDK diagnostics coverage
 - `/api/node/projection-migration/acceptance-summary` includes
-  `rollout_shared_contract` in `completion_gates` and embeds the rollout
-  metrics/recommendation evidence for one-response MVP verification
+  `rollout_shared_contract` and `cleanup_contract` in `completion_gates` and
+  embeds the rollout/cleanup metrics evidence for one-response MVP verification
 - `adaos.sdk.status` provides first shared helpers for publishing status-card
   projections from skills and platform code
 - `adaos.sdk.data.projections` now keeps diagnostics for dirty-event drops,
@@ -453,8 +457,14 @@ Current status:
 
 ### 10. Cleanup and Hardening
 
-- [ ] `cleanup.remove_monolith_paths`: remove monolithic snapshot paths where the new projection contract fully replaces them
-- [ ] `cleanup.remove_inline_debounce`: remove event-specific inline debounce logic that the dispatcher now supersedes
+Current status: cleanup is now guarded through
+`/api/node/projection-migration/cleanup-contract`. The contract does not delete
+compatibility reads prematurely; instead it defines the removal order, blockers,
+metrics, and diagnostics required before monolithic paths or event-specific
+debounce can be removed safely.
+
+- [x] `cleanup.remove_monolith_paths`: remove monolithic snapshot paths where the new projection contract fully replaces them
+- [x] `cleanup.remove_inline_debounce`: remove event-specific inline debounce logic that the dispatcher now supersedes
 - [x] `cleanup.operator_projection_diagnostics`: add operator diagnostics for active projections per webspace
 - [x] `cleanup.test_multi_webspace_and_consumers`: add tests for multi-webspace demand routing and multiple simultaneous consumers
 - [x] `cleanup.test_access_metadata_and_dev`: add tests for guest-visible access metadata and `dev` audience handling

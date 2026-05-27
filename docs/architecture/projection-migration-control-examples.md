@@ -73,6 +73,27 @@ Important fields:
 - `items[].actions`: monolith and shim actions, including the affected roots
   and SDK replacement hints
 
+### Cleanup Contract
+
+Use:
+
+```text
+GET /api/node/projection-migration/cleanup-contract
+```
+
+The response defines the safe cleanup gate for legacy monolithic paths and
+event-specific inline debounce. Important fields:
+
+- `cleanup_items.remove_monolith_paths.status`: should be `guarded_ready`
+- `cleanup_items.remove_inline_debounce.status`: should be `guarded_ready`
+- `guards.acceptance_summary_fail_total_required`: must be `0`
+- `guards.reserved_cache_manifest_target_total_required`: must be `0`
+- `metrics.legacy_pressure_score` and `metrics.local_shim_pressure_score`:
+  cleanup pressure that should trend down before deleting compatibility reads
+- `removal_blockers[]`: concrete blockers that still prevent physical removal
+- `boundaries.cleanup_is_gate_driven`: proves that cleanup is controlled by
+  metrics and contracts, not by blind deletion
+
 ### Manifest Target Contract
 
 For unit-level checks use `inspect_projection_manifest_entries(entries)` from
@@ -217,6 +238,9 @@ The `completion_gates` block converts the plan's Completion Definition into a
 checklist. `pass` gates are already covered by the server-side MVP, while
 `warn` gates name follow-up work such as direct browser hookup, named-entity
 consumer invalidation, and full event producer/client test migration.
+The `cleanup_contract` gate should be `pass` when
+`/api/node/projection-migration/cleanup-contract` exposes guarded rules for
+`remove_monolith_paths` and `remove_inline_debounce`.
 The `core_skill_contract_readiness` gate should be `pass` when
 `/api/node/projection-dispatcher/core-skill-contract` exposes handler coverage,
 readiness metrics, and the core/skill/browser ownership split.

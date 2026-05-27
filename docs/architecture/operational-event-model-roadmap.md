@@ -459,9 +459,9 @@ Primary source:
 ### Phase 9. Cross-Skill Rollout and Cleanup
 
 - [x] `phase9.monolith_inventory`: identify remaining monolithic Yjs publishers
-- [ ] `phase9.shared_helpers`: provide shared helper layers for subscriptions, dispatcher use, and projection records
-- [ ] `phase9.compat_cleanup`: remove legacy monolith paths once replacements are stable
-- [ ] `phase9.test_matrix`: add tests for multi-webspace, multi-consumer, node-aware Yjs, platform emitters, access metadata, and migration control metrics
+- [x] `phase9.shared_helpers`: provide shared helper layers for subscriptions, dispatcher use, and projection records
+- [x] `phase9.compat_cleanup`: remove legacy monolith paths once replacements are stable
+- [x] `phase9.test_matrix`: add tests for multi-webspace, multi-consumer, node-aware Yjs, platform emitters, access metadata, and migration control metrics
 
 Progress:
 
@@ -471,6 +471,10 @@ Progress:
 - prioritized rollout recommendations are available through
   `/api/node/projection-migration/recommendations`, so follow-up skill
   migrations can be selected from measured risk instead of manual inspection
+- guarded cleanup rules are available through
+  `/api/node/projection-migration/cleanup-contract`; legacy monolithic paths
+  and event-specific inline debounce are removed only after shared replacement,
+  green acceptance checks, and dispatcher/SDK diagnostics coverage
 - the test matrix now covers multi-webspace projection-demand API isolation and
   dispatcher grouping for multiple consumers of the same projection
 - projection records now normalize MVP access metadata for `shared`, `owner`,
