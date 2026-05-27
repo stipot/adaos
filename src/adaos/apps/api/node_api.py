@@ -84,6 +84,7 @@ from adaos.services.projection_record_yjs import (
     read_projection_records_yjs_cache,
 )
 from adaos.services.projection_migration_inventory import (
+    projection_cleanup_contract_snapshot,
     projection_migration_acceptance_summary,
     projection_migration_metrics,
     projection_migration_monolith_inventory,
@@ -2478,6 +2479,20 @@ async def node_projection_migration_rollout_contract(
         skills_root=skills_root,
         include_non_browser=include_non_browser,
         limit=limit,
+    )
+
+
+@router.get("/projection-migration/cleanup-contract", dependencies=[Depends(require_token)])
+async def node_projection_migration_cleanup_contract(
+    include_non_browser: bool = False,
+    top_limit: int = 5,
+) -> dict[str, Any]:
+    ctx = get_ctx()
+    skills_root = Path(ctx.paths.skills_dir())
+    return projection_cleanup_contract_snapshot(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        top_limit=top_limit,
     )
 
 

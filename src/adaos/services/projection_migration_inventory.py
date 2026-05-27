@@ -25,6 +25,7 @@ from adaos.services.scenario.projection_registry import inspect_projection_manif
 
 
 PROJECTION_RECORDS_COMPAT_BRANCH = "data/projectionRecords"
+PROJECTION_CLEANUP_CONTRACT = "adaos.projection-cleanup.legacy-paths.v1"
 PROJECTION_ROLLOUT_CONTRACT = "adaos.projection-rollout.shared-contract.v1"
 
 
@@ -881,6 +882,133 @@ def projection_rollout_shared_contract_snapshot(
     }
 
 
+def projection_cleanup_contract_snapshot(
+    *,
+    skills_root: str | Path,
+    include_non_browser: bool = False,
+    top_limit: int = 5,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Return the guarded cleanup contract for legacy paths and inline debounce."""
+
+    metrics_report = projection_migration_metrics(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        top_limit=top_limit,
+        now=now,
+    )
+    recommendations = projection_migration_recommendations(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        limit=top_limit,
+        now=metrics_report.get("updated_at"),
+    )
+    metrics = _mapping(metrics_report.get("metrics"))
+    legacy_pressure_score = int(metrics.get("legacy_pressure_score") or 0)
+    local_shim_pressure_score = int(metrics.get("local_shim_pressure_score") or 0)
+    reserved_cache_target_total = int(metrics.get("reserved_cache_manifest_target_total") or 0)
+    removal_blockers = [
+        blocker
+        for blocker, active in [
+            ("reserved_cache_manifest_target_total must be zero", reserved_cache_target_total > 0),
+            ("legacy_pressure_score should trend toward zero before deleting compatibility reads", legacy_pressure_score > 0),
+            ("local_shim_pressure_score should trend toward zero before removing inline debounce", local_shim_pressure_score > 0),
+        ]
+        if active
+    ]
+    return {
+        "contract": PROJECTION_CLEANUP_CONTRACT,
+        "ready_for_mvp": True,
+        "updated_at": metrics_report.get("updated_at"),
+        "skills_root": metrics_report.get("skills_root"),
+        "include_non_browser": bool(include_non_browser),
+        "source_endpoints": {
+            "acceptance_summary": "/api/node/projection-migration/acceptance-summary",
+            "metrics": "/api/node/projection-migration/metrics",
+            "recommendations": "/api/node/projection-migration/recommendations",
+            "rollout_contract": "/api/node/projection-migration/rollout-contract",
+        },
+        "cleanup_items": {
+            "remove_monolith_paths": {
+                "status": "guarded_ready",
+                "rule": "Delete legacy monolithic read/write paths only after the shared projection contract replaces the same surface and acceptance-summary keeps fail_total=0.",
+                "blocked_when": [
+                    "reserved_cache_manifest_target_total > 0",
+                    "legacy_pressure_score remains above the accepted cleanup threshold",
+                    "browser or skill consumers still require compatibility reads",
+                ],
+                "evidence": [
+                    "projection_migration_monolith_inventory.items[].roots[].compatibility",
+                    "projection_migration_metrics.metrics.legacy_pressure_score",
+                    "projection_rollout_shared_contract_snapshot.boundaries.cleanup_requires_green_acceptance_summary",
+                ],
+            },
+            "remove_inline_debounce": {
+                "status": "guarded_ready",
+                "rule": "Remove event-specific debounce only when dispatcher/SDK diagnostics cover dirty drops, coalescing, and overlapping refresh pressure.",
+                "blocked_when": [
+                    "local_shim_pressure_score remains above the accepted cleanup threshold",
+                    "dispatcher_memory_contract is missing",
+                    "SDK projection diagnostics are unavailable",
+                ],
+                "evidence": [
+                    "ProjectionRuntime diagnostics: dirty-event drops",
+                    "ProjectionRuntime diagnostics: coalesced refreshes",
+                    "ProjectionRuntime diagnostics: overlapping refresh pressure",
+                    "/api/node/projection-dispatcher/memory-contract",
+                ],
+            },
+        },
+        "guards": {
+            "acceptance_summary_fail_total_required": 0,
+            "reserved_cache_manifest_target_total_required": 0,
+            "requires_rollout_contract": True,
+            "requires_browser_adapter_contract": True,
+            "requires_dispatcher_memory_contract": True,
+            "requires_sdk_projection_diagnostics": True,
+            "does_not_delete_compatibility_reads_before_consumers_move": True,
+        },
+        "metrics": {
+            "legacy_pressure_score": legacy_pressure_score,
+            "local_shim_pressure_score": local_shim_pressure_score,
+            "monolith_exposure_ratio": metrics.get("monolith_exposure_ratio"),
+            "migration_readiness_ratio": metrics.get("migration_readiness_ratio"),
+            "reserved_cache_manifest_target_total": reserved_cache_target_total,
+        },
+        "removal_blockers": removal_blockers,
+        "recommended_cleanup_targets": [
+            {
+                "skill_id": str(item.get("skill_id") or ""),
+                "priority_score": int(item.get("priority_score") or 0),
+                "recommended_next_step": item.get("recommended_next_step"),
+            }
+            for item in recommendations.get("items", [])
+            if isinstance(item, Mapping)
+        ],
+        "cleanup_order": [
+            "freeze compatibility read paths behind explicit guards",
+            "migrate high-risk monolithic publishers through the shared rollout contract",
+            "replace direct ctx_subnet writes and local fingerprint caches",
+            "verify migration metrics trend down and acceptance-summary fail_total remains zero",
+            "remove legacy monolithic paths after consumers stop using compatibility reads",
+            "remove inline debounce after dispatcher and SDK diagnostics stay green",
+        ],
+        "boundaries": {
+            "does_not_delete_legacy_paths_before_rollout": True,
+            "does_not_remove_runtime_safety_counters": True,
+            "keeps_compatibility_reads_until_no_consumers": True,
+            "cleanup_is_gate_driven": True,
+        },
+        "evidence": [
+            "projection_migration_metrics",
+            "projection_migration_recommendations",
+            "projection_rollout_shared_contract_snapshot",
+            "projection_dispatcher_memory_contract_snapshot",
+            "SDK projection diagnostics",
+        ],
+    }
+
+
 def _acceptance_check(
     *,
     check_id: str,
@@ -1590,6 +1718,17 @@ def _acceptance_completion_gates(*, server_mvp_ready: bool, fail_total: int, war
             ],
         },
         {
+            "id": "cleanup_contract",
+            "criterion": "legacy monolithic paths and inline debounce have guarded removal rules before cleanup",
+            "status": "pass",
+            "evidence": [
+                "/api/node/projection-migration/cleanup-contract",
+                "remove_monolith_paths guarded cleanup rule",
+                "remove_inline_debounce guarded cleanup rule",
+                "acceptance-summary fail_total=0 guard",
+            ],
+        },
+        {
             "id": "infrascope_projection_family_contract",
             "criterion": "Infrascope overview, inventory, inspectors, topology, and modal/widget payloads are split into explicit projection families",
             "status": "pass",
@@ -1768,6 +1907,7 @@ def _acceptance_final_acceptance(
             "request_examples",
             "browser_adapter_contract",
             "browser_demand_contract",
+            "cleanup_contract",
             "demand_restore_contract",
             "dispatcher_memory_contract",
             "event_envelope",
@@ -1836,6 +1976,12 @@ def projection_migration_acceptance_summary(
         skills_root=skills_root,
         include_non_browser=include_non_browser,
         limit=top_limit,
+        now=metrics_report.get("updated_at"),
+    )
+    cleanup_contract = projection_cleanup_contract_snapshot(
+        skills_root=skills_root,
+        include_non_browser=include_non_browser,
+        top_limit=top_limit,
         now=metrics_report.get("updated_at"),
     )
     runtime_ownership_contract = projection_runtime_ownership_contract_snapshot(now=metrics_report.get("updated_at"))
@@ -1994,6 +2140,7 @@ def projection_migration_acceptance_summary(
         "completion_gates": completion_gates,
         "browser_adapter_contract": browser_adapter_contract,
         "browser_demand_contract": browser_demand_contract,
+        "cleanup_contract": cleanup_contract,
         "demand_restore_contract": demand_restore_contract,
         "dispatcher_memory_contract": dispatcher_memory_contract,
         "event_envelope": event_envelope,
@@ -2027,5 +2174,6 @@ __all__ = [
     "projection_migration_metrics",
     "projection_migration_monolith_inventory",
     "projection_migration_recommendations",
+    "projection_cleanup_contract_snapshot",
     "projection_rollout_shared_contract_snapshot",
 ]

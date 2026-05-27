@@ -12,6 +12,7 @@ from adaos.apps.api.auth import require_token
 from adaos.services.agent_context import get_ctx
 from adaos.services.projection_migration_inventory import (
     legacy_projection_branch_compatibility,
+    projection_cleanup_contract_snapshot,
     projection_migration_acceptance_summary,
     projection_migration_metrics,
     projection_migration_monolith_inventory,
@@ -396,6 +397,50 @@ async def publish(payload, webspace_id):
     assert snapshot["boundaries"]["does_not_remove_legacy_paths_yet"] is True
 
 
+def test_projection_cleanup_contract_snapshot_guards_removal_rules(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+        handler_text="""
+from concurrent.futures import ThreadPoolExecutor
+from adaos.sdk.data import ctx_subnet
+
+_projection_fingerprints: dict[str, str] = {}
+_PROJECTION_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("voice_chat.state", payload, webspace_id=webspace_id)
+""",
+    )
+    _write_skill(
+        root,
+        "prompt_engineer_skill",
+        skill_yaml=_static_skill_yaml(),
+        webui={"apps": [{"id": "prompt_app"}]},
+    )
+
+    snapshot = projection_cleanup_contract_snapshot(
+        skills_root=root,
+        include_non_browser=True,
+        top_limit=5,
+        now=100.0,
+    )
+
+    assert snapshot["contract"] == "adaos.projection-cleanup.legacy-paths.v1"
+    assert snapshot["ready_for_mvp"] is True
+    assert snapshot["cleanup_items"]["remove_monolith_paths"]["status"] == "guarded_ready"
+    assert snapshot["cleanup_items"]["remove_inline_debounce"]["status"] == "guarded_ready"
+    assert snapshot["guards"]["acceptance_summary_fail_total_required"] == 0
+    assert snapshot["guards"]["requires_dispatcher_memory_contract"] is True
+    assert snapshot["metrics"]["legacy_pressure_score"] == 3
+    assert snapshot["metrics"]["local_shim_pressure_score"] == 7
+    assert snapshot["recommended_cleanup_targets"][0]["skill_id"] == "voice_chat_skill"
+    assert snapshot["boundaries"]["does_not_delete_legacy_paths_before_rollout"] is True
+
+
 def test_projection_migration_acceptance_summary_marks_server_mvp_ready_with_followups(tmp_path: Path) -> None:
     root = tmp_path / "skills"
     _write_skill(
@@ -476,9 +521,9 @@ async def publish(payload, webspace_id):
     assert [item["slice"] for item in summary["plan_review"]["slices"]] == [1, 2, 3, 4, 5, 6]
     assert summary["plan_review"]["slices"][-1]["state"] == "mvp_acceptance_ready"
     assert summary["completion_gates"]["source"] == "Completion Definition"
-    assert summary["completion_gates"]["gate_total"] == 22
+    assert summary["completion_gates"]["gate_total"] == 23
     assert summary["completion_gates"]["status"] == "ready_with_followups"
-    assert summary["completion_gates"]["pass_total"] == 19
+    assert summary["completion_gates"]["pass_total"] == 20
     browser_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["browser_multi_demand"]
@@ -487,6 +532,7 @@ async def publish(payload, webspace_id):
         "browser_demand_contract",
         "browser_adapter_contract",
         "browser_multi_demand",
+        "cleanup_contract",
         "core_skill_contract_readiness",
         "demand_restore_contract",
         "dispatcher_memory_contract",
@@ -582,6 +628,15 @@ async def publish(payload, webspace_id):
     assert summary["rollout_shared_contract"]["ready_for_mvp"] is True
     assert summary["rollout_shared_contract"]["selection_rules"]["prioritize_high_risk_monoliths"] is True
     assert summary["rollout_shared_contract"]["boundaries"]["does_not_remove_legacy_paths_yet"] is True
+    cleanup_gate = {
+        item["id"]: item for item in summary["completion_gates"]["gates"]
+    }["cleanup_contract"]
+    assert "/api/node/projection-migration/cleanup-contract" in cleanup_gate["evidence"]
+    assert summary["cleanup_contract"]["contract"] == "adaos.projection-cleanup.legacy-paths.v1"
+    assert summary["cleanup_contract"]["ready_for_mvp"] is True
+    assert summary["cleanup_contract"]["cleanup_items"]["remove_monolith_paths"]["status"] == "guarded_ready"
+    assert summary["cleanup_contract"]["cleanup_items"]["remove_inline_debounce"]["status"] == "guarded_ready"
+    assert summary["cleanup_contract"]["boundaries"]["cleanup_is_gate_driven"] is True
     infrascope_gate = {
         item["id"]: item for item in summary["completion_gates"]["gates"]
     }["infrascope_projection_family_contract"]
@@ -623,6 +678,7 @@ async def publish(payload, webspace_id):
     assert "control_snapshot" in summary["final_acceptance"]["evidence_fields"]
     assert "browser_adapter_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "browser_demand_contract" in summary["final_acceptance"]["evidence_fields"]
+    assert "cleanup_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "demand_restore_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "dispatcher_memory_contract" in summary["final_acceptance"]["evidence_fields"]
     assert "event_envelope" in summary["final_acceptance"]["evidence_fields"]
@@ -768,6 +824,35 @@ async def publish(payload, webspace_id):
     assert payload["recommendation_total"] == 1
     assert payload["recommended_items"][0]["skill_id"] == "voice_chat_skill"
     assert payload["boundaries"]["does_not_require_skill_specific_abi"] is True
+
+
+def test_projection_cleanup_contract_api_uses_workspace_skills() -> None:
+    ctx = get_ctx()
+    root = Path(ctx.paths.skills_dir())
+    _write_skill(
+        root,
+        "voice_chat_skill",
+        skill_yaml=_voice_skill_yaml(),
+        webui={"apps": [{"id": "voice_chat_app"}]},
+        handler_text="""
+from adaos.sdk.data import ctx_subnet
+
+async def publish(payload, webspace_id):
+    await ctx_subnet.set_async("voice_chat.state", payload, webspace_id=webspace_id)
+""",
+    )
+    client = _make_api_client()
+
+    response = client.get("/api/node/projection-migration/cleanup-contract?top_limit=1")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["contract"] == "adaos.projection-cleanup.legacy-paths.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["source_endpoints"]["rollout_contract"] == "/api/node/projection-migration/rollout-contract"
+    assert payload["cleanup_items"]["remove_monolith_paths"]["status"] == "guarded_ready"
+    assert payload["cleanup_items"]["remove_inline_debounce"]["status"] == "guarded_ready"
+    assert payload["boundaries"]["keeps_compatibility_reads_until_no_consumers"] is True
 
 
 def test_projection_migration_acceptance_summary_api_uses_workspace_skills() -> None:
