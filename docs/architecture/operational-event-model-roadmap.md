@@ -170,12 +170,12 @@ References:
 ### Phase 1. Event Model Fixation
 
 - [x] `phase1.master_event_taxonomy`: freeze the shared taxonomy from the Operational Event Model
-- [ ] `phase1.core_skill_contract`: define the core-skill interaction contract as a first-class runtime layer
+- [x] `phase1.core_skill_contract`: define the core-skill interaction contract as a first-class runtime layer
 - [x] `phase1.named_entity_contract`: freeze name, localized label, alias, conflict, registry-changed, and resolver-diagnostic events
 - [ ] `phase1.platform_emitters`: define the platform as a first-class emitter of notifications, diagnostics, and system errors
 - [x] `phase1.scope_model`: freeze `per-webspace` projection scope plus reserved `node scope`
 - [x] `phase1.access_contract`: freeze MVP access metadata with `shared`, `owner`, `guest`, and `dev`
-- [ ] `phase1.event_envelope`: define the minimal shared event envelope fields and compatibility rules for existing `Event(type, payload, source, ts)` producers
+- [x] `phase1.event_envelope`: define the minimal shared event envelope fields and compatibility rules for existing `Event(type, payload, source, ts)` producers
 
 Current checkpoint as of 2026-05-15:
 
@@ -189,8 +189,14 @@ Current checkpoint as of 2026-05-15:
 - eventbus backpressure and incident observability are implemented for selected
   hot topics, but this is a guardrail over the current bus, not yet the shared
   event envelope contract
-- platform emitters remain partially defined through diagnostics and the
-  planned status-card work; they need one explicit ABI before migration
+- platform emitters remain partially defined through diagnostics and the first
+  status-card implementation slice; status cards now provide the initial ABI,
+  but notifications and diagnostics still need the shared projection lifecycle
+  contract
+- Harvest branch checkpoint: the minimal event envelope helper and inspectable
+  contract now exist, and the demanded projection dispatcher exposes a
+  core-to-skill refresh contract. This closes the contract definition step, not
+  producer migration across every event source.
 
 Primary source:
 
@@ -198,11 +204,11 @@ Primary source:
 
 ### Phase 2. Shared Runtime ABI
 
-- [ ] `phase2.event_envelope_abi`: implement helpers for event id, trace/cause, actor/source authority, scope, priority, schema/version, and timestamp metadata without breaking legacy publishers
-- [ ] `phase2.runtime_ownership_split`: define which invalidations are core-owned and which rebuilds are skill-owned
-- [ ] `phase2.refresh_contract`: define the shared invalidation and refresh contract before browser-specific migration
+- [x] `phase2.event_envelope_abi`: implement helpers for event id, trace/cause, actor/source authority, scope, priority, schema/version, and timestamp metadata without breaking legacy publishers
+- [x] `phase2.runtime_ownership_split`: define which invalidations are core-owned and which rebuilds are skill-owned
+- [x] `phase2.refresh_contract`: define the shared invalidation and refresh contract before browser-specific migration
 - [ ] `phase2.restore_demand`: define startup restoration from Yjs demand state for core and skills
-- [ ] `phase2.platform_projection_families`: define the initial platform-owned projection families, starting with status cards and runtime diagnostics
+- [x] `phase2.platform_projection_families`: define the initial platform-owned projection families, starting with status cards and runtime diagnostics
 - [x] `phase2.named_entity_runtime_abi`: define `NamedEntityRecord`, localized label metadata, `EntityResolutionResult`, and `entity.registry.changed` invalidation semantics
 - [ ] `phase2.status_card_abi`: align the shared status-card contract with projection lifecycle, platform emitters, and thin reliability summaries
 
@@ -217,8 +223,17 @@ Current checkpoint as of 2026-05-15:
   add/remove/deprecate paths
 - the core runtime still uses a minimal event object; envelope metadata is
   carried inconsistently in payload `_meta`
-- status-card work in `issue-tracker.md` should become the first explicit
-  platform-emitter ABI instead of a separate monitoring-only feature
+- status-card work has become the first explicit platform-emitter ABI:
+  `StatusCard`, `StatusRegistry`, SDK publish helpers, guard cards, thin
+  reliability summaries, ETag-aware client cache, CLI metrics, and compact
+  boundary diagnostics exist
+- the remaining platform-emitter work is not the status-card contract itself;
+  it is moving notifications, diagnostics, and workspace-manager surfaces onto
+  the shared projection lifecycle and dispatcher
+- Harvest branch checkpoint: status cards are exposed as the first
+  `status-card:*` projection family through the existing `services.status`
+  registry. Demand restoration is intentionally still contract-only until SDK
+  restore helpers and activation-time restore are implemented.
 
 Primary sources:
 
@@ -228,8 +243,8 @@ Primary sources:
 
 ### Phase 3. Node-Aware Yjs Shape
 
-- [ ] `phase3.projection_record_shape`: lock the canonical projection record shape
-- [ ] `phase3.client_subscription_shape`: lock the client-written subscription shape
+- [x] `phase3.projection_record_shape`: lock the canonical projection record shape
+- [x] `phase3.client_subscription_shape`: lock the client-written subscription shape
 - [ ] `phase3.node_top_level_reserved`: add a reserved node-aware top-level envelope in shared Yjs state
 - [x] `phase3.named_entity_projection_path`: lock the read-only named-entity projection path and privacy constraints
 - [ ] `phase3.compat_layer_defined`: define compatibility rules for legacy skill/scenario JSON branches
@@ -263,6 +278,11 @@ Current checkpoint as of 2026-05-15:
 - the general projection record shape, client subscription shape, and
   top-level node-owned envelope remain the blocking ABI work before broad
   dispatcher/client migration
+- Harvest branch checkpoint: `ProjectionRecord` and
+  `ClientSubscriptionRecord` are implemented as code ABI. The shared
+  `data/projectionRecords` cache now carries a node-aware envelope for
+  ProjectionRecords, but the wider node-owned Yjs envelope for other branches
+  remains open.
 
 Primary sources:
 
@@ -272,11 +292,11 @@ Primary sources:
 ### Phase 4. Client Projection Runtime
 
 - [ ] `phase4.subscription_registry`: implement browser-side projection subscription registry
-- [ ] `phase4.full_overwrite_model`: make the browser write full active subscription sets
-- [ ] `phase4.multi_projection_consumers`: support concurrent page, widget, modal, and panel consumers
+- [x] `phase4.full_overwrite_model`: make the browser write full active subscription sets
+- [x] `phase4.multi_projection_consumers`: support concurrent page, widget, modal, and panel consumers
 - [ ] `phase4.node_multiplicity_visible`: prepare the client to consume node multiplicity from shared Yjs
-- [ ] `phase4.lifecycle_consumption`: consume `pending/refreshing/ready/stale/error` as first-class projection state
-- [ ] `phase4.cache_by_projection_key`: cache projection payloads by `projection_key`
+- [x] `phase4.lifecycle_consumption`: consume `pending/refreshing/ready/stale/error` as first-class projection state
+- [x] `phase4.cache_by_projection_key`: cache projection payloads by `projection_key`
 
 Current checkpoint as of 2026-05-02:
 
@@ -306,6 +326,10 @@ Next gate:
   locked
 - the first implementation should support page, modal, widget, and pinned panel
   consumers through the same subscription record shape
+- Harvest branch checkpoint: server-side full-session demand writes,
+  browser-state mapping, session touch/delete, browser-cache ETags, and
+  per-entry lifecycle/cache metadata exist. The Angular/browser adapter hookup
+  and actual browser-side registry migration remain open.
 
 Primary source:
 
@@ -313,10 +337,10 @@ Primary source:
 
 ### Phase 5. Shared Dispatcher
 
-- [ ] `phase5.dispatcher_exists`: implement one reusable dispatcher for `event -> in-memory update -> demanded projection refresh`
-- [ ] `phase5.per_webspace_dispatch`: ensure dispatch runs per webspace
-- [ ] `phase5.no_cross_webspace_churn`: ensure one webspace cannot force unrelated Yjs churn
-- [ ] `phase5.memory_vs_yjs_boundary`: preserve the rule that runtime memory may be richer than published Yjs projections
+- [x] `phase5.dispatcher_exists`: implement one reusable dispatcher for `event -> in-memory update -> demanded projection refresh`
+- [x] `phase5.per_webspace_dispatch`: ensure dispatch runs per webspace
+- [x] `phase5.no_cross_webspace_churn`: ensure one webspace cannot force unrelated Yjs churn
+- [x] `phase5.memory_vs_yjs_boundary`: preserve the rule that runtime memory may be richer than published Yjs projections
 - [ ] `phase5.eventbus_guardrail_tests`: add regression coverage for bounded hot-topic queues, supersede/drop counters, and backlog snapshots so dispatcher work can rely on observable pressure behavior
 
 Current checkpoint as of 2026-05-15:
@@ -328,6 +352,10 @@ Current checkpoint as of 2026-05-15:
 - this reduces incident amplification, but it is not a replacement for the
   shared dispatcher; the dispatcher still needs to decide which demanded
   projections refresh per webspace
+- Harvest branch checkpoint: the shared dispatcher exists with wildcard
+  handler matching, lifecycle bookkeeping, pressure counters, per-webspace
+  selection, and API contract snapshots. Eventbus guardrail regression remains
+  a separate hardening item.
 
 Primary sources:
 
@@ -403,6 +431,11 @@ Primary sources:
 Primary source:
 
 - [Infrascope Roadmap](infrascope-roadmap.md)
+
+Harvest branch note: PR #87 included an Infrascope status-card adapter, but this
+branch deliberately does not carry it forward yet. The pilot readiness contract
+marks Infrascope as blocked until the platform status-card emitter and browser
+ProjectionRecord cache are accepted.
 
 ### Phase 8. Follow-Up Pilots
 
