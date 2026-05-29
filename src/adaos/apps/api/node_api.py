@@ -116,7 +116,6 @@ from adaos.services.projection_records import (
     browser_projection_record_snapshot,
     get_projection_record,
     projection_record_registry_snapshot,
-    write_projection_record,
 )
 from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
 from adaos.services.status_projection import (
@@ -1963,13 +1962,6 @@ class ProjectionDispatchRequest(BaseModel):
     projection_keys: list[str] | None = None
 
 
-class ProjectionRecordWriteRequest(BaseModel):
-    status: str = "ready"
-    data: Any = Field(default_factory=dict)
-    meta: dict[str, Any] = Field(default_factory=dict)
-    error: dict[str, Any] | str | None = None
-
-
 class ProjectionRecordsYjsMaterializeRequest(BaseModel):
     webspace_id: str | None = None
     projection_keys: list[str] | None = None
@@ -2260,28 +2252,6 @@ async def node_projection_demand_client_delete(
 @router.get("/projection-records", dependencies=[Depends(require_token)])
 async def node_projection_records(webspace_id: str | None = None) -> dict[str, Any]:
     return projection_record_registry_snapshot(webspace_id=_coerce_node_webspace_id(webspace_id))
-
-
-@router.post("/projection-records", dependencies=[Depends(require_token)])
-async def node_projection_record_write(payload: ProjectionRecordWriteRequest) -> dict[str, Any]:
-    try:
-        record = write_projection_record(
-            {
-                "status": payload.status,
-                "data": payload.data,
-                "meta": payload.meta,
-                "error": payload.error,
-            }
-        )
-    except ValueError as exc:
-        _raise_400(str(exc))
-    return {
-        "ok": True,
-        "accepted": True,
-        "webspace_id": record.meta.webspace_id,
-        "record": record.to_dict(),
-        "snapshot": projection_record_registry_snapshot(webspace_id=record.meta.webspace_id),
-    }
 
 
 @router.get("/projection-records/item", dependencies=[Depends(require_token)])

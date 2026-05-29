@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from adaos.apps.api.auth import require_token
 from adaos.domain import make_client_subscription_record, make_projection_subscription
 from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
-from adaos.services.projection_records import clear_projection_record_registry
+from adaos.services.projection_records import clear_projection_record_registry, write_projection_record
 
 
 def _make_client() -> TestClient:
@@ -37,35 +37,46 @@ def _make_client() -> TestClient:
     return TestClient(app)
 
 
-def test_projection_records_api_writes_and_reads_record() -> None:
+def _write_projection_record(
+    projection_key: str = "status-card:runtime",
+    *,
+    summary: str = "Runtime ready",
+    webspace_id: str = "desktop",
+    version: int | None = 1,
+    fingerprint: str | None = "fp-1",
+) -> None:
+    meta = {
+        "projection_key": projection_key,
+        "kind": "status-card",
+        "webspace_id": webspace_id,
+    }
+    if version is not None:
+        meta["version"] = version
+    if fingerprint is not None:
+        meta["fingerprint"] = fingerprint
+    write_projection_record(
+        {
+            "status": "ready",
+            "data": {"summary": summary},
+            "meta": meta,
+        }
+    )
+
+
+def test_projection_records_api_reads_core_written_record() -> None:
     client = _make_client()
 
-    write_resp = client.post(
-        "/api/node/projection-records",
-        json={
-            "status": "ready",
-            "data": {"summary": "Runtime ready"},
-            "meta": {
-                "projection_key": "status-card:runtime",
-                "kind": "status-card",
-                "webspace_id": "desktop",
-                "version": 1,
-                "fingerprint": "fp-1",
-            },
-        },
-    )
+    _write_projection_record()
     item_resp = client.get(
         "/api/node/projection-records/item",
         params={"webspace_id": "desktop", "projection_key": "status-card:runtime"},
     )
 
-    assert write_resp.status_code == 200
-    assert write_resp.json()["snapshot"]["record_total"] == 1
     assert item_resp.status_code == 200
     assert item_resp.json()["record"]["data"]["summary"] == "Runtime ready"
 
 
-def test_projection_records_api_rejects_missing_identity() -> None:
+def test_projection_records_api_does_not_expose_runtime_write_surface() -> None:
     client = _make_client()
 
     resp = client.post(
@@ -73,8 +84,7 @@ def test_projection_records_api_rejects_missing_identity() -> None:
         json={"status": "ready", "data": {"summary": "Runtime ready"}, "meta": {}},
     )
 
-    assert resp.status_code == 400
-    assert resp.json()["detail"] == "webspace_id is required"
+    assert resp.status_code == 405
 
 
 def test_projection_records_node_multiplicity_contract_endpoint_exposes_browser_rules() -> None:
@@ -189,20 +199,7 @@ def test_projection_records_api_reads_yjs_cache(monkeypatch) -> None:
 
 def test_projection_records_api_exposes_browser_cache_snapshot() -> None:
     client = _make_client()
-    write_resp = client.post(
-        "/api/node/projection-records",
-        json={
-            "status": "ready",
-            "data": {"summary": "Runtime ready"},
-            "meta": {
-                "projection_key": "status-card:runtime",
-                "kind": "status-card",
-                "webspace_id": "desktop",
-                "version": 1,
-                "fingerprint": "fp-1",
-            },
-        },
-    )
+    _write_projection_record()
     write_client_subscription_record(
         make_client_subscription_record(
             client_id="browser-1",
@@ -225,7 +222,6 @@ def test_projection_records_api_exposes_browser_cache_snapshot() -> None:
         params={"webspace_id": "desktop"},
     )
 
-    assert write_resp.status_code == 200
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["kind"] == "browser-demanded-projection-records"
@@ -249,18 +245,7 @@ def test_projection_records_api_exposes_browser_cache_snapshot() -> None:
 def test_projection_records_api_filters_browser_cache_by_client_session() -> None:
     client = _make_client()
     for projection_key in ["status-card:runtime", "status-card:desktop-shell"]:
-        client.post(
-            "/api/node/projection-records",
-            json={
-                "status": "ready",
-                "data": {"summary": projection_key},
-                "meta": {
-                    "projection_key": projection_key,
-                    "kind": "status-card",
-                    "webspace_id": "desktop",
-                },
-            },
-        )
+        _write_projection_record(projection_key, summary=projection_key, version=None, fingerprint=None)
     write_client_subscription_record(
         make_client_subscription_record(
             client_id="browser-1",
@@ -311,18 +296,7 @@ def test_projection_records_api_filters_browser_cache_by_client_session() -> Non
 def test_projection_records_api_filters_browser_cache_by_projection_keys() -> None:
     client = _make_client()
     for projection_key in ["status-card:runtime", "status-card:desktop-shell"]:
-        client.post(
-            "/api/node/projection-records",
-            json={
-                "status": "ready",
-                "data": {"summary": projection_key},
-                "meta": {
-                    "projection_key": projection_key,
-                    "kind": "status-card",
-                    "webspace_id": "desktop",
-                },
-            },
-        )
+        _write_projection_record(projection_key, summary=projection_key, version=None, fingerprint=None)
     write_client_subscription_record(
         make_client_subscription_record(
             client_id="browser-1",
@@ -363,18 +337,7 @@ def test_projection_records_api_filters_browser_cache_by_projection_keys() -> No
 
 def test_projection_records_api_returns_not_modified_for_matching_browser_cache_etag() -> None:
     client = _make_client()
-    client.post(
-        "/api/node/projection-records",
-        json={
-            "status": "ready",
-            "data": {"summary": "Runtime ready"},
-            "meta": {
-                "projection_key": "status-card:runtime",
-                "kind": "status-card",
-                "webspace_id": "desktop",
-            },
-        },
-    )
+    _write_projection_record(version=None, fingerprint=None)
     write_client_subscription_record(
         make_client_subscription_record(
             client_id="browser-1",
