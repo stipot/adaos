@@ -105,11 +105,12 @@ def test_projection_demand_restore_contract_endpoint_exposes_startup_rules() -> 
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["contract"] == "adaos.projection-demand.restore-from-yjs.v1"
-    assert payload["ready_for_mvp"] is False
-    assert payload["status"] == "contract_only"
-    assert payload["runtime_helpers"]["projection_runtime"] == "planned ProjectionRuntime.restore_active_demand"
+    assert payload["ready_for_mvp"] is True
+    assert payload["status"] == "implemented"
+    assert payload["runtime_helpers"]["projection_runtime"] == "ProjectionRuntime.restore_active_demand"
     assert payload["restore_modes"][1]["active_state"] == "active_receivers"
     assert payload["boundaries"]["restore_writes_yjs_directly"] is False
+    assert payload["source_of_truth"]["yjs_path"] == "runtime/clients"
 
 
 def test_projection_demand_api_get_and_delete_snapshot() -> None:
@@ -286,3 +287,70 @@ def test_projection_demand_api_accepts_browser_state_mapping() -> None:
     assert payload["record"]["subscriptions"][3]["pinned"] is True
     assert payload["snapshot"]["projection_total"] == 3
     assert payload["snapshot"]["consumer_total"] == 4
+
+
+def test_projection_demand_api_materializes_yjs_cache(monkeypatch) -> None:
+    client = _make_client()
+    from adaos.apps.api import node_api
+
+    captured = {}
+
+    async def fake_materialize_projection_demand_to_yjs(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": kwargs["webspace_id"],
+            "yjs_path": "runtime/clients",
+            "client_total": 0,
+        }
+
+    monkeypatch.setattr(
+        node_api,
+        "materialize_projection_demand_to_yjs",
+        fake_materialize_projection_demand_to_yjs,
+    )
+
+    resp = client.post(
+        "/api/node/projection-demand/yjs/materialize",
+        json={"webspace_id": "desktop", "now": 20.0},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["yjs_path"] == "runtime/clients"
+    assert captured["webspace_id"] == "desktop"
+    assert captured["now"] == 20.0
+
+
+def test_projection_demand_api_restores_yjs_cache(monkeypatch) -> None:
+    client = _make_client()
+    from adaos.apps.api import node_api
+
+    captured = {}
+
+    async def fake_restore_projection_demand_from_yjs(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": kwargs["webspace_id"],
+            "restored_total": 1,
+            "skipped_total": 0,
+        }
+
+    monkeypatch.setattr(
+        node_api,
+        "restore_projection_demand_from_yjs",
+        fake_restore_projection_demand_from_yjs,
+    )
+
+    resp = client.post(
+        "/api/node/projection-demand/yjs/restore",
+        json={"webspace_id": "desktop", "include_hidden": False, "stale_after_s": 5.0},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["restored_total"] == 1
+    assert captured["webspace_id"] == "desktop"
+    assert captured["include_hidden"] is False
+    assert captured["stale_after_s"] == 5.0

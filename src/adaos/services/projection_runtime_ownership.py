@@ -46,6 +46,13 @@ def projection_runtime_ownership_contract_snapshot(*, now: float | None = None) 
             "browser_owned": ["read demanded projection cache"],
             "forbidden": ["anonymous node ownership", "broad browser writes to shared projection cache"],
         },
+        {
+            "area": "platform_nodes_branch",
+            "core_owned": ["reserve platform/nodes/<node_id>", "write node status, diagnostics, and projection summaries"],
+            "skill_owned": [],
+            "browser_owned": ["read platform node state"],
+            "forbidden": ["skill writes to platform/nodes", "browser writes to platform/nodes"],
+        },
     ]
     return {
         "contract": RUNTIME_OWNERSHIP_CONTRACT,
@@ -66,6 +73,7 @@ def projection_runtime_ownership_contract_snapshot(*, now: float | None = None) 
             "/api/node/projection-dispatcher/core-skill-contract",
             "/api/node/projection-platform-emitters",
             "/api/node/projection-records/yjs/read",
+            "/api/node/platform/nodes/contract",
         ],
         "forbidden_total": sum(len(item.get("forbidden") or []) for item in boundaries),
     }

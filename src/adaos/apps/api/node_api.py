@@ -97,6 +97,12 @@ from adaos.services.projection_demand_mapper import (
     build_browser_projection_demand_record,
 )
 from adaos.services.projection_demand_restore import projection_demand_restore_contract_snapshot
+from adaos.services.projection_demand_yjs import (
+    materialize_projection_demand_to_yjs,
+    read_projection_demand_yjs,
+    restore_projection_demand_from_yjs,
+    safe_materialize_projection_demand_to_yjs,
+)
 from adaos.services.projection_diagnostics import projection_operator_diagnostics
 from adaos.services.projection_dispatcher import (
     core_skill_refresh_contract_snapshot,
@@ -104,6 +110,7 @@ from adaos.services.projection_dispatcher import (
     projection_dispatcher_memory_contract_snapshot,
     projection_dispatcher_snapshot,
 )
+from adaos.services.projection_event_bridge import projection_event_bridge_snapshot
 from adaos.services.projection_pilot_readiness import projection_pilot_readiness_contract_snapshot
 from adaos.services.projection_record_yjs import (
     materialize_projection_records_to_yjs,
@@ -118,6 +125,11 @@ from adaos.services.projection_records import (
     projection_record_registry_snapshot,
 )
 from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
+from adaos.services.platform_node_yjs import (
+    materialize_platform_node_to_yjs,
+    platform_nodes_contract_snapshot,
+    read_platform_nodes_yjs,
+)
 from adaos.services.status_projection import (
     ensure_status_card_projection_handler,
     materialize_status_card_projection_records,
@@ -1969,6 +1981,28 @@ class ProjectionRecordsYjsMaterializeRequest(BaseModel):
     now: float | None = None
 
 
+class ProjectionDemandYjsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    now: float | None = None
+
+
+class ProjectionDemandYjsRestoreRequest(BaseModel):
+    webspace_id: str | None = None
+    include_hidden: bool = True
+    include_stale: bool = True
+    stale_after_s: float | None = None
+    now: float | None = None
+
+
+class PlatformNodeYjsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    node_id: str | None = None
+    status: dict[str, Any] | None = None
+    diagnostics: dict[str, Any] | None = None
+    projections: dict[str, Any] | None = None
+    now: float | None = None
+
+
 class StatusCardProjectionRecordsMaterializeRequest(BaseModel):
     webspace_id: str | None = None
     card_ids: list[str] | None = None
@@ -2112,7 +2146,9 @@ async def node_projection_runtime_ownership() -> dict[str, Any]:
 
 @router.get("/projection-platform-emitters", dependencies=[Depends(require_token)])
 async def node_projection_platform_emitters() -> dict[str, Any]:
-    return platform_emitter_contract_snapshot(now=time.time())
+    payload = platform_emitter_contract_snapshot(now=time.time())
+    payload["event_bridge"] = projection_event_bridge_snapshot(now=time.time())
+    return payload
 
 
 @router.get("/projection-pilot/readiness-contract", dependencies=[Depends(require_token)])
@@ -2133,6 +2169,38 @@ async def node_projection_demand_surface_lifecycle_contract() -> dict[str, Any]:
 @router.get("/projection-demand/restore-contract", dependencies=[Depends(require_token)])
 async def node_projection_demand_restore_contract() -> dict[str, Any]:
     return projection_demand_restore_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-demand/yjs", dependencies=[Depends(require_token)])
+async def node_projection_demand_yjs(webspace_id: str | None = None) -> dict[str, Any]:
+    return await read_projection_demand_yjs(webspace_id=_coerce_node_webspace_id(webspace_id))
+
+
+@router.post("/projection-demand/yjs/materialize", dependencies=[Depends(require_token)])
+async def node_projection_demand_yjs_materialize(
+    payload: ProjectionDemandYjsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or ProjectionDemandYjsMaterializeRequest()
+    return await materialize_projection_demand_to_yjs(
+        webspace_id=_coerce_node_webspace_id(request_payload.webspace_id or webspace_id),
+        now=request_payload.now,
+    )
+
+
+@router.post("/projection-demand/yjs/restore", dependencies=[Depends(require_token)])
+async def node_projection_demand_yjs_restore(
+    payload: ProjectionDemandYjsRestoreRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or ProjectionDemandYjsRestoreRequest()
+    return await restore_projection_demand_from_yjs(
+        webspace_id=_coerce_node_webspace_id(request_payload.webspace_id or webspace_id),
+        include_hidden=request_payload.include_hidden,
+        include_stale=request_payload.include_stale,
+        stale_after_s=request_payload.stale_after_s,
+        now=request_payload.now,
+    )
 
 
 @router.get("/projection-demand", dependencies=[Depends(require_token)])
@@ -2166,12 +2234,14 @@ async def node_projection_demand_client(payload: ClientProjectionDemandRequest) 
         )
     except ValueError as exc:
         _raise_400(str(exc))
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
     return {
         "ok": True,
         "accepted": True,
         "webspace_id": target_webspace_id,
         "record": record.to_dict(),
         "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
     }
 
 
@@ -2191,12 +2261,14 @@ async def node_projection_demand_browser_state(payload: BrowserProjectionDemandS
         updated_at=payload.updated_at,
     )
     stored = write_client_subscription_record(record)
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
     return {
         "ok": True,
         "accepted": True,
         "webspace_id": target_webspace_id,
         "record": stored.to_dict(),
         "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
     }
 
 
@@ -2219,12 +2291,14 @@ async def node_projection_demand_client_touch(
     )
     if record is None:
         raise HTTPException(status_code=404, detail="projection_demand_session_not_found")
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
     return {
         "ok": True,
         "accepted": True,
         "webspace_id": target_webspace_id,
         "record": record.to_dict(),
         "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
     }
 
 
@@ -2240,12 +2314,14 @@ async def node_projection_demand_client_delete(
         session_id=session_id,
         webspace_id=target_webspace_id,
     )
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
     return {
         "ok": True,
         "accepted": deleted,
         "webspace_id": target_webspace_id,
         "deleted": deleted,
         "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
     }
 
 
@@ -2301,6 +2377,32 @@ async def node_projection_records_browser_adapter_contract() -> dict[str, Any]:
 @router.get("/projection-records/node-multiplicity-contract", dependencies=[Depends(require_token)])
 async def node_projection_records_node_multiplicity_contract() -> dict[str, Any]:
     return projection_records_node_multiplicity_contract_snapshot(now=time.time())
+
+
+@router.get("/platform/nodes/contract", dependencies=[Depends(require_token)])
+async def node_platform_nodes_contract() -> dict[str, Any]:
+    return platform_nodes_contract_snapshot(now=time.time())
+
+
+@router.get("/platform/nodes/yjs", dependencies=[Depends(require_token)])
+async def node_platform_nodes_yjs(webspace_id: str | None = None) -> dict[str, Any]:
+    return await read_platform_nodes_yjs(webspace_id=_coerce_node_webspace_id(webspace_id))
+
+
+@router.post("/platform/nodes/materialize", dependencies=[Depends(require_token)])
+async def node_platform_nodes_materialize(
+    payload: PlatformNodeYjsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or PlatformNodeYjsMaterializeRequest()
+    return await materialize_platform_node_to_yjs(
+        webspace_id=_coerce_node_webspace_id(request_payload.webspace_id or webspace_id),
+        node_id=request_payload.node_id,
+        status=request_payload.status,
+        diagnostics=request_payload.diagnostics,
+        projections=request_payload.projections,
+        now=request_payload.now,
+    )
 
 
 @router.get("/projection-records/yjs/cache", dependencies=[Depends(require_token)])

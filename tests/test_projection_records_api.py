@@ -102,6 +102,59 @@ def test_projection_records_node_multiplicity_contract_endpoint_exposes_browser_
     assert payload["browser_rules"]["do_not_assume_single_anonymous_node"] is True
 
 
+def test_platform_nodes_contract_endpoint_reserves_branch() -> None:
+    client = _make_client()
+
+    resp = client.get("/api/node/platform/nodes/contract")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["contract"] == "adaos.platform-nodes.reserved-yjs-branch.v1"
+    assert payload["ready_for_mvp"] is True
+    assert payload["yjs_path"] == "platform/nodes"
+    assert payload["boundaries"]["browser_may_write"] is False
+
+
+def test_platform_nodes_api_materializes_reserved_branch(monkeypatch) -> None:
+    client = _make_client()
+    from adaos.apps.api import node_api
+
+    captured = {}
+
+    async def fake_materialize_platform_node_to_yjs(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "accepted": True,
+            "webspace_id": kwargs["webspace_id"],
+            "node_id": kwargs["node_id"],
+            "yjs_path": "platform/nodes",
+            "written": True,
+        }
+
+    monkeypatch.setattr(
+        node_api,
+        "materialize_platform_node_to_yjs",
+        fake_materialize_platform_node_to_yjs,
+    )
+
+    resp = client.post(
+        "/api/node/platform/nodes/materialize",
+        json={
+            "webspace_id": "desktop",
+            "node_id": "node-a",
+            "status": {"state": "ready"},
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["yjs_path"] == "platform/nodes"
+    assert captured["webspace_id"] == "desktop"
+    assert captured["node_id"] == "node-a"
+    assert captured["status"] == {"state": "ready"}
+
+
 def test_projection_records_browser_adapter_contract_endpoint_exposes_cache_rules() -> None:
     client = _make_client()
 

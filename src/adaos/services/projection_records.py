@@ -160,6 +160,7 @@ def _browser_cache_entry_metadata(
     projection_key: str,
     record_payload: Mapping[str, Any] | None,
     cached: bool,
+    missing_reason: str | None = None,
 ) -> dict[str, Any]:
     meta = record_payload.get("meta") if isinstance(record_payload, Mapping) else None
     meta_payload = meta if isinstance(meta, Mapping) else {}
@@ -191,7 +192,7 @@ def _browser_cache_entry_metadata(
         "record_fingerprint": record_fingerprint,
         "status": status,
         "source": "ProjectionRecord registry" if cached else "browser demand",
-        "missing_reason": None if cached else "demanded_projection_record_not_materialized",
+        "missing_reason": None if cached else str(missing_reason or "demanded_projection_record_not_materialized"),
     }
 
 
@@ -199,13 +200,14 @@ def _browser_projection_lifecycle(
     *,
     record_payload: Mapping[str, Any] | None,
     cached: bool,
+    missing_reason: str | None = None,
 ) -> dict[str, Any]:
     meta = record_payload.get("meta") if isinstance(record_payload, Mapping) else None
     meta_payload = meta if isinstance(meta, Mapping) else {}
     record_status = str(record_payload.get("status") or "").strip().lower() if cached else None
     if not cached:
-        state = "pending"
-        reason = "demanded_projection_record_not_materialized"
+        reason = str(missing_reason or "demanded_projection_record_not_materialized")
+        state = "error" if reason == "projection_access_denied" else "pending"
     elif record_status in {"loading", "refreshing", "pending"}:
         state = "refreshing"
         reason = str(meta_payload.get("lifecycle_reason") or record_status or "refreshing")
@@ -249,6 +251,41 @@ def _browser_lifecycle_summary(entries: Iterable[Mapping[str, Any]]) -> dict[str
         "stale_projection_keys": projection_keys_by_state["stale"],
         "error_projection_keys": projection_keys_by_state["error"],
     }
+
+
+def _consumer_roles(consumers: Iterable[Mapping[str, Any]]) -> set[str]:
+    return {
+        str(item.get("role") or "").strip().lower()
+        for item in consumers
+        if isinstance(item, Mapping) and str(item.get("role") or "").strip()
+    }
+
+
+def _trusted_access_roles() -> set[str]:
+    return {"owner", "operator", "admin", "administrator", "dev", "developer", "maintainer"}
+
+
+def _projection_record_access_allowed(
+    record_payload: Mapping[str, Any],
+    consumers: Iterable[Mapping[str, Any]],
+) -> tuple[bool, str | None, dict[str, Any]]:
+    meta = record_payload.get("meta") if isinstance(record_payload.get("meta"), Mapping) else {}
+    access = meta.get("access") if isinstance(meta.get("access"), Mapping) else {}
+    audience = str(access.get("audience") or "shared").strip().lower()
+    sensitive = bool(access.get("sensitive"))
+    roles = _consumer_roles(consumers)
+    trusted_roles = _trusted_access_roles()
+    if sensitive and not roles.intersection(trusted_roles):
+        return False, "projection_access_denied", dict(access)
+    if audience == "shared":
+        return True, None, dict(access)
+    if audience == "owner":
+        return bool(roles.intersection({"owner", "operator", "admin", "administrator"})), "projection_access_denied", dict(access)
+    if audience == "dev":
+        return bool(roles.intersection({"dev", "developer", "operator", "admin", "administrator"})), "projection_access_denied", dict(access)
+    if audience == "guest":
+        return bool(roles.intersection({"guest", "owner", "operator", "admin", "administrator", "dev", "developer"})), "projection_access_denied", dict(access)
+    return True, None, dict(access)
 
 
 def browser_projection_record_snapshot(
@@ -298,6 +335,7 @@ def browser_projection_record_snapshot(
     entries: list[dict[str, Any]] = []
     records: dict[str, Any] = {}
     missing_projection_keys: list[str] = []
+    access_denied_projection_keys: list[str] = []
     for projection_key in demanded_keys:
         record = records_by_projection.get(projection_key)
         consumer_items = consumers_by_projection.get(projection_key, [])
@@ -326,6 +364,35 @@ def browser_projection_record_snapshot(
             )
             continue
         record_payload = record.to_dict()
+        access_allowed, access_reason, access = _projection_record_access_allowed(record_payload, consumer_items)
+        if not access_allowed:
+            access_denied_projection_keys.append(projection_key)
+            entries.append(
+                {
+                    "projection_key": projection_key,
+                    "cached": False,
+                    "record": None,
+                    "consumer_total": len(consumer_items),
+                    "consumers": consumer_items,
+                    "access": access,
+                    "access_denied": True,
+                    "lifecycle": _browser_projection_lifecycle(
+                        record_payload=None,
+                        cached=False,
+                        missing_reason=access_reason,
+                    ),
+                    "cache": _browser_cache_entry_metadata(
+                        webspace_id=webspace_token or None,
+                        client_id=client_token or None,
+                        session_id=session_token or None,
+                        projection_key=projection_key,
+                        record_payload=None,
+                        cached=False,
+                        missing_reason=access_reason,
+                    ),
+                }
+            )
+            continue
         records[projection_key] = record_payload
         entries.append(
             {
@@ -334,6 +401,8 @@ def browser_projection_record_snapshot(
                 "record": record_payload,
                 "consumer_total": len(consumer_items),
                 "consumers": consumer_items,
+                "access": record_payload.get("meta", {}).get("access"),
+                "access_denied": False,
                 "lifecycle": _browser_projection_lifecycle(
                     record_payload=record_payload,
                     cached=True,
@@ -363,6 +432,7 @@ def browser_projection_record_snapshot(
             "projection_keys": demanded_keys,
             "requested_projection_keys": sorted(requested_keys or []),
             "missing_projection_keys": missing_projection_keys,
+            "access_denied_projection_keys": access_denied_projection_keys,
             "records": records,
             "consumers": consumers_by_projection,
         }
@@ -387,12 +457,14 @@ def browser_projection_record_snapshot(
         "demanded_projection_total": len(demanded_keys),
         "record_total": len(records),
         "missing_record_total": len(missing_projection_keys),
+        "access_denied_total": len(access_denied_projection_keys),
         "ready_record_total": sum(1 for item in records.values() if item.get("status") == "ready"),
         "stale_record_total": sum(1 for item in records.values() if item.get("status") == "stale"),
         "error_record_total": sum(1 for item in records.values() if item.get("status") == "error"),
         "lifecycle_summary": lifecycle_summary,
         "projection_keys": demanded_keys,
         "missing_projection_keys": missing_projection_keys,
+        "access_denied_projection_keys": access_denied_projection_keys,
         "records": records,
         "entries": entries,
         "entry_cache_keys": [str(entry["cache"]["key"]) for entry in entries],
@@ -417,6 +489,7 @@ def browser_projection_record_snapshot(
             "browser_read": True,
             "browser_write": False,
             "skill_write": False,
+            "access_filter": "ProjectionRecord.meta.access",
             "client_session_filter": True,
             "write_policy": "core-owned-cache-only",
             "legacy_fallback": "compatibility-only",
@@ -447,6 +520,7 @@ def browser_projection_adapter_contract_snapshot(*, now: float | None = None) ->
             "reuse_cached_views": True,
             "prefer_nested_projection_path": True,
             "avoid_observe_deep_data": True,
+            "enforce_access_metadata": True,
         },
         "cache_model": {
             "browser_cache_key": "browser-projection-records:{webspace_id}:{client_id}:{session_id}:{projection_keys}",
@@ -462,6 +536,7 @@ def browser_projection_adapter_contract_snapshot(*, now: float | None = None) ->
             "adapter reads browser-cache or data/projectionRecords.records[projection_key]",
             "adapter reuses entry cache when fingerprint/etag is unchanged",
             "adapter observes only projectionRecords or a stable projection-key path where available",
+            "adapter omits records blocked by ProjectionRecord.meta.access",
         ],
         "lifecycle_states": ["pending", "refreshing", "ready", "stale", "error"],
         "roadmap_items": [
@@ -477,6 +552,7 @@ def browser_projection_adapter_contract_snapshot(*, now: float | None = None) ->
             "entry_fingerprints",
             "entry_etags",
             "lifecycle_summary",
+            "access_denied_projection_keys",
         ],
     }
 

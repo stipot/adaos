@@ -11,16 +11,18 @@ def projection_demand_restore_contract_snapshot(*, now: float | None = None) -> 
 
     return {
         "contract": PROJECTION_DEMAND_RESTORE_CONTRACT,
-        "ready_for_mvp": False,
-        "status": "contract_only",
+        "ready_for_mvp": True,
+        "status": "implemented",
         "updated_at": float(now if now is not None else 0.0),
         "source_of_truth": {
             "active_demand": "/api/node/projection-demand",
+            "yjs_path": "runtime/clients",
+            "yjs_endpoint": "/api/node/projection-demand/yjs",
             "client_subscription_record": "adaos.client-projection-subscription.v1",
             "surface_lifecycle_mapping": "adaos.browser-surface-lifecycle-subscriptions.v1",
         },
         "runtime_helpers": {
-            "projection_runtime": "planned ProjectionRuntime.restore_active_demand",
+            "projection_runtime": "ProjectionRuntime.restore_active_demand",
             "stream_runtime": "planned StreamRuntime.restore_active_demand",
         },
         "restore_modes": [
@@ -68,14 +70,18 @@ def projection_demand_restore_contract_snapshot(*, now: float | None = None) -> 
             "skill_restores_local_memory": True,
             "browser_writes_restore_state": False,
             "restore_writes_yjs_directly": False,
+            "restore_writes_projection_payloads": False,
         },
         "evidence": [
             "/api/node/projection-demand",
             "/api/node/projection-demand/contract",
+            "/api/node/projection-demand/yjs",
+            "/api/node/projection-demand/yjs/materialize",
+            "/api/node/projection-demand/yjs/restore",
+            "ProjectionRuntime.restore_active_demand",
         ],
         "remaining_work": [
-            "add SDK/runtime restore helpers",
-            "restore active demand during skill activation",
+            "restore stream receiver demand during skill activation",
             "add regression coverage for stale and hidden consumers",
         ],
     }

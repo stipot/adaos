@@ -8,6 +8,7 @@ import time
 from types import SimpleNamespace
 from typing import Any, Mapping
 
+from adaos.domain import enrich_event_payload
 from adaos.sdk.core._ctx import require_ctx
 
 from .bus import BusNotAvailable
@@ -27,8 +28,38 @@ def publish(topic: str, payload: Mapping[str, Any] | None = None, **meta: Any) -
     ctx = require_ctx("sdk.events.publish")
     publish_fn = _ensure_bus(ctx)
 
-    data = dict(payload or {})
-    extra_meta = {k: v for k, v in meta.items() if k not in {"source", "ts"}}
+    data = enrich_event_payload(
+        payload,
+        event_id=meta.get("event_id"),
+        generate_event_id=bool(meta.get("generate_event_id", False)),
+        source_authority=meta.get("source_authority"),
+        actor=meta.get("actor"),
+        scope=meta.get("scope"),
+        trace_id=meta.get("trace_id"),
+        cause_event_id=meta.get("cause_event_id"),
+        schema=meta.get("schema"),
+        version=meta.get("version"),
+        priority=meta.get("priority"),
+    )
+    extra_meta = {
+        k: v
+        for k, v in meta.items()
+        if k
+        not in {
+            "source",
+            "ts",
+            "event_id",
+            "generate_event_id",
+            "source_authority",
+            "actor",
+            "scope",
+            "trace_id",
+            "cause_event_id",
+            "schema",
+            "version",
+            "priority",
+        }
+    }
     if extra_meta:
         meta_container = dict(data.get("_meta", {}))
         meta_container.update(extra_meta)

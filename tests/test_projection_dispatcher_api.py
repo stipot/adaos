@@ -76,13 +76,14 @@ def test_projection_runtime_ownership_endpoint_exposes_split() -> None:
     payload = resp.json()
     assert payload["contract"] == "adaos.projection-runtime-ownership.v1"
     assert payload["ready_for_mvp"] is True
-    assert payload["boundary_total"] == 5
+    assert payload["boundary_total"] == 6
     assert payload["forbidden_total"] >= 5
     areas = {item["area"]: item for item in payload["boundaries"]}
     assert "select demanded projections" in areas["refresh_dispatch"]["core_owned"]
     assert "write full active subscription set" in areas["browser_demand"]["browser_owned"]
     assert "refresh payload for owned projection keys" in areas["refresh_dispatch"]["skill_owned"]
     assert "browser writes to data/projectionRecords" in areas["browser_demand"]["forbidden"]
+    assert "platform_nodes_branch" in areas
     assert "/api/node/projection-dispatcher/core-skill-contract" in payload["evidence"]
 
 

@@ -334,3 +334,82 @@ def test_browser_projection_record_snapshot_exposes_lifecycle_summary() -> None:
     assert snapshot["lifecycle_summary"]["pending_projection_keys"] == ["status-card:missing"]
     assert snapshot["lifecycle_summary"]["refreshing_projection_keys"] == ["status-card:loading"]
     assert snapshot["lifecycle_summary"]["stale_projection_keys"] == ["status-card:stale"]
+
+
+def test_browser_projection_record_snapshot_enforces_access_metadata() -> None:
+    write_projection_record(
+        make_projection_record(
+            projection_key="status-card:dev",
+            kind="status-card",
+            webspace_id="desktop",
+            data={"summary": "dev only"},
+            access={"audience": "dev", "sensitive": True},
+        )
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-guest",
+            device_id="desktop",
+            session_id="session-guest",
+            webspace_id="desktop",
+            role="guest",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:dev",
+                    consumer_id="widget:dev",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    snapshot = browser_projection_record_snapshot(
+        webspace_id="desktop",
+        client_id="browser-guest",
+        session_id="session-guest",
+    )
+
+    assert snapshot["record_total"] == 0
+    assert snapshot["access_denied_total"] == 1
+    assert snapshot["access_denied_projection_keys"] == ["status-card:dev"]
+    assert snapshot["entries"][0]["access_denied"] is True
+    assert snapshot["entries"][0]["cache"]["missing_reason"] == "projection_access_denied"
+    assert snapshot["entries"][0]["lifecycle"]["state"] == "error"
+
+
+def test_browser_projection_record_snapshot_allows_dev_access_role() -> None:
+    write_projection_record(
+        make_projection_record(
+            projection_key="status-card:dev",
+            kind="status-card",
+            webspace_id="desktop",
+            data={"summary": "dev only"},
+            access={"audience": "dev", "sensitive": True},
+        )
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-dev",
+            device_id="desktop",
+            session_id="session-dev",
+            webspace_id="desktop",
+            role="dev",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:dev",
+                    consumer_id="widget:dev",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    snapshot = browser_projection_record_snapshot(
+        webspace_id="desktop",
+        client_id="browser-dev",
+        session_id="session-dev",
+    )
+
+    assert snapshot["record_total"] == 1
+    assert snapshot["access_denied_total"] == 0
+    assert snapshot["records"]["status-card:dev"]["data"]["summary"] == "dev only"

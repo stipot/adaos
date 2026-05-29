@@ -73,6 +73,7 @@ class ProjectionDispatchReport:
 
 ProjectionRefreshHandler = Callable[[ProjectionRefreshContext], Any | Awaitable[Any]]
 PROJECTION_DISPATCHER_MEMORY_CONTRACT = "adaos.projection-dispatcher.memory-vs-yjs.v1"
+PROJECTION_LIFECYCLE_EVENT = "adaos.projection.lifecycle.changed"
 
 
 _LOCK = RLock()
@@ -152,6 +153,45 @@ def _set_lifecycle(
             "changed_at": changed_at,
             "event_type": context.event.type,
         }
+
+
+def _publish_lifecycle_event(
+    bus: Any | None,
+    *,
+    context: ProjectionRefreshContext,
+    status: str,
+    reason: str | None = None,
+    error: str | None = None,
+    ts: float | None = None,
+) -> None:
+    if bus is None:
+        return
+    try:
+        from adaos.services.eventbus import emit
+
+        emit(
+            bus,
+            PROJECTION_LIFECYCLE_EVENT,
+            {
+                "webspace_id": context.webspace_id,
+                "projection_key": context.projection_key,
+                "status": status,
+                "reason": reason,
+                "error": error,
+                "event_type": context.event.type,
+                "consumer_total": len(context.consumers),
+            },
+            "projection.dispatcher",
+            source_authority="platform",
+            scope={"webspace_id": context.webspace_id},
+            schema=PROJECTION_LIFECYCLE_EVENT,
+            version=1,
+            priority="normal",
+            generate_event_id=True,
+            ts=ts,
+        )
+    except Exception:
+        return
 
 
 def projection_dispatcher_snapshot() -> dict[str, Any]:
@@ -494,6 +534,7 @@ async def dispatch_demanded_projection_refresh(
     include_hidden: bool = True,
     include_stale: bool = True,
     stale_after_s: float | None = None,
+    bus: Any | None = None,
     now: float | None = None,
 ) -> ProjectionDispatchReport:
     started_at = float(now if now is not None else time.time())
@@ -515,10 +556,23 @@ async def dispatch_demanded_projection_refresh(
     _inc_stat("selected_total", len(selected))
     for context in selected:
         _set_lifecycle(context=context, status="pending", reason="demanded", ts=started_at)
+        _publish_lifecycle_event(
+            bus,
+            context=context,
+            status="requested",
+            reason="demanded",
+            ts=started_at,
+        )
         handler = _handler_for(context.projection_key)
         if handler is None:
             _inc_stat("skipped_total")
             _set_lifecycle(context=context, status="stale", reason="no_handler")
+            _publish_lifecycle_event(
+                bus,
+                context=context,
+                status="stale",
+                reason="no_handler",
+            )
             skipped.append(
                 ProjectionRefreshResult(
                     projection_key=context.projection_key,
@@ -531,6 +585,12 @@ async def dispatch_demanded_projection_refresh(
         if not _try_begin_refresh(context):
             _inc_stat("skipped_total")
             _set_lifecycle(context=context, status="stale", reason="coalesced")
+            _publish_lifecycle_event(
+                bus,
+                context=context,
+                status="stale",
+                reason="coalesced",
+            )
             skipped.append(
                 ProjectionRefreshResult(
                     projection_key=context.projection_key,
@@ -542,6 +602,12 @@ async def dispatch_demanded_projection_refresh(
             continue
         try:
             _set_lifecycle(context=context, status="refreshing", reason="handler_started")
+            _publish_lifecycle_event(
+                bus,
+                context=context,
+                status="refreshing",
+                reason="handler_started",
+            )
             value = handler(context)
             if inspect.isawaitable(value):
                 value = await value
@@ -551,6 +617,12 @@ async def dispatch_demanded_projection_refresh(
             refreshed.append(result)
             _inc_stat("refreshed_total")
             _set_lifecycle(context=context, status=str(result.status or "ready"), reason=result.reason)
+            _publish_lifecycle_event(
+                bus,
+                context=context,
+                status=str(result.status or "ready"),
+                reason=result.reason,
+            )
         except Exception as exc:
             _inc_stat("error_total")
             text = f"{type(exc).__name__}: {exc}"
@@ -562,6 +634,13 @@ async def dispatch_demanded_projection_refresh(
             )
             errors.append(result)
             _set_lifecycle(context=context, status="error", reason="handler_error", error=text)
+            _publish_lifecycle_event(
+                bus,
+                context=context,
+                status="error",
+                reason="handler_error",
+                error=text,
+            )
         finally:
             _end_refresh(context)
     return ProjectionDispatchReport(
@@ -577,6 +656,7 @@ async def dispatch_demanded_projection_refresh(
 
 
 __all__ = [
+    "PROJECTION_LIFECYCLE_EVENT",
     "ProjectionDispatchReport",
     "ProjectionRefreshContext",
     "ProjectionRefreshHandler",

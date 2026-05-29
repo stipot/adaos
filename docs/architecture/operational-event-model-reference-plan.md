@@ -331,15 +331,15 @@ Use this checklist for every implementation slice touching the event model.
 | --- | --- | --- |
 | Communication prerequisites | Closed for current transport scope | Complete |
 | Event taxonomy | Stable vocabulary | Complete |
-| Shared event envelope | Helpers and compatibility rules | Contract helper implemented on harvest branch; selected producer adoption remains an MVP blocker |
+| Shared event envelope | Helpers and compatibility rules | Helper implemented; SDK events, eventbus emit helper, status-card events, and dispatcher lifecycle events carry `_meta.event` metadata |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
-| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Implemented through existing `StatusRegistry`; live demanded refresh bridge remains an MVP blocker |
+| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Implemented through existing `StatusRegistry`; live demanded refresh bridge handles `adaos.status.card.changed` |
 | Projection record ABI | Canonical record shape | Implemented on harvest branch; arbitrary runtime write endpoint removed from the node API |
-| Browser subscription ABI | Full-overwrite demand records | Server/domain shape implemented; browser/Yjs source-of-truth adapter remains an MVP blocker |
-| Node-aware Yjs envelope | Reserved top-level ownership shape | ProjectionRecord cache carries node metadata; reserved `platform/nodes/<node_id>/...` branch remains an MVP blocker |
-| Client demand runtime | Page/widget/modal/pinned consumers | Server mapper exists; browser runtime migration remains an MVP blocker |
-| Shared dispatcher | Per-webspace demanded refresh | Dispatcher contract implemented; SDK registration API and live eventbus bridge remain MVP blockers |
-| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Status-card bridge implemented; minimal notifications and diagnostics remain MVP blockers |
+| Browser subscription ABI | Full-overwrite demand records | Server/domain shape, browser-state mapper, Angular YDoc demand registry, and `runtime/clients` Yjs materialization/restore are implemented |
+| Node-aware Yjs envelope | Reserved top-level ownership shape | ProjectionRecord cache carries node metadata and `platform/nodes/<node_id>/...` is reserved and materializable |
+| Client demand runtime | Page/widget/modal/pinned consumers | Server mapper exists and browser YDoc demand writes full records; primary ProjectionRecord read adoption remains the active client gap |
+| Shared dispatcher | Per-webspace demanded refresh | Dispatcher contract, SDK registration/restore helpers, lifecycle events, and live eventbus bridge are implemented for the status-card family |
+| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Status-card bridge and platform node diagnostics branch are implemented; notification ProjectionRecord migration remains open |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by previous rows |
 
 ## Completion Definition

@@ -70,7 +70,19 @@ class StatusRegistry:
             self._prune_locked()
             self._last_publish_latency_ms = (time.perf_counter() - started) * 1000.0
         if changed and emit_event and self._bus is not None:
-            emit(self._bus, "adaos.status.card.changed", {"card": stored.to_dict()}, "status.registry")
+            scope = {"webspace_id": stored.webspace_id} if stored.webspace_id else None
+            emit(
+                self._bus,
+                "adaos.status.card.changed",
+                {"card": stored.to_dict(), "webspace_id": stored.webspace_id},
+                "status.registry",
+                source_authority="platform",
+                scope=scope,
+                schema="adaos.status.card.changed",
+                version=1,
+                priority="normal",
+                generate_event_id=True,
+            )
         return {"changed": changed, "card": stored.to_dict(), "key": key}
 
     def publish_many(self, cards: Iterable[StatusCard | dict[str, Any]], *, emit_event: bool = True) -> dict[str, Any]:
@@ -176,6 +188,12 @@ def register_status_registry(bus: Any, registry: StatusRegistry | None = None) -
 
     bus.subscribe("adaos.status.card.single", _publish_one)
     bus.subscribe("adaos.status.card.batch", _publish_many)
+    try:
+        from adaos.services.projection_event_bridge import register_projection_event_bridge
+
+        register_projection_event_bridge(bus)
+    except Exception:
+        pass
     return target
 
 

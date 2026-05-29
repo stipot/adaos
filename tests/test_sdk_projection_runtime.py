@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+import pytest
+
+from adaos.domain import make_client_subscription_record, make_projection_subscription
 from adaos.sdk.data.projections import (
     DirtyRouter,
     ProjectionRuntime,
@@ -10,8 +13,20 @@ from adaos.sdk.data.projections import (
     SectionCache,
     StreamReceiver,
     StreamRuntime,
+    clear_projection_demand,
+    has_projection_demand,
+    register_projection_dispatcher_handlers,
+    restore_active_projection_demand,
     stable_payload_fingerprint,
+    unregister_projection_dispatcher_handlers,
 )
+from adaos.services.projection_demand import clear_projection_demand_registry, write_client_subscription_record
+from adaos.services.projection_dispatcher import (
+    clear_projection_dispatcher,
+    dispatch_demanded_projection_refresh,
+    registered_projection_refresh_handlers,
+)
+from adaos.services.projection_records import clear_projection_record_registry, get_projection_record
 
 
 class _FakeSubnet:
@@ -26,6 +41,19 @@ class _FakeSubnet:
 class _Payload:
     name: str
     values: list[int]
+
+
+@pytest.fixture(autouse=True)
+def _clear_projection_demand_registry() -> None:
+    clear_projection_demand()
+    clear_projection_demand_registry()
+    clear_projection_dispatcher()
+    clear_projection_record_registry()
+    yield
+    clear_projection_demand()
+    clear_projection_demand_registry()
+    clear_projection_dispatcher()
+    clear_projection_record_registry()
 
 
 def test_stable_payload_fingerprint_is_order_independent_for_mappings() -> None:
@@ -227,6 +255,96 @@ def test_projection_runtime_records_event_pressure_counters() -> None:
     assert by_event["browser.session.changed"]["coalesced_total"] == 1
     assert by_event["browser.session.changed"]["last_sections"] == ["browsers.summary"]
     assert diagnostics["last_refresh_event"]["topic"] == "browser.session.changed"
+
+
+def test_projection_runtime_registers_dispatcher_handlers_and_restores_demand() -> None:
+    runtime = ProjectionRuntime(
+        "demo_skill",
+        projections=[
+            ProjectionSlot(
+                "status-card:runtime",
+                build=lambda context: {"summary": context.webspace_id},
+                kind="status-card",
+                audience="shared",
+            )
+        ],
+    )
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:runtime",
+                    consumer_id="widget:runtime",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    registered = runtime.register_dispatcher_handlers()
+    restored = runtime.restore_active_demand(webspace_id="desktop")
+    report = asyncio.run(
+        dispatch_demanded_projection_refresh(
+            {
+                "type": "demo.event",
+                "payload": {"webspace_id": "desktop"},
+                "source": "test",
+                "ts": 20.0,
+            }
+        )
+    )
+    stored = get_projection_record(webspace_id="desktop", projection_key="status-card:runtime")
+
+    assert registered == ["status-card:runtime"]
+    assert registered_projection_refresh_handlers() == ["status-card:runtime"]
+    assert restored["restored_total"] == 1
+    assert report.refreshed[0].status == "ready"
+    assert stored is not None
+    assert stored.data == {"summary": "desktop"}
+    assert runtime.diagnostics_snapshot()["dispatcher_handlers"] == ["status-card:runtime"]
+    assert runtime.unregister_dispatcher_handlers() == ["status-card:runtime"]
+    assert registered_projection_refresh_handlers() == []
+
+
+def test_projection_runtime_module_helpers_register_restore_and_unregister() -> None:
+    write_client_subscription_record(
+        make_client_subscription_record(
+            client_id="browser-1",
+            device_id="desktop",
+            session_id="session-1",
+            webspace_id="desktop",
+            role="operator",
+            subscriptions=[
+                make_projection_subscription(
+                    projection_key="status-card:helper",
+                    consumer_id="widget:helper",
+                    consumer_kind="widget",
+                )
+            ],
+        )
+    )
+
+    registered = register_projection_dispatcher_handlers(
+        "helper_skill",
+        projections=[
+            ProjectionSlot(
+                "status-card:helper",
+                build=lambda: {"summary": "helper"},
+                kind="status-card",
+            )
+        ],
+    )
+    restored = restore_active_projection_demand("helper_skill", webspace_id="desktop")
+    removed = unregister_projection_dispatcher_handlers("helper_skill")
+
+    assert registered == ["status-card:helper"]
+    assert restored["restored_total"] == 1
+    assert removed == ["status-card:helper"]
 
 
 def test_section_cache_expires_and_invalidates_by_webspace() -> None:

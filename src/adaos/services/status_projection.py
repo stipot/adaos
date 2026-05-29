@@ -227,18 +227,35 @@ def platform_emitter_contract_snapshot(*, now: float | None = None) -> dict[str,
         "ready_for_mvp": True,
         "updated_at": float(now if now is not None else time.time()),
         "projection_family": f"{STATUS_CARD_PROJECTION_PREFIX}*",
+        "projection_families": [
+            f"{STATUS_CARD_PROJECTION_PREFIX}*",
+            "platform/notifications",
+            "platform/runtime-diagnostics",
+        ],
         "existing_status_registry": True,
         "handler": STATUS_CARD_WILDCARD_HANDLER,
+        "event_bridge": {
+            "topic": "adaos.status.card.changed",
+            "dispatcher": "dispatch_demanded_projection_refresh",
+            "materializer": "materialize_projection_records_to_yjs",
+            "coalesced_by": ["webspace_id", "projection_key"],
+        },
         "records": {
             "kind": STATUS_CARD_PROJECTION_KIND,
             "source": "services.status.StatusRegistry",
             "materialize": "materialize_status_card_projection_records",
+        },
+        "platform_sources": {
+            "status_cards": "services.status.StatusRegistry",
+            "notifications": "runtime/notifications via existing OperationManager projection",
+            "runtime_diagnostics": "platform/nodes/<node_id>/diagnostics reserved branch",
         },
         "boundaries": {
             "status_cards_use_existing_registry": True,
             "projection_records_are_core_owned": True,
             "browser_writes_projection_records": False,
             "skills_publish_status_cards_via_sdk": True,
+            "platform_nodes_branch_reserved": True,
         },
     }
 
