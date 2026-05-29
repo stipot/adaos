@@ -1,6 +1,6 @@
 # Operational Event Model Reference Plan
 
-Snapshot date: 2026-05-15.
+Snapshot date: 2026-05-29.
 
 This document is the reference execution plan for completing the AdaOS
 operational event model correctly.
@@ -76,6 +76,8 @@ Required artifacts:
 - projection record shape
 - browser subscription record shape
 - regression tests for event envelope helpers and eventbus pressure guardrails
+- removal of arbitrary runtime ProjectionRecord write surfaces from browser/API
+  exposure
 
 Exit criteria:
 
@@ -102,6 +104,7 @@ Required artifacts:
   into subscription records
 - soft session sanitation rules that do not act as projection activity TTL
 - client tests for multiple simultaneous consumers
+- startup and skill-activation restore from Yjs-written subscription state
 
 Exit criteria:
 
@@ -125,6 +128,11 @@ Required artifacts:
 - no-cross-webspace-churn tests
 - lifecycle publication for pending, refreshing, ready, stale, and error
 - pressure observability for coalesced, superseded, skipped, and dropped work
+- skill-facing SDK helpers for registering and unregistering projection refresh
+  handlers, binding them to event topics, and restoring active demand on skill
+  activation
+- a live eventbus bridge that routes selected platform/domain topics through
+  the dispatcher without direct Yjs writes
 
 Exit criteria:
 
@@ -133,6 +141,7 @@ Exit criteria:
 - dispatcher coalescing preserves evidence of incoming pressure
 - services can keep richer memory state than they publish to Yjs
 - existing eventbus guardrails remain visible through incident artifacts
+- Yjs materialization is demanded-only, fingerprint-gated, and set-if-changed
 
 ### Slice 4. Platform Emitters Pilot
 
@@ -155,6 +164,7 @@ Required artifacts:
 - operator-visible stale/error semantics
 - tests for versioning, fingerprinting, dedupe, TTL/staleness, and access
   metadata
+- access filtering on browser reads before sensitive diagnostics are exposed
 
 Exit criteria:
 
@@ -321,15 +331,15 @@ Use this checklist for every implementation slice touching the event model.
 | --- | --- | --- |
 | Communication prerequisites | Closed for current transport scope | Complete |
 | Event taxonomy | Stable vocabulary | Complete |
-| Shared event envelope | Helpers and compatibility rules | Open |
+| Shared event envelope | Helpers and compatibility rules | Helper implemented; SDK events, eventbus emit helper, status-card events, and dispatcher lifecycle events carry `_meta.event` metadata |
 | Named-entity ABI | Records, resolver result, lifecycle topics, invalidation | Mostly complete; consumer migration remains |
-| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Open |
-| Projection record ABI | Canonical record shape | Open |
-| Browser subscription ABI | Full-overwrite demand records | Open |
-| Node-aware Yjs envelope | Reserved top-level ownership shape | Partial compatibility metadata only |
-| Client demand runtime | Page/widget/modal/pinned consumers | Open |
-| Shared dispatcher | Per-webspace demanded refresh | Open |
-| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Open |
+| Status-card ABI | Platform-emitter family with dedupe/version/staleness | Implemented through existing `StatusRegistry`; live demanded refresh bridge handles `adaos.status.card.changed` |
+| Projection record ABI | Canonical record shape | Implemented on harvest branch; arbitrary runtime write endpoint removed from the node API |
+| Browser subscription ABI | Full-overwrite demand records | Server/domain shape, browser-state mapper, Angular YDoc demand registry, and `runtime/clients` Yjs materialization/restore are implemented |
+| Node-aware Yjs envelope | Reserved top-level ownership shape | ProjectionRecord cache carries node metadata and `platform/nodes/<node_id>/...` is reserved and materializable |
+| Client demand runtime | Page/widget/modal/pinned consumers | Server mapper exists and browser YDoc demand writes full records; primary ProjectionRecord read adoption remains the active client gap |
+| Shared dispatcher | Per-webspace demanded refresh | Dispatcher contract, SDK registration/restore helpers, lifecycle events, and live eventbus bridge are implemented for the status-card family |
+| Platform emitter pilot | Status/notifications/diagnostics through shared ABI | Status-card bridge and platform node diagnostics branch are implemented; notification ProjectionRecord migration remains open |
 | Infrascope migration | Uses shared ABI and dispatcher | Blocked by previous rows |
 
 ## Completion Definition
@@ -341,6 +351,11 @@ The operational event model can be considered covered when:
 - browser clients can declare multiple active projection demands in one
   webspace
 - the dispatcher refreshes demanded projections without cross-webspace churn
+- dispatcher refreshes are coalesced and fingerprint-gated so event traffic does
+  not create critical Yjs load
+- skills register/unregister projection refresh handlers through the SDK rather
+  than ad hoc local subscription systems
+- runtime browser/API surfaces do not allow arbitrary ProjectionRecord writes
 - named-entity lifecycle changes invalidate consumers without reload-only
   behavior
 - Infrascope or another heavy pilot uses the shared ABI without adding a

@@ -231,6 +231,11 @@ That means the architecture should make room for top-level node-owned branches s
 
 The browser may initially continue to consume simplified aggregate projections, but the storage and event model should not assume a single anonymous node view forever.
 
+MVP implementation reserves `platform/nodes/<node_id>` as a core-owned branch
+for node `status`, `diagnostics`, and `projections` summaries. The existing
+`data/projectionRecords` branch remains the demanded browser-facing projection
+cache and is not replaced by this node branch.
+
 ## Projection Demand Model
 
 ### Browser-Written Subscription Records
@@ -274,6 +279,16 @@ Suggested shape:
   }
 }
 ```
+
+Current MVP implementation:
+
+- browser/API demand is normalized as `ClientSubscriptionRecord`
+- the node can materialize that demand to `runtime/clients` and an inspectable
+  `runtime/projectionDemand` envelope
+- startup restore reads `runtime/clients` back into the in-memory demand
+  registry without writing projection payloads
+- the browser adapter writes full session records for active YDoc-backed
+  projection consumers; add/remove deltas are not the source of truth
 
 ### Active Projection Set
 
@@ -451,6 +466,9 @@ For MVP:
 - owner and guest share the same payload
 - access differences should be expressed through metadata and client behavior, not duplicated payloads
 - if a payload is too sensitive to be shared with guests, it must not be published as a shared webspace projection without an explicit safe-view design
+- browser-cache reads enforce `ProjectionRecord.meta.access` before returning
+  records; blocked records are reported as `projection_access_denied` rather
+  than returned to the client
 
 Suggested MVP access fields:
 

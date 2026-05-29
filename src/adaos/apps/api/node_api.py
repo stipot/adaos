@@ -13,11 +13,11 @@ from typing import Any, Mapping, Optional
 
 import anyio
 import requests
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from adaos.domain import Event
+from adaos.domain import Event, client_subscription_contract_snapshot, event_envelope_contract_snapshot
 from adaos.adapters.db import SqliteSkillRegistry
 from adaos.apps.api.auth import ensure_token, require_token, resolve_presented_token
 from adaos.services.agent_context import get_ctx
@@ -86,6 +86,55 @@ from adaos.services.system_model.service import (
 )
 from adaos.services.system_model.projections import compact_overview_projection_dict
 from adaos.services.status.guard_cards import guard_status_cards_from_runtime
+from adaos.services.projection_demand import (
+    delete_client_subscription_record,
+    projection_demand_snapshot,
+    touch_client_subscription_record,
+    write_client_subscription_record,
+)
+from adaos.services.projection_demand_mapper import (
+    browser_surface_lifecycle_contract_snapshot,
+    build_browser_projection_demand_record,
+)
+from adaos.services.projection_demand_restore import projection_demand_restore_contract_snapshot
+from adaos.services.projection_demand_yjs import (
+    materialize_projection_demand_to_yjs,
+    read_projection_demand_yjs,
+    restore_projection_demand_from_yjs,
+    safe_materialize_projection_demand_to_yjs,
+)
+from adaos.services.projection_diagnostics import projection_operator_diagnostics
+from adaos.services.projection_dispatcher import (
+    core_skill_refresh_contract_snapshot,
+    dispatch_demanded_projection_refresh,
+    projection_dispatcher_memory_contract_snapshot,
+    projection_dispatcher_snapshot,
+)
+from adaos.services.projection_event_bridge import projection_event_bridge_snapshot
+from adaos.services.projection_pilot_readiness import projection_pilot_readiness_contract_snapshot
+from adaos.services.projection_record_yjs import (
+    materialize_projection_records_to_yjs,
+    normalize_projection_record_keys,
+    projection_records_node_multiplicity_contract_snapshot,
+    read_projection_records_yjs_cache,
+)
+from adaos.services.projection_records import (
+    browser_projection_adapter_contract_snapshot,
+    browser_projection_record_snapshot,
+    get_projection_record,
+    projection_record_registry_snapshot,
+)
+from adaos.services.projection_runtime_ownership import projection_runtime_ownership_contract_snapshot
+from adaos.services.platform_node_yjs import (
+    materialize_platform_node_to_yjs,
+    platform_nodes_contract_snapshot,
+    read_platform_nodes_yjs,
+)
+from adaos.services.status_projection import (
+    ensure_status_card_projection_handler,
+    materialize_status_card_projection_records,
+    platform_emitter_contract_snapshot,
+)
 from adaos.services.yjs.doc import async_read_ydoc
 from adaos.services.yjs.store import get_ystore_for_webspace
 from adaos.services.yjs.webspace import coerce_webspace_id, default_webspace_id
@@ -1886,6 +1935,82 @@ class UiRuntimeDiagnosticsRequest(BaseModel):
     events: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ClientProjectionDemandRequest(BaseModel):
+    client_id: str = Field(..., min_length=1)
+    device_id: str = ""
+    session_id: str = Field(..., min_length=1)
+    webspace_id: str | None = None
+    role: str = "operator"
+    subscriptions: list[dict[str, Any]] = Field(default_factory=list)
+    updated_at: float | None = None
+
+
+class ClientProjectionDemandTouchRequest(BaseModel):
+    device_id: str | None = None
+    role: str | None = None
+    updated_at: float | None = None
+
+
+class BrowserProjectionDemandStateRequest(BaseModel):
+    client_id: str = Field(..., min_length=1)
+    device_id: str = ""
+    session_id: str = Field(..., min_length=1)
+    webspace_id: str | None = None
+    role: str = "operator"
+    page: dict[str, Any] | str | None = None
+    widgets: list[dict[str, Any] | str] = Field(default_factory=list)
+    modals: list[dict[str, Any] | str] = Field(default_factory=list)
+    pinnedPanels: list[dict[str, Any] | str] = Field(default_factory=list)
+    pinned_panels: list[dict[str, Any] | str] | None = None
+    updated_at: float | None = None
+
+
+class ProjectionDispatchRequest(BaseModel):
+    type: str = Field(..., min_length=1)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    source: str = "api.node"
+    ts: float | None = None
+    webspace_ids: list[str] | None = None
+    projection_keys: list[str] | None = None
+
+
+class ProjectionRecordsYjsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    projection_keys: list[str] | None = None
+    demanded_only: bool = False
+    now: float | None = None
+
+
+class ProjectionDemandYjsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    now: float | None = None
+
+
+class ProjectionDemandYjsRestoreRequest(BaseModel):
+    webspace_id: str | None = None
+    include_hidden: bool = True
+    include_stale: bool = True
+    stale_after_s: float | None = None
+    now: float | None = None
+
+
+class PlatformNodeYjsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    node_id: str | None = None
+    status: dict[str, Any] | None = None
+    diagnostics: dict[str, Any] | None = None
+    projections: dict[str, Any] | None = None
+    now: float | None = None
+
+
+class StatusCardProjectionRecordsMaterializeRequest(BaseModel):
+    webspace_id: str | None = None
+    card_ids: list[str] | None = None
+    demanded_only: bool = False
+    write_yjs: bool = False
+    now: float | None = None
+
+
 def _raise_400(detail: str) -> None:
     raise HTTPException(status_code=400, detail=detail)
 
@@ -2003,6 +2128,411 @@ async def node_control_plane_subnet_planning_context(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"unknown control-plane object: {exc.args[0]}") from exc
     return {"ok": True, "context": context}
+
+
+def _ensure_projection_runtime_handlers() -> None:
+    ensure_status_card_projection_handler()
+
+
+@router.get("/event-envelope-contract", dependencies=[Depends(require_token)])
+async def node_event_envelope_contract() -> dict[str, Any]:
+    return event_envelope_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-runtime-ownership", dependencies=[Depends(require_token)])
+async def node_projection_runtime_ownership() -> dict[str, Any]:
+    return projection_runtime_ownership_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-platform-emitters", dependencies=[Depends(require_token)])
+async def node_projection_platform_emitters() -> dict[str, Any]:
+    payload = platform_emitter_contract_snapshot(now=time.time())
+    payload["event_bridge"] = projection_event_bridge_snapshot(now=time.time())
+    return payload
+
+
+@router.get("/projection-pilot/readiness-contract", dependencies=[Depends(require_token)])
+async def node_projection_pilot_readiness_contract() -> dict[str, Any]:
+    return projection_pilot_readiness_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-demand/contract", dependencies=[Depends(require_token)])
+async def node_projection_demand_contract() -> dict[str, Any]:
+    return client_subscription_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-demand/surface-lifecycle-contract", dependencies=[Depends(require_token)])
+async def node_projection_demand_surface_lifecycle_contract() -> dict[str, Any]:
+    return browser_surface_lifecycle_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-demand/restore-contract", dependencies=[Depends(require_token)])
+async def node_projection_demand_restore_contract() -> dict[str, Any]:
+    return projection_demand_restore_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-demand/yjs", dependencies=[Depends(require_token)])
+async def node_projection_demand_yjs(webspace_id: str | None = None) -> dict[str, Any]:
+    return await read_projection_demand_yjs(webspace_id=_coerce_node_webspace_id(webspace_id))
+
+
+@router.post("/projection-demand/yjs/materialize", dependencies=[Depends(require_token)])
+async def node_projection_demand_yjs_materialize(
+    payload: ProjectionDemandYjsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or ProjectionDemandYjsMaterializeRequest()
+    return await materialize_projection_demand_to_yjs(
+        webspace_id=_coerce_node_webspace_id(request_payload.webspace_id or webspace_id),
+        now=request_payload.now,
+    )
+
+
+@router.post("/projection-demand/yjs/restore", dependencies=[Depends(require_token)])
+async def node_projection_demand_yjs_restore(
+    payload: ProjectionDemandYjsRestoreRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or ProjectionDemandYjsRestoreRequest()
+    return await restore_projection_demand_from_yjs(
+        webspace_id=_coerce_node_webspace_id(request_payload.webspace_id or webspace_id),
+        include_hidden=request_payload.include_hidden,
+        include_stale=request_payload.include_stale,
+        stale_after_s=request_payload.stale_after_s,
+        now=request_payload.now,
+    )
+
+
+@router.get("/projection-demand", dependencies=[Depends(require_token)])
+async def node_projection_demand(
+    webspace_id: str | None = None,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return projection_demand_snapshot(
+        webspace_id=target_webspace_id,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+    )
+
+
+@router.post("/projection-demand/client", dependencies=[Depends(require_token)])
+async def node_projection_demand_client(payload: ClientProjectionDemandRequest) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(payload.webspace_id)
+    try:
+        record = write_client_subscription_record(
+            {
+                "client_id": payload.client_id,
+                "device_id": payload.device_id,
+                "session_id": payload.session_id,
+                "webspace_id": target_webspace_id,
+                "role": payload.role,
+                "subscriptions": payload.subscriptions,
+                "updated_at": payload.updated_at,
+            }
+        )
+    except ValueError as exc:
+        _raise_400(str(exc))
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "record": record.to_dict(),
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
+    }
+
+
+@router.post("/projection-demand/browser-state", dependencies=[Depends(require_token)])
+async def node_projection_demand_browser_state(payload: BrowserProjectionDemandStateRequest) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(payload.webspace_id)
+    record = build_browser_projection_demand_record(
+        client_id=payload.client_id,
+        device_id=payload.device_id,
+        session_id=payload.session_id,
+        webspace_id=target_webspace_id,
+        role=payload.role,
+        page=payload.page,
+        widgets=payload.widgets,
+        modals=payload.modals,
+        pinned_panels=payload.pinned_panels if payload.pinned_panels is not None else payload.pinnedPanels,
+        updated_at=payload.updated_at,
+    )
+    stored = write_client_subscription_record(record)
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "record": stored.to_dict(),
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
+    }
+
+
+@router.post("/projection-demand/client/{client_id}/{session_id}/touch", dependencies=[Depends(require_token)])
+async def node_projection_demand_client_touch(
+    client_id: str,
+    session_id: str,
+    payload: ClientProjectionDemandTouchRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or ClientProjectionDemandTouchRequest()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    record = touch_client_subscription_record(
+        client_id=client_id,
+        session_id=session_id,
+        webspace_id=target_webspace_id,
+        device_id=request_payload.device_id,
+        role=request_payload.role,
+        updated_at=request_payload.updated_at,
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="projection_demand_session_not_found")
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
+    return {
+        "ok": True,
+        "accepted": True,
+        "webspace_id": target_webspace_id,
+        "record": record.to_dict(),
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
+    }
+
+
+@router.delete("/projection-demand/client/{client_id}/{session_id}", dependencies=[Depends(require_token)])
+async def node_projection_demand_client_delete(
+    client_id: str,
+    session_id: str,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    deleted = delete_client_subscription_record(
+        client_id=client_id,
+        session_id=session_id,
+        webspace_id=target_webspace_id,
+    )
+    yjs = await safe_materialize_projection_demand_to_yjs(webspace_id=target_webspace_id)
+    return {
+        "ok": True,
+        "accepted": deleted,
+        "webspace_id": target_webspace_id,
+        "deleted": deleted,
+        "snapshot": projection_demand_snapshot(webspace_id=target_webspace_id),
+        "yjs": yjs,
+    }
+
+
+@router.get("/projection-records", dependencies=[Depends(require_token)])
+async def node_projection_records(webspace_id: str | None = None) -> dict[str, Any]:
+    return projection_record_registry_snapshot(webspace_id=_coerce_node_webspace_id(webspace_id))
+
+
+@router.get("/projection-records/item", dependencies=[Depends(require_token)])
+async def node_projection_record_item(projection_key: str, webspace_id: str | None = None) -> dict[str, Any]:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    record = get_projection_record(webspace_id=target_webspace_id, projection_key=projection_key)
+    if record is None:
+        raise HTTPException(status_code=404, detail="projection_record_not_found")
+    return {"ok": True, "webspace_id": target_webspace_id, "record": record.to_dict()}
+
+
+@router.get("/projection-records/browser-cache", dependencies=[Depends(require_token)])
+async def node_projection_records_browser_cache(
+    response: Response,
+    webspace_id: str | None = None,
+    client_id: str | None = None,
+    session_id: str | None = None,
+    projection_keys: list[str] | None = Query(default=None),
+    include_hidden: bool = True,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+) -> Any:
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    payload = browser_projection_record_snapshot(
+        webspace_id=target_webspace_id,
+        client_id=client_id,
+        session_id=session_id,
+        projection_keys=projection_keys,
+        include_hidden=include_hidden,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+    )
+    etag = str(payload.get("etag") or "")
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    response.headers.update(headers)
+    if _etag_matches(if_none_match, etag):
+        return Response(status_code=304, headers=headers)
+    return payload
+
+
+@router.get("/projection-records/browser-adapter-contract", dependencies=[Depends(require_token)])
+async def node_projection_records_browser_adapter_contract() -> dict[str, Any]:
+    return browser_projection_adapter_contract_snapshot(now=time.time())
+
+
+@router.get("/projection-records/node-multiplicity-contract", dependencies=[Depends(require_token)])
+async def node_projection_records_node_multiplicity_contract() -> dict[str, Any]:
+    return projection_records_node_multiplicity_contract_snapshot(now=time.time())
+
+
+@router.get("/platform/nodes/contract", dependencies=[Depends(require_token)])
+async def node_platform_nodes_contract() -> dict[str, Any]:
+    return platform_nodes_contract_snapshot(now=time.time())
+
+
+@router.get("/platform/nodes/yjs", dependencies=[Depends(require_token)])
+async def node_platform_nodes_yjs(webspace_id: str | None = None) -> dict[str, Any]:
+    return await read_platform_nodes_yjs(webspace_id=_coerce_node_webspace_id(webspace_id))
+
+
+@router.post("/platform/nodes/materialize", dependencies=[Depends(require_token)])
+async def node_platform_nodes_materialize(
+    payload: PlatformNodeYjsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or PlatformNodeYjsMaterializeRequest()
+    return await materialize_platform_node_to_yjs(
+        webspace_id=_coerce_node_webspace_id(request_payload.webspace_id or webspace_id),
+        node_id=request_payload.node_id,
+        status=request_payload.status,
+        diagnostics=request_payload.diagnostics,
+        projections=request_payload.projections,
+        now=request_payload.now,
+    )
+
+
+@router.get("/projection-records/yjs/cache", dependencies=[Depends(require_token)])
+async def node_projection_records_yjs_cache(webspace_id: str | None = None) -> dict[str, Any]:
+    return await read_projection_records_yjs_cache(webspace_id=_coerce_node_webspace_id(webspace_id))
+
+
+@router.post("/projection-records/yjs/materialize", dependencies=[Depends(require_token)])
+async def node_projection_records_yjs_materialize(
+    payload: ProjectionRecordsYjsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or ProjectionRecordsYjsMaterializeRequest()
+    return await materialize_projection_records_to_yjs(
+        webspace_id=_coerce_node_webspace_id(request_payload.webspace_id or webspace_id),
+        projection_keys=request_payload.projection_keys,
+        demanded_only=request_payload.demanded_only,
+        now=request_payload.now,
+    )
+
+
+@router.post("/projection-records/status-cards/materialize", dependencies=[Depends(require_token)])
+async def node_projection_records_materialize_status_cards(
+    payload: StatusCardProjectionRecordsMaterializeRequest | None = None,
+    webspace_id: str | None = None,
+) -> dict[str, Any]:
+    request_payload = payload or StatusCardProjectionRecordsMaterializeRequest()
+    target_webspace_id = _coerce_node_webspace_id(request_payload.webspace_id or webspace_id)
+    result = materialize_status_card_projection_records(
+        webspace_id=target_webspace_id,
+        card_ids=request_payload.card_ids,
+        demanded_only=request_payload.demanded_only,
+        now=request_payload.now,
+        access={"audience": "shared", "visibility": "operator"},
+    )
+    if request_payload.write_yjs:
+        result["yjs"] = await materialize_projection_records_to_yjs(
+            webspace_id=target_webspace_id,
+            projection_keys=normalize_projection_record_keys(result.get("records") or []),
+            demanded_only=False,
+            now=request_payload.now,
+        )
+    return result
+
+
+@router.get("/projection-dispatcher", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_snapshot() -> dict[str, Any]:
+    _ensure_projection_runtime_handlers()
+    return projection_dispatcher_snapshot()
+
+
+@router.get("/projection-dispatcher/core-skill-contract", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_core_skill_contract(
+    webspace_id: str | None = None,
+    projection_keys: list[str] | None = Query(default=None),
+    include_hidden: bool = True,
+    include_stale: bool = True,
+) -> dict[str, Any]:
+    _ensure_projection_runtime_handlers()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    return core_skill_refresh_contract_snapshot(
+        webspace_ids=[target_webspace_id],
+        projection_keys=projection_keys,
+        include_hidden=include_hidden,
+        include_stale=include_stale,
+    )
+
+
+@router.get("/projection-dispatcher/memory-contract", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_memory_contract() -> dict[str, Any]:
+    return projection_dispatcher_memory_contract_snapshot(now=time.time())
+
+
+@router.post("/projection-dispatcher/dispatch", dependencies=[Depends(require_token)])
+async def node_projection_dispatcher_dispatch(payload: ProjectionDispatchRequest) -> dict[str, Any]:
+    _ensure_projection_runtime_handlers()
+    event = Event(
+        type=payload.type,
+        payload=payload.payload,
+        source=payload.source,
+        ts=float(payload.ts if payload.ts is not None else time.time()),
+    )
+    report = await dispatch_demanded_projection_refresh(
+        event,
+        webspace_ids=payload.webspace_ids,
+        projection_keys=payload.projection_keys,
+    )
+    return {
+        "ok": True,
+        "accepted": True,
+        "report": report.to_dict(),
+        "dispatcher": projection_dispatcher_snapshot(),
+    }
+
+
+@router.get("/projection-diagnostics", dependencies=[Depends(require_token)])
+async def node_projection_diagnostics(
+    webspace_id: str | None = None,
+    include_stale: bool = True,
+    stale_after_s: float | None = None,
+    include_yjs_cache: bool = False,
+    materialize_yjs_cache: bool = False,
+    materialize_status_cards: bool = False,
+) -> dict[str, Any]:
+    _ensure_projection_runtime_handlers()
+    target_webspace_id = _coerce_node_webspace_id(webspace_id)
+    refreshes: dict[str, Any] = {}
+    if materialize_status_cards:
+        refreshes["status_cards"] = materialize_status_card_projection_records(
+            webspace_id=target_webspace_id,
+            demanded_only=True,
+            access={"audience": "shared", "visibility": "operator"},
+        )
+    if materialize_yjs_cache:
+        refreshes["projection_records_yjs"] = await materialize_projection_records_to_yjs(
+            webspace_id=target_webspace_id,
+            demanded_only=True,
+        )
+    yjs_cache = None
+    if include_yjs_cache or materialize_yjs_cache:
+        yjs_cache = await read_projection_records_yjs_cache(webspace_id=target_webspace_id)
+    diagnostics = projection_operator_diagnostics(
+        webspace_id=target_webspace_id,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+        yjs_cache=yjs_cache,
+    )
+    if refreshes:
+        diagnostics["refreshes"] = refreshes
+    return diagnostics
 
 
 @router.get("/reliability", dependencies=[Depends(require_token)])

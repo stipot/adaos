@@ -194,7 +194,7 @@ target event model without drifting between parallel roadmaps.
 
 ### Current Status
 
-Snapshot date: 2026-05-15.
+Snapshot date: 2026-05-28.
 
 The target architecture remains valid, but the documentation had two related
 roadmaps that could be read as competing priority sources:
@@ -215,11 +215,21 @@ The next execution slice is intentionally contract-first:
 5. add a shared demanded-projection dispatcher
 6. validate platform emitters before heavy skill migration
 
+Branch checkpoint: `integration/pr87-projection-harvest` carries the useful
+parts of donor PR `stipot-com/adaos#87` as a topic harvest, not a direct merge.
+The branch implements the event envelope helpers, ProjectionRecord and client
+subscription ABI, server-side browser demand registry, demanded dispatcher,
+ProjectionRecord registry/Yjs cache, browser-cache ETags, and a
+`status-card:*` platform-emitter bridge on top of the existing
+`services.status` registry. The donor Infrascope adapter and acceptance-demo
+surface were deliberately left out until the platform emitter and client-cache
+gates are accepted.
+
 ### Tasks
 
 #### OEM-001: Consolidate roadmap authority
 
-Status: in progress.
+Status: implemented on `integration/pr87-projection-harvest`; rev2026 merge and stand acceptance pending.
 
 Actions:
 
@@ -234,39 +244,51 @@ Actions:
   shapes, review checklist, and completion definition.
 - [x] Update roadmap progress for named-entity contract/runtime ABI and
   eventbus hot-topic guardrails.
-- [ ] Define the minimal shared event envelope and compatibility rules for
+- [x] Define the minimal shared event envelope and compatibility rules for
   existing `Event(type, payload, source, ts)` producers.
-- [ ] Bind `STATUS-*` work to the platform-emitter phase so status cards do not
+- [x] Bind `STATUS-*` work to the platform-emitter phase so status cards do not
   become a separate monitoring-only architecture.
 
 #### OEM-002: Lock projection ABI before client/runtime migration
 
-Status: planned.
+Status: implemented on `integration/pr87-projection-harvest`; browser client hookup and broader Yjs compatibility rules pending.
 
 Actions:
 
-- [ ] Define canonical projection record fields: `status`, `data`, `meta`,
+- [x] Define canonical projection record fields: `status`, `data`, `meta`,
   `error`, lifecycle timestamps, version/fingerprint, access metadata, and
   source ownership.
-- [ ] Define browser-written subscription records for page, widget, modal, and
+- [x] Define browser-written subscription records for page, widget, modal, and
   pinned panel consumers.
 - [ ] Define compatibility rules for legacy Yjs branches during migration.
-- [ ] Use `registry.named_entities` and planned status cards as reference
+- [x] Use `registry.named_entities` and planned status cards as reference
   examples before Infrascope migration.
+- [x] Add server-side full-session browser demand writes, session touch/delete,
+  browser-state mapping, demanded-only browser-cache reads, and ETag
+  validation.
+- [x] Add the shared demanded-projection dispatcher with per-webspace selection,
+  wildcard handler support, lifecycle state, and operator diagnostics.
+- [x] Materialize canonical ProjectionRecords to `data/projectionRecords` with
+  a node-aware envelope and core-owned write policy.
 
 #### OEM-003: Keep heavy-skill pilots behind platform-emitter validation
 
-Status: planned.
+Status: planned; gate preserved during PR #87 harvest.
 
 Actions:
 
 - [ ] Allow Infrascope inventory/tests that do not create a parallel projection
   ABI.
-- [ ] Migrate status cards, notifications, diagnostics, or workspace-manager
+- [x] Migrate status cards, notifications, diagnostics, or workspace-manager
   surfaces first through the shared projection contract.
 - [ ] Start Infrascope split only after event envelope, projection ABI, client
   subscriptions, dispatcher, and at least one platform-emitter pilot are
   materially in place.
+- [x] Reject the donor PR's parallel status-card registry in favor of the
+  existing `services.status.StatusRegistry`.
+- [x] Keep the donor PR's Infrascope-specific dispatcher/status-card adapter out
+  of the first harvest branch so Phase 7 does not start before Phase 6 is
+  accepted.
 
 ## Modal Projection and Runtime Recovery Integrity
 

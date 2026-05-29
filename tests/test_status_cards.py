@@ -169,6 +169,9 @@ def test_register_status_registry_consumes_sdk_status_events(monkeypatch) -> Non
     assert snapshot["total"] == 1
     assert snapshot["cards"][0]["owner"] == "skill:infrastate_skill"
     assert changed[0].payload["card"]["id"] == "runtime"
+    assert changed[0].payload["_meta"]["event"]["source_authority"] == "platform"
+    assert changed[0].payload["_meta"]["event"]["scope"] == {"webspace_id": "desktop"}
+    assert changed[0].payload["_meta"]["event"]["schema"] == "adaos.status.card.changed"
 
 
 def test_publish_status_initializes_lazy_context_registry(monkeypatch) -> None:

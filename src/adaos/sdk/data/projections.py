@@ -31,6 +31,8 @@ class ProjectionSlot:
     scope: str = "webspace"
     audience: str = "shared"
     min_interval_s: float = 0.0
+    demand: str = "active"
+    kind: str = "skill"
 
 
 @dataclass(frozen=True, slots=True)
@@ -549,6 +551,7 @@ class ProjectionRuntime:
         self._last_write_at: dict[tuple[str, str], float] = {}
         self._pending_refresh: dict[tuple[str, tuple[str, ...]], asyncio.Task[ProjectionRefreshResult]] = {}
         self._projections: dict[str, ProjectionSlot] = {}
+        self._dispatcher_handlers: set[str] = set()
         self._router = router or DirtyRouter()
         self.section_cache = section_cache or SectionCache()
         self._diagnostics = ProjectionDiagnostics()
@@ -564,6 +567,158 @@ class ProjectionRuntime:
     def register_projections(self, slots: Iterable[ProjectionSlot]) -> None:
         for slot in slots:
             self.register_projection(slot)
+
+    def register_dispatcher_handlers(
+        self,
+        projection_keys: Iterable[str] | None = None,
+    ) -> list[str]:
+        """Expose registered ProjectionSlots through the shared core dispatcher."""
+
+        requested = {str(item or "").strip() for item in projection_keys or [] if str(item or "").strip()} or None
+        registered: list[str] = []
+        with self._lock:
+            slots = {
+                name: slot
+                for name, slot in self._projections.items()
+                if requested is None or name in requested
+            }
+        for projection_key, slot in sorted(slots.items()):
+            if slot.build is None:
+                continue
+            from adaos.services.projection_dispatcher import register_projection_refresh_handler
+
+            register_projection_refresh_handler(projection_key, self._dispatcher_handler(projection_key))
+            with self._lock:
+                self._dispatcher_handlers.add(projection_key)
+            registered.append(projection_key)
+        return registered
+
+    def unregister_dispatcher_handlers(
+        self,
+        projection_keys: Iterable[str] | None = None,
+    ) -> list[str]:
+        requested = {str(item or "").strip() for item in projection_keys or [] if str(item or "").strip()} or None
+        with self._lock:
+            keys = sorted(self._dispatcher_handlers if requested is None else self._dispatcher_handlers.intersection(requested))
+        removed: list[str] = []
+        for projection_key in keys:
+            from adaos.services.projection_dispatcher import unregister_projection_refresh_handler
+
+            if unregister_projection_refresh_handler(projection_key):
+                removed.append(projection_key)
+            with self._lock:
+                self._dispatcher_handlers.discard(projection_key)
+        return removed
+
+    def restore_active_demand(
+        self,
+        *,
+        webspace_id: str | None = None,
+        projection_prefix: str | None = None,
+        include_hidden: bool = False,
+        include_stale: bool = False,
+        stale_after_s: float | None = None,
+    ) -> dict[str, Any]:
+        """Restore SDK-local active demand from canonical client subscription records."""
+
+        from adaos.services.projection_demand import projection_demand_consumers
+
+        prefix = str(projection_prefix or "").strip()
+        restored: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        with self._lock:
+            registered = set(self._projections)
+        for consumer in projection_demand_consumers(
+            webspace_id=webspace_id,
+            include_hidden=include_hidden,
+            include_stale=include_stale,
+            stale_after_s=stale_after_s,
+        ):
+            projection_key = str(consumer.projection_key or "").strip()
+            if prefix and not projection_key.startswith(prefix):
+                skipped.append({"projection_key": projection_key, "reason": "projection_prefix_mismatch"})
+                continue
+            if registered and projection_key not in registered:
+                skipped.append({"projection_key": projection_key, "reason": "slot_unregistered"})
+                continue
+            subscription_id = ":".join(
+                [
+                    "client",
+                    consumer.webspace_id,
+                    consumer.client_id,
+                    consumer.session_id,
+                    consumer.consumer_id,
+                ]
+            )
+            remember_projection_demand(
+                projection_key,
+                webspace_id=consumer.webspace_id,
+                subscription_id=subscription_id,
+            )
+            restored.append(
+                {
+                    "webspace_id": consumer.webspace_id,
+                    "projection_key": projection_key,
+                    "consumer_id": consumer.consumer_id,
+                    "client_id": consumer.client_id,
+                    "session_id": consumer.session_id,
+                }
+            )
+        return {
+            "ok": True,
+            "runtime": "projection",
+            "skill_id": self.skill_id,
+            "restored_total": len(restored),
+            "skipped_total": len(skipped),
+            "restored": restored,
+            "skipped": skipped,
+            "active_projection_demand": active_projection_demand_snapshot(),
+        }
+
+    def _dispatcher_handler(self, projection_key: str) -> Callable[[Any], Any]:
+        async def _handler(context: Any) -> Any:
+            with self._lock:
+                slot = self._projections.get(projection_key)
+            if slot is None:
+                raise RuntimeError(f"projection slot is not registered: {projection_key}")
+            if slot.build is None:
+                raise RuntimeError(f"projection slot has no build function: {projection_key}")
+            event_scope = getattr(context.event, "scope", None)
+            node_id = None
+            if isinstance(event_scope, Mapping):
+                node_id = str(event_scope.get("node_id") or "").strip() or None
+            build_context = ProjectionContext(
+                skill_id=self.skill_id,
+                webspace_id=context.webspace_id,
+                event_topic=getattr(context.event, "type", None),
+                node_id=node_id,
+                reason="dispatcher_refresh",
+            )
+            data = await _call_build(slot.build, build_context)
+            from adaos.domain import make_projection_record
+            from adaos.services.projection_dispatcher import ProjectionRefreshResult as CoreProjectionRefreshResult
+
+            record = make_projection_record(
+                projection_key=projection_key,
+                kind=str(slot.kind or "skill"),
+                webspace_id=context.webspace_id,
+                node_id=node_id,
+                data=data,
+                source=f"skill:{self.skill_id}",
+                source_authority="skill",
+                access={"audience": slot.audience},
+                lifecycle_reason="dispatcher_refresh",
+                updated_at=context.requested_at,
+            )
+            return CoreProjectionRefreshResult(
+                projection_key=projection_key,
+                webspace_id=context.webspace_id,
+                status=str(getattr(record.status, "value", record.status)),
+                record=record.to_dict(),
+                reason="dispatcher_refresh",
+            )
+
+        return _handler
 
     def bind_ctx_subnet(self, ctx_subnet: Any | None) -> "ProjectionRuntime":
         with self._lock:
@@ -887,6 +1042,7 @@ class ProjectionRuntime:
             payload["last_write_entries"] = len(self._last_write_at)
             payload["pending_refresh_entries"] = sum(1 for task in self._pending_refresh.values() if not task.done())
             payload["registered_projections"] = sorted(self._projections)
+            payload["dispatcher_handlers"] = sorted(self._dispatcher_handlers)
             payload["dirty_routes"] = self._router.snapshot()
             payload["ts"] = time.time()
             return payload
@@ -1340,6 +1496,46 @@ async def set_projection_if_changed(
     return await runtime.set_if_changed(slot, value, webspace_id=webspace_id, force=force, reason=reason)
 
 
+def register_projection_dispatcher_handlers(
+    skill_id: str,
+    *,
+    projections: Iterable[ProjectionSlot] | None = None,
+    projection_keys: Iterable[str] | None = None,
+) -> list[str]:
+    runtime = get_projection_runtime(skill_id)
+    if projections is not None:
+        runtime.register_projections(projections)
+    return runtime.register_dispatcher_handlers(projection_keys=projection_keys)
+
+
+def unregister_projection_dispatcher_handlers(
+    skill_id: str,
+    *,
+    projection_keys: Iterable[str] | None = None,
+) -> list[str]:
+    runtime = get_projection_runtime(skill_id)
+    return runtime.unregister_dispatcher_handlers(projection_keys=projection_keys)
+
+
+def restore_active_projection_demand(
+    skill_id: str,
+    *,
+    webspace_id: str | None = None,
+    projection_prefix: str | None = None,
+    include_hidden: bool = False,
+    include_stale: bool = False,
+    stale_after_s: float | None = None,
+) -> dict[str, Any]:
+    runtime = get_projection_runtime(skill_id)
+    return runtime.restore_active_demand(
+        webspace_id=webspace_id,
+        projection_prefix=projection_prefix,
+        include_hidden=include_hidden,
+        include_stale=include_stale,
+        stale_after_s=stale_after_s,
+    )
+
+
 def clear_projection_runtime_state(skill_id: str | None = None) -> None:
     with _RUNTIMES_LOCK:
         if skill_id is None:
@@ -1363,6 +1559,13 @@ __all__ = [
     "StreamRuntime",
     "clear_projection_runtime_state",
     "get_projection_runtime",
+    "has_projection_demand",
+    "record_projection_subscription_change",
+    "register_projection_dispatcher_handlers",
+    "remember_projection_demand",
+    "forget_projection_demand",
+    "restore_active_projection_demand",
     "set_projection_if_changed",
     "stable_payload_fingerprint",
+    "unregister_projection_dispatcher_handlers",
 ]
