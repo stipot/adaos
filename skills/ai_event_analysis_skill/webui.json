@@ -1,0 +1,868 @@
+{
+  "$schema": "../../../../src/adaos/abi/webui.v1.schema.json",
+  "webio": {
+    "receivers": {
+      "ai_event_analysis.results": {
+        "mode": "replace",
+        "transport": "hub",
+        "snapshotPolicy": "on_subscribe",
+        "initialState": [
+          {
+            "id": "pending",
+            "title": "Evaluation not run yet",
+            "description": "Open the app or run the demo baseline to publish the latest result."
+          }
+        ],
+        "budget": {
+          "maxPayloadBytes": 12288,
+          "maxPublishHz": 0.5,
+          "maxSnapshotHz": 0.5,
+          "maxItems": 4
+        },
+        "guardVisibility": {
+          "degradedState": "Keep last evaluation result and ask for a manual refresh.",
+          "log": "service.ai_event_analysis_skill.runtime.log",
+          "quarantine": false,
+          "metric": "webio_stream_guard.ai_event_analysis.results"
+        },
+        "route": {
+          "kind": "stream",
+          "surface": "modal:ai_event_analysis",
+          "owner": "skill:ai_event_analysis_skill",
+          "firstPaint": "static benchmark defaults",
+          "recovery": "snapshot requested on stream subscribe",
+          "updateSource": ["webio.stream.snapshot.requested", "ai_event_analysis.evaluate_requested"]
+        }
+      }
+    }
+  },
+  "apps": [
+    {
+      "id": "ai_event_analysis_app",
+      "title": "AI Event Analysis",
+      "icon": "analytics-outline",
+      "launchModal": "ai_event_analysis_modal"
+    }
+  ],
+  "widgets": [
+    {
+      "id": "ai_event_analysis_widget",
+      "title": "AI Event Analysis",
+      "type": "visual.metricTile",
+      "icon": "analytics-outline",
+      "dataSource": {
+        "kind": "y",
+        "path": "data/ai_event_analysis/summary"
+      },
+      "actions": [
+        {
+          "on": "click:open",
+          "type": "openModal",
+          "params": {
+            "modalId": "ai_event_analysis_modal"
+          }
+        },
+        {
+          "on": "click:run_demo",
+          "type": "callSkill",
+          "target": "ai_event_analysis_skill.run_demo_evaluation",
+          "params": {
+            "webspace_id": "$runtime.webspace_id"
+          }
+        }
+      ]
+    }
+  ],
+  "registry": {
+    "modals": {
+      "ai_event_analysis_modal": {
+        "title": "AI Event Analysis",
+        "schema": {
+          "id": "ai_event_analysis_modal",
+          "initialState": {
+            "aiEventAnalysisTab": "overview"
+          },
+          "layout": {
+            "type": "split",
+            "pattern": "split",
+            "areas": [
+              {
+                "id": "main",
+                "role": "main"
+              },
+              {
+                "id": "right",
+                "role": "aux"
+              },
+              {
+                "id": "bottom",
+                "role": "footer"
+              }
+            ]
+          },
+          "widgets": [
+            {
+              "id": "ai-event-analysis-summary",
+              "type": "visual.metricTile",
+              "area": "main",
+              "title": "Current baseline",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/summary"
+              },
+              "actions": [
+                {
+                  "on": "click:run_demo",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.run_demo_evaluation",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ai-event-analysis-tabs",
+              "type": "input.commandBar",
+              "area": "main",
+              "inputs": {
+                "size": "small",
+                "selectedStateKey": "aiEventAnalysisTab",
+                "buttons": [
+                  {
+                    "id": "overview",
+                    "label": "Overview"
+                  },
+                  {
+                    "id": "dataset",
+                    "label": "Dataset"
+                  },
+                  {
+                    "id": "windows",
+                    "label": "Windows"
+                  },
+                  {
+                    "id": "metrics",
+                    "label": "Metrics"
+                  },
+                  {
+                    "id": "experiments",
+                    "label": "Experiments"
+                  },
+                  {
+                    "id": "subscriptions",
+                    "label": "Subscriptions"
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "on": "click",
+                  "type": "updateState",
+                  "params": {
+                    "aiEventAnalysisTab": "$event.id"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ai-event-analysis-task",
+              "type": "ui.list",
+              "area": "main",
+              "title": "Task",
+              "visibleIf": "$state.aiEventAnalysisTab === 'overview'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/task"
+              },
+              "inputs": {
+                "titleKey": "title",
+                "subtitleKey": "description",
+                "showDetails": false,
+                "itemAccordion": false,
+                "emptyText": "No task statement"
+              }
+            },
+            {
+              "id": "ai-event-analysis-dataset",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Dataset contract",
+              "visibleIf": "$state.aiEventAnalysisTab === 'dataset'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/dataset"
+              },
+              "inputs": {
+                "emptyText": "No dataset contract",
+                "columns": [
+                  {
+                    "key": "name",
+                    "label": "Item"
+                  },
+                  {
+                    "key": "current",
+                    "label": "Current",
+                    "width": "110px",
+                    "mono": true
+                  },
+                  {
+                    "key": "target",
+                    "label": "Target",
+                    "width": "140px"
+                  },
+                  {
+                    "key": "notes",
+                    "label": "Notes"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-metrics",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Success metrics",
+              "visibleIf": "$state.aiEventAnalysisTab === 'metrics'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/metrics"
+              },
+              "inputs": {
+                "emptyText": "No metrics",
+                "columns": [
+                  {
+                    "key": "metric",
+                    "label": "Metric"
+                  },
+                  {
+                    "key": "value",
+                    "label": "Demo",
+                    "width": "100px",
+                    "mono": true
+                  },
+                  {
+                    "key": "target",
+                    "label": "Target",
+                    "width": "140px"
+                  },
+                  {
+                    "key": "status",
+                    "label": "State",
+                    "width": "100px"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-windows",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Event windows",
+              "visibleIf": "$state.aiEventAnalysisTab === 'windows'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/windows"
+              },
+              "inputs": {
+                "emptyText": "No event windows yet",
+                "columns": [
+                  {
+                    "key": "window_id",
+                    "label": "Window"
+                  },
+                  {
+                    "key": "events",
+                    "label": "Events",
+                    "width": "80px",
+                    "mono": true
+                  },
+                  {
+                    "key": "errors",
+                    "label": "Errors",
+                    "width": "80px",
+                    "mono": true
+                  },
+                  {
+                    "key": "prediction",
+                    "label": "Baseline prediction",
+                    "width": "190px"
+                  },
+                  {
+                    "key": "severity",
+                    "label": "Severity",
+                    "width": "100px"
+                  },
+                  {
+                    "key": "confidence",
+                    "label": "Confidence",
+                    "width": "110px",
+                    "mono": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-per-class",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Per-class baseline",
+              "visibleIf": "$state.aiEventAnalysisTab === 'metrics'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/per_class"
+              },
+              "inputs": {
+                "emptyText": "No per-class metrics",
+                "columns": [
+                  {
+                    "key": "class",
+                    "label": "Class"
+                  },
+                  {
+                    "key": "precision",
+                    "label": "Precision",
+                    "width": "110px",
+                    "mono": true
+                  },
+                  {
+                    "key": "recall",
+                    "label": "Recall",
+                    "width": "100px",
+                    "mono": true
+                  },
+                  {
+                    "key": "f1",
+                    "label": "F1",
+                    "width": "80px",
+                    "mono": true
+                  },
+                  {
+                    "key": "support",
+                    "label": "Support",
+                    "width": "90px",
+                    "mono": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-experiments",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Experiment plan",
+              "visibleIf": "$state.aiEventAnalysisTab === 'experiments'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/experiments"
+              },
+              "inputs": {
+                "emptyText": "No experiment plan",
+                "columns": [
+                  {
+                    "key": "model",
+                    "label": "Model"
+                  },
+                  {
+                    "key": "status",
+                    "label": "Status",
+                    "width": "130px"
+                  },
+                  {
+                    "key": "macro_f1",
+                    "label": "Macro-F1",
+                    "width": "100px",
+                    "mono": true
+                  },
+                  {
+                    "key": "next_step",
+                    "label": "Next step"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-subscription-summary",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Subscription Flow Summary",
+              "visibleIf": "$state.aiEventAnalysisTab === 'subscriptions'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/subscription_summary"
+              },
+              "inputs": {
+                "emptyText": "No subscription summary",
+                "columns": [
+                  {
+                    "key": "name",
+                    "label": "Metric"
+                  },
+                  {
+                    "key": "value",
+                    "label": "Value",
+                    "width": "110px",
+                    "mono": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-subscription-edges",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Publisher / Subscriber Edges",
+              "visibleIf": "$state.aiEventAnalysisTab === 'subscriptions'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/subscription_edges"
+              },
+              "inputs": {
+                "emptyText": "No subscription flow data",
+                "columns": [
+                  {
+                    "key": "event_type",
+                    "label": "Event"
+                  },
+                  {
+                    "key": "publisher",
+                    "label": "Publisher",
+                    "width": "130px"
+                  },
+                  {
+                    "key": "subscriber",
+                    "label": "Subscriber",
+                    "width": "170px"
+                  },
+                  {
+                    "key": "events",
+                    "label": "Events",
+                    "width": "80px",
+                    "mono": true
+                  },
+                  {
+                    "key": "fanout",
+                    "label": "Fanout",
+                    "width": "80px",
+                    "mono": true
+                  },
+                  {
+                    "key": "state",
+                    "label": "State",
+                    "width": "130px"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-chart",
+              "type": "visual.metricChart",
+              "area": "right",
+              "title": "Operational readiness",
+              "visibleIf": "$state.aiEventAnalysisTab === 'overview' || $state.aiEventAnalysisTab === 'metrics'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/chart"
+              },
+              "inputs": {
+                "xKey": "ts",
+                "yKey": "value",
+                "emptyText": "No chart data"
+              }
+            },
+            {
+              "id": "ai-event-analysis-volume-chart",
+              "type": "visual.metricChart",
+              "area": "right",
+              "title": "Event volume",
+              "visibleIf": "$state.aiEventAnalysisTab === 'windows' || $state.aiEventAnalysisTab === 'dataset'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/event_volume_chart"
+              },
+              "inputs": {
+                "xKey": "ts",
+                "yKey": "value",
+                "emptyText": "No event-window volume data"
+              }
+            },
+            {
+              "id": "ai-event-analysis-class-chart",
+              "type": "visual.metricChart",
+              "area": "right",
+              "title": "Class distribution",
+              "visibleIf": "$state.aiEventAnalysisTab === 'windows' || $state.aiEventAnalysisTab === 'metrics'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/class_distribution_chart"
+              },
+              "inputs": {
+                "xKey": "ts",
+                "yKey": "value",
+                "emptyText": "No class distribution data"
+              }
+            },
+            {
+              "id": "ai-event-analysis-subscription-chart",
+              "type": "visual.metricChart",
+              "area": "right",
+              "title": "Event type volume",
+              "visibleIf": "$state.aiEventAnalysisTab === 'subscriptions'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/subscription_chart"
+              },
+              "inputs": {
+                "xKey": "ts",
+                "yKey": "value",
+                "emptyText": "No subscription flow chart"
+              }
+            },
+            {
+              "id": "ai-event-analysis-actions",
+              "type": "input.commandBar",
+              "area": "right",
+              "title": "Actions",
+              "inputs": {
+                "variant": "stack",
+                "size": "small",
+                "buttons": [
+                  {
+                    "id": "run_demo",
+                    "label": "Run demo baseline"
+                  },
+                  {
+                    "id": "run_trials",
+                    "label": "Run synthetic trial"
+                  },
+                  {
+                    "id": "run_real_trial",
+                    "label": "Run real trial"
+                  },
+                  {
+                    "id": "refresh_snapshot",
+                    "label": "Refresh demo"
+                  },
+                  {
+                    "id": "analyze_logs",
+                    "label": "Analyze real logs"
+                  },
+                  {
+                    "id": "analyze_health",
+                    "label": "Analyze health"
+                  },
+                  {
+                    "id": "analyze_subscriptions",
+                    "label": "Analyze subscriptions"
+                  },
+                  {
+                    "id": "build_windows",
+                    "label": "Build windows"
+                  },
+                  {
+                    "id": "export_jsonl",
+                    "label": "Export JSONL"
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "on": "click:run_demo",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.run_demo_evaluation",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id"
+                  }
+                },
+                {
+                  "on": "click:run_trials",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.run_trial_suite",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id"
+                  }
+                },
+                {
+                  "on": "click:run_real_trial",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.run_real_trial",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id",
+                    "event_count": 14,
+                    "window_seconds": 60,
+                    "max_lines": 600
+                  }
+                },
+                {
+                  "on": "click:refresh_snapshot",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.refresh_snapshot",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id"
+                  }
+                },
+                {
+                  "on": "click:analyze_logs",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.analyze_local_logs",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id",
+                    "window_seconds": 60
+                  }
+                },
+                {
+                  "on": "click:analyze_health",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.analyze_observability_health",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id",
+                    "window_seconds": 60,
+                    "max_lines": 800
+                  }
+                },
+                {
+                  "on": "click:analyze_subscriptions",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.analyze_subscription_flow",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id"
+                  }
+                },
+                {
+                  "on": "click:build_windows",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.build_event_windows",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id",
+                    "window_seconds": 60
+                  }
+                },
+                {
+                  "on": "click:export_jsonl",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.export_event_windows_jsonl",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ai-event-analysis-results",
+              "type": "ui.list",
+              "area": "bottom",
+              "title": "Evaluation stream",
+              "dataSource": {
+                "kind": "stream",
+                "receiver": "ai_event_analysis.results"
+              },
+              "inputs": {
+                "titleKey": "title",
+                "subtitleKey": "description",
+                "detailsPath": "content",
+                "showDetails": false,
+                "itemAccordion": false,
+                "detailsModal": true,
+                "detailsModalTitleKey": "title",
+                "emptyText": "No evaluation result yet"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "widgets": {}
+  },
+  "ydoc_defaults": {
+    "data/ai_event_analysis": {
+      "summary": {
+        "label": "AI Event Analysis",
+        "value": "0.000",
+        "subtitle": "rule baseline macro-F1",
+        "description": "Measurable AI/ML research task for AdaOS operational events.",
+        "buttons": [
+          {
+            "id": "open",
+            "label": "Open"
+          },
+          {
+            "id": "run_demo",
+            "label": "Run demo evaluation"
+          }
+        ]
+      },
+      "task": [
+        {
+          "id": "objective",
+          "title": "Objective",
+          "description": "Classify fixed operational event windows into normal or incident classes and return top contributing signals."
+        },
+        {
+          "id": "baseline",
+          "title": "Baseline",
+          "description": "Compare future ML/NN models against a deterministic rule-based classifier."
+        },
+        {
+          "id": "measurement",
+          "title": "Measurement",
+          "description": "Track macro-F1, critical recall, normal false-positive rate, detection delay, and explanation hit rate."
+        }
+      ],
+      "dataset": {
+        "items": [
+          {
+            "id": "windows",
+            "name": "Labeled windows",
+            "current": 12,
+            "target": "500-1000+",
+            "notes": "First iteration uses a synthetic benchmark."
+          },
+          {
+            "id": "classes",
+            "name": "Classes",
+            "current": 7,
+            "target": "6+",
+            "notes": "normal plus operational incident classes."
+          },
+          {
+            "id": "features",
+            "name": "Feature families",
+            "current": 9,
+            "target": "eventbus/projection/Yjs/device/runtime",
+            "notes": "Aggregated numeric features."
+          }
+        ]
+      },
+      "windows": {
+        "items": [
+          {
+            "id": "demo-001",
+            "window_id": "demo-001",
+            "events": 18,
+            "errors": 0,
+            "prediction": "normal",
+            "severity": "info",
+            "confidence": 0.68
+          },
+          {
+            "id": "demo-004",
+            "window_id": "demo-004",
+            "events": 140,
+            "errors": 3,
+            "prediction": "projection_refresh_storm",
+            "severity": "warning",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "metrics": {
+        "items": [
+          {
+            "id": "macro_f1",
+            "metric": "Macro-F1",
+            "value": "",
+            "target": ">= 0.75",
+            "status": "pending"
+          },
+          {
+            "id": "critical_recall",
+            "metric": "Critical recall",
+            "value": "",
+            "target": ">= 0.85",
+            "status": "pending"
+          },
+          {
+            "id": "false_positive_rate",
+            "metric": "Normal false positive rate",
+            "value": "",
+            "target": "<= 0.15",
+            "status": "pending"
+          }
+        ]
+      },
+      "per_class": {
+        "items": []
+      },
+      "chart": {
+        "title": "Operational readiness",
+        "unit": "0..1",
+        "points": []
+      },
+      "event_volume_chart": {
+        "title": "Event volume by window",
+        "unit": "events",
+        "points": [
+          {
+            "ts": "demo-001",
+            "value": 18
+          },
+          {
+            "ts": "demo-004",
+            "value": 140
+          },
+          {
+            "ts": "demo-010",
+            "value": 420
+          }
+        ]
+      },
+      "class_distribution_chart": {
+        "title": "Baseline class distribution",
+        "unit": "windows",
+        "points": [
+          {
+            "ts": "normal",
+            "value": 3
+          },
+          {
+            "ts": "projection",
+            "value": 2
+          },
+          {
+            "ts": "eventbus",
+            "value": 2
+          }
+        ]
+      },
+      "experiments": {
+        "items": [
+          {
+            "id": "rule_baseline",
+            "model": "Rule baseline",
+            "status": "implemented",
+            "macro_f1": "",
+            "next_step": "Use as baseline for all future models."
+          },
+          {
+            "id": "classical_ml",
+            "model": "Classical ML",
+            "status": "planned",
+            "macro_f1": "",
+            "next_step": "Train on imported labeled windows."
+          },
+          {
+            "id": "neural_window_model",
+            "model": "Neural window model",
+            "status": "planned",
+            "macro_f1": "",
+            "next_step": "Evaluate against identical test split."
+          }
+        ]
+      }
+    }
+  },
+  "contributions": [
+    {
+      "extensionPoint": "desktop.apps",
+      "type": "app",
+      "id": "ai_event_analysis_app",
+      "autoInstall": true
+    },
+    {
+      "extensionPoint": "desktop.widgets",
+      "type": "widget",
+      "id": "ai_event_analysis_widget",
+      "autoInstall": false
+    }
+  ]
+}

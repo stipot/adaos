@@ -1,0 +1,495 @@
+name: ai_event_analysis_skill
+version: 0.2.20
+description: Research skill for measurable AI/ML analysis of AdaOS operational event
+  windows.
+runtime:
+  python: '3.11'
+webui_owner: shared
+data_projections:
+- scope: subnet
+  slot: ai_event_analysis.summary
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/summary
+- scope: subnet
+  slot: ai_event_analysis.dataset
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/dataset
+- scope: subnet
+  slot: ai_event_analysis.metrics
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/metrics
+- scope: subnet
+  slot: ai_event_analysis.experiments
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/experiments
+- scope: subnet
+  slot: ai_event_analysis.windows
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/windows
+- scope: subnet
+  slot: ai_event_analysis.task
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/task
+- scope: subnet
+  slot: ai_event_analysis.per_class
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/per_class
+- scope: subnet
+  slot: ai_event_analysis.chart
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/chart
+- scope: subnet
+  slot: ai_event_analysis.event_volume_chart
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/event_volume_chart
+- scope: subnet
+  slot: ai_event_analysis.class_distribution_chart
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/class_distribution_chart
+- scope: subnet
+  slot: ai_event_analysis.subscription_summary
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/subscription_summary
+- scope: subnet
+  slot: ai_event_analysis.subscription_edges
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/subscription_edges
+- scope: subnet
+  slot: ai_event_analysis.subscription_metrics
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/subscription_metrics
+- scope: subnet
+  slot: ai_event_analysis.subscription_chart
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/subscription_chart
+data_routes:
+- surface: widget:ai_event_analysis_widget
+  route: yjs
+  projection_slot: ai_event_analysis.summary
+  first_paint: compact static summary from webui defaults
+  recovery: Yjs replay restores the compact summary
+  update_source:
+  - webui defaults
+  budget:
+    max_payload_bytes: 2048
+    max_publish_hz: 0.05
+  guard_visibility:
+    degraded_state: widget keeps static summary
+    log: service.ai_event_analysis_skill.runtime.log
+    quarantine: false
+- surface: modal:ai_event_analysis.results
+  route: stream
+  receiver: ai_event_analysis.results
+  first_paint: compact pending result row
+  recovery: snapshot requested on receiver subscribe
+  update_source:
+  - webio.stream.snapshot.requested
+  - ai_event_analysis.evaluate_requested
+  - explicit tool call
+  budget:
+    max_payload_bytes: 12288
+    max_publish_hz: 0.5
+    max_items: 4
+    snapshot_policy: on_subscribe
+  guard_visibility:
+    degraded_state: UI keeps last compact result and requires manual refresh
+    log: service.ai_event_analysis_skill.runtime.log
+    quarantine: false
+- surface: tool:dataset_export
+  route: skill-local
+  first_paint: no browser data; explicit tool response only
+  recovery: rerun export_event_windows_jsonl
+  update_source:
+  - export_event_windows_jsonl
+  guard_visibility:
+    degraded_state: export reports failure in tool response
+    log: service.ai_event_analysis_skill.runtime.log
+    quarantine: false
+memory_budget:
+  expected_rss_mb: 64
+  caches: []
+  background_workers:
+    max_threads: 0
+    cleanup_hook: none
+  retained_payloads:
+    max_windows_returned_by_default: 0
+    max_windows_returned_explicitly: 64
+    max_stream_rows: 12
+    max_evidence_per_window: 4
+lifecycle:
+  rehydrate: rehydrate
+events:
+  subscribe:
+  - webio.stream.snapshot.requested
+  - ai_event_analysis.evaluate_requested
+  publish:
+  - ai_event_analysis.evaluation.completed
+tools:
+- name: get_lab_snapshot
+  description: Return the current AI event-analysis research task snapshot.
+  entry: handlers.main:get_lab_snapshot
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - snapshot
+    properties:
+      ok:
+        type: boolean
+      snapshot:
+        type: object
+- name: refresh_snapshot
+  description: Project the compact first-paint AI event-analysis state into Yjs.
+  entry: handlers.main:refresh_snapshot
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    properties:
+      ok:
+        type: boolean
+      projected:
+        type: object
+- name: rehydrate
+  description: Restore compact browser-visible state after activation or reload.
+  entry: handlers.main:rehydrate
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    properties:
+      ok:
+        type: boolean
+      projected:
+        type: object
+- name: run_demo_evaluation
+  description: Evaluate the built-in rule baseline on the synthetic event-window dataset.
+  entry: handlers.main:run_demo_evaluation
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: run_trial_suite
+  description: Run a deterministic synthetic multi-scenario workload that populates
+    event-window, metric, chart, and subscription-flow projections with useful smoke-test
+    data.
+  entry: handlers.main:run_trial_suite
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: run_real_trial
+  description: Emit real AdaOS SDK events, read back local node logs, build event
+    windows from those logs, and project the measured result.
+  entry: handlers.main:run_real_trial
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+      trial_id:
+        type: string
+      event_count:
+        type: integer
+      max_lines:
+        type: integer
+      window_seconds:
+        type: integer
+      include_windows:
+        type: boolean
+      cross_skill:
+        type: boolean
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: train_projection_relevance_agent
+  description: Train and evaluate a projection relevance agent that predicts which
+    demanded materialized projections should be refreshed for an operational event.
+  entry: handlers.main:train_projection_relevance_agent
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+      sample_count:
+        type: integer
+      seed:
+        type: integer
+      epochs:
+        type: integer
+      learning_rate:
+        type: number
+      threshold:
+        type: number
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: predict_projection_refresh_plan
+  description: Predict an advisory refresh plan for one event and the current active
+    projection demand set.
+  entry: handlers.main:predict_projection_refresh_plan
+  input_schema:
+    type: object
+    properties:
+      event:
+        type: object
+      threshold:
+        type: number
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: evaluate_windows
+  description: Evaluate custom labeled event windows with the rule baseline.
+  entry: handlers.main:evaluate_windows
+  input_schema:
+    type: object
+    properties:
+      windows:
+        type: array
+        items:
+          type: object
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: import_local_logs
+  description: Import and redact local AdaOS log lines into event evidence records.
+  entry: handlers.main:import_local_logs
+  input_schema:
+    type: object
+    properties:
+      path:
+        type: string
+      max_lines:
+        type: integer
+  output_schema:
+    type: object
+    required:
+    - ok
+    - records
+    - summary
+    properties:
+      ok:
+        type: boolean
+      records:
+        type: array
+      summary:
+        type: object
+- name: build_event_windows
+  description: Build event-window records from imported evidence records or local
+    logs and evaluate the rule baseline against weak log labels.
+  entry: handlers.main:build_event_windows
+  input_schema:
+    type: object
+    properties:
+      records:
+        type: array
+        items:
+          type: object
+      window_seconds:
+        type: integer
+      node_id:
+        type: string
+      subnet_id:
+        type: string
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: analyze_local_logs
+  description: Import local AdaOS logs, build event windows, project tables and weak-label
+    baseline metrics.
+  entry: handlers.main:analyze_local_logs
+  input_schema:
+    type: object
+    properties:
+      path:
+        type: string
+      max_lines:
+        type: integer
+      window_seconds:
+        type: integer
+      node_id:
+        type: string
+      subnet_id:
+        type: string
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: analyze_observability_health
+  description: Normalize local core, browser, YJS, and skill logs into observability
+    records, compute health metrics and invariant violations, and project the result.
+  entry: handlers.main:analyze_observability_health
+  input_schema:
+    type: object
+    properties:
+      path:
+        type: string
+      max_lines:
+        type: integer
+      window_seconds:
+        type: integer
+      node_id:
+        type: string
+      subnet_id:
+        type: string
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: analyze_subscription_flow
+  description: Analyze event publisher/subscriber flow from local logs and project
+    subscription routing health.
+  entry: handlers.main:analyze_subscription_flow
+  input_schema:
+    type: object
+    properties:
+      records:
+        type: array
+        items:
+          type: object
+      path:
+        type: string
+      max_lines:
+        type: integer
+      webspace_id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: export_event_windows_jsonl
+  description: Export event-window records as a JSONL dataset file.
+  entry: handlers.main:export_event_windows_jsonl
+  input_schema:
+    type: object
+    properties:
+      windows:
+        type: array
+        items:
+          type: object
+      path:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - export
+    properties:
+      ok:
+        type: boolean
+      export:
+        type: object
+updated_at: '2026-05-31T19:56:09+00:00'
+
