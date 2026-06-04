@@ -150,6 +150,10 @@
                     "label": "Experiments"
                   },
                   {
+                    "id": "agent",
+                    "label": "Agent"
+                  },
+                  {
                     "id": "subscriptions",
                     "label": "Subscriptions"
                   }
@@ -382,6 +386,122 @@
               }
             },
             {
+              "id": "ai-event-analysis-agent-summary",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Projection Relevance Agent Trial",
+              "visibleIf": "$state.aiEventAnalysisTab === 'agent'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/agent_summary"
+              },
+              "inputs": {
+                "emptyText": "Run agent trial to populate the advisory scenario",
+                "columns": [
+                  {
+                    "key": "name",
+                    "label": "Item"
+                  },
+                  {
+                    "key": "value",
+                    "label": "Value",
+                    "width": "180px",
+                    "mono": true
+                  },
+                  {
+                    "key": "notes",
+                    "label": "Notes"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-agent-plan",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Advisory Refresh Plan",
+              "visibleIf": "$state.aiEventAnalysisTab === 'agent'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/agent_plan"
+              },
+              "inputs": {
+                "emptyText": "No agent refresh plan",
+                "columns": [
+                  {
+                    "key": "projection_key",
+                    "label": "Projection"
+                  },
+                  {
+                    "key": "demanded",
+                    "label": "Demanded",
+                    "width": "100px"
+                  },
+                  {
+                    "key": "score",
+                    "label": "Score",
+                    "width": "90px",
+                    "mono": true
+                  },
+                  {
+                    "key": "agent_action",
+                    "label": "Agent action",
+                    "width": "130px"
+                  },
+                  {
+                    "key": "rule_action",
+                    "label": "Rule action",
+                    "width": "130px"
+                  },
+                  {
+                    "key": "comparison",
+                    "label": "Comparison",
+                    "width": "150px"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "ai-event-analysis-agent-gates",
+              "type": "ui.table",
+              "area": "main",
+              "title": "Agent Safety Gates",
+              "visibleIf": "$state.aiEventAnalysisTab === 'agent'",
+              "dataSource": {
+                "kind": "y",
+                "path": "data/ai_event_analysis/agent_gates"
+              },
+              "inputs": {
+                "emptyText": "No agent safety result",
+                "columns": [
+                  {
+                    "key": "gate",
+                    "label": "Gate"
+                  },
+                  {
+                    "key": "value",
+                    "label": "Value",
+                    "width": "100px",
+                    "mono": true
+                  },
+                  {
+                    "key": "target",
+                    "label": "Target",
+                    "width": "100px"
+                  },
+                  {
+                    "key": "status",
+                    "label": "State",
+                    "width": "100px"
+                  },
+                  {
+                    "key": "notes",
+                    "label": "Notes"
+                  }
+                ]
+              }
+            },
+            {
               "id": "ai-event-analysis-subscription-summary",
               "type": "ui.table",
               "area": "main",
@@ -540,6 +660,10 @@
                     "label": "Run real trial"
                   },
                   {
+                    "id": "run_agent_trial",
+                    "label": "Run agent trial"
+                  },
+                  {
                     "id": "refresh_snapshot",
                     "label": "Refresh demo"
                   },
@@ -591,6 +715,16 @@
                     "event_count": 14,
                     "window_seconds": 60,
                     "max_lines": 600
+                  }
+                },
+                {
+                  "on": "click:run_agent_trial",
+                  "type": "callSkill",
+                  "target": "ai_event_analysis_skill.run_projection_relevance_agent_trial",
+                  "params": {
+                    "webspace_id": "$runtime.webspace_id",
+                    "event_type": "core.update.status",
+                    "threshold": 0.5
                   }
                 },
                 {
@@ -848,6 +982,15 @@
             "next_step": "Evaluate against identical test split."
           }
         ]
+      },
+      "agent_summary": {
+        "items": []
+      },
+      "agent_plan": {
+        "items": []
+      },
+      "agent_gates": {
+        "items": []
       }
     }
   },

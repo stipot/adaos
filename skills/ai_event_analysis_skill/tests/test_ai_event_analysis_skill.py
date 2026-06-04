@@ -49,6 +49,7 @@ def test_manifest_declares_measurable_tools_and_stream_wakeup() -> None:
         "run_real_trial",
         "train_projection_relevance_agent",
         "predict_projection_refresh_plan",
+        "run_projection_relevance_agent_trial",
         "summarize_projection_relevance_agent",
         "evaluate_windows",
         "import_local_logs",
@@ -76,6 +77,9 @@ def test_manifest_declares_measurable_tools_and_stream_wakeup() -> None:
         "ai_event_analysis.subscription_metrics",
         "ai_event_analysis.subscription_chart",
         "ai_event_analysis.experiments",
+        "ai_event_analysis.agent_summary",
+        "ai_event_analysis.agent_plan",
+        "ai_event_analysis.agent_gates",
     }.issubset(projection_slots)
 
 
@@ -91,11 +95,13 @@ def test_webui_declares_app_widget_and_results_receiver() -> None:
     assert any(widget["type"] == "ui.list" for widget in widgets)
     tabs = next(widget for widget in widgets if widget["id"] == "ai-event-analysis-tabs")
     assert any(button["id"] == "windows" for button in tabs["inputs"]["buttons"])
+    assert any(button["id"] == "agent" for button in tabs["inputs"]["buttons"])
     assert any(button["id"] == "subscriptions" for button in tabs["inputs"]["buttons"])
     actions = next(widget for widget in widgets if widget["id"] == "ai-event-analysis-actions")
     assert any(button["id"] == "refresh_snapshot" for button in actions["inputs"]["buttons"])
     assert any(button["id"] == "run_trials" for button in actions["inputs"]["buttons"])
     assert any(button["id"] == "run_real_trial" for button in actions["inputs"]["buttons"])
+    assert any(button["id"] == "run_agent_trial" for button in actions["inputs"]["buttons"])
     assert any(button["id"] == "analyze_logs" for button in actions["inputs"]["buttons"])
     assert any(button["id"] == "analyze_health" for button in actions["inputs"]["buttons"])
     assert any(button["id"] == "analyze_subscriptions" for button in actions["inputs"]["buttons"])
@@ -285,6 +291,35 @@ def test_projection_relevance_summary_reports_advisory_readiness() -> None:
     assert "guarded dispatcher" in " ".join(result["agent_boundary"]["not_allowed"])
 
 
+def test_projection_relevance_trial_compares_agent_with_rule_baseline() -> None:
+    agent = _load_agent_module()
+
+    result = agent.build_projection_relevance_trial(
+        {
+            "event_type": "core.update.status",
+            "event_class": "platform_fact",
+            "active_subscriptions": [
+                "overview",
+                "platform:diagnostics",
+                "platform:notifications",
+                "inventory:skills",
+            ],
+        }
+    )
+
+    assert result["mode"] == "projection_relevance_agent_trial"
+    assert result["rule_baseline"]["demanded_refresh"] == [
+        "overview",
+        "platform:diagnostics",
+        "platform:notifications",
+    ]
+    assert result["comparison"]["missed_critical_projections"] == []
+    assert result["safety"]["passed"] is True
+    assert result["safety"]["dispatch_applied"] is False
+    assert result["safety"]["agent_is_advisory"] is True
+    assert {row["projection_key"] for row in result["plan_rows"]} == set(agent.PROJECTION_KEYS)
+
+
 def test_projection_relevance_tools_project_experiment_result(monkeypatch) -> None:
     mod = _load_module()
     projected: list[tuple[object, object]] = []
@@ -313,6 +348,45 @@ def test_projection_relevance_tools_project_experiment_result(monkeypatch) -> No
     assert summary["result"]["advisory_ready"] is True
     assert projected
     assert published
+
+
+def test_projection_relevance_agent_trial_projects_web_ui_sections(monkeypatch) -> None:
+    mod = _load_module()
+    projected: list[tuple[object, object]] = []
+    published: list[object] = []
+    emitted: list[tuple[str, object]] = []
+
+    monkeypatch.setattr(mod, "_project_sections", lambda sections, **kwargs: projected.append((sections, kwargs)))
+    monkeypatch.setattr(mod, "stream_publish", lambda _receiver, payload, _meta=None: published.append(payload))
+    monkeypatch.setattr(
+        mod,
+        "publish_event",
+        lambda event_type, payload, source=None: emitted.append((event_type, payload)),
+    )
+
+    response = mod.run_projection_relevance_agent_trial(
+        {
+            "webspace_id": "desktop",
+            "trial_id": "agent-test",
+            "event_type": "core.update.status",
+        }
+    )
+
+    result = response["result"]
+    assert response["ok"] is True
+    assert result["trial_id"] == "agent-test"
+    assert result["event_source"] == "controlled_operational_event"
+    assert result["demand_source"] == "controlled_web_ui_trial"
+    assert result["safety"]["dispatch_applied"] is False
+    assert result["comparison"]["missed_critical_projections"] == []
+    assert projected
+    sections = projected[-1][0]
+    assert {"agent_summary", "agent_plan", "agent_gates"}.issubset(sections)
+    assert published
+    assert {event_type for event_type, _payload in emitted} == {
+        "ai_event_analysis.projection_relevance_agent_trial.started",
+        "ai_event_analysis.projection_relevance_agent_trial.completed",
+    }
 
 
 def test_custom_window_evaluation_reports_false_positive_rate() -> None:

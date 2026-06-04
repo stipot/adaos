@@ -1,5 +1,5 @@
 name: ai_event_analysis_skill
-version: 0.2.21
+version: 0.2.22
 description: Research skill for measurable AI/ML analysis of AdaOS operational event
   windows.
 runtime:
@@ -26,6 +26,21 @@ data_projections:
   targets:
   - backend: yjs
     path: data/ai_event_analysis/experiments
+- scope: subnet
+  slot: ai_event_analysis.agent_summary
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/agent_summary
+- scope: subnet
+  slot: ai_event_analysis.agent_plan
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/agent_plan
+- scope: subnet
+  slot: ai_event_analysis.agent_gates
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/agent_gates
 - scope: subnet
   slot: ai_event_analysis.windows
   targets:
@@ -138,6 +153,8 @@ events:
   - ai_event_analysis.evaluate_requested
   publish:
   - ai_event_analysis.evaluation.completed
+  - ai_event_analysis.projection_relevance_agent_trial.started
+  - ai_event_analysis.projection_relevance_agent_trial.completed
 tools:
 - name: get_lab_snapshot
   description: Return the current AI event-analysis research task snapshot.
@@ -302,6 +319,34 @@ tools:
         type: number
       webspace_id:
         type: string
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
+- name: run_projection_relevance_agent_trial
+  description: Run a controlled Web UI trial that compares one advisory projection
+    refresh plan with the deterministic rule baseline without applying projection
+    writes.
+  entry: handlers.main:run_projection_relevance_agent_trial
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+      trial_id:
+        type: string
+      event_type:
+        type: string
+      event:
+        type: object
+      threshold:
+        type: number
   output_schema:
     type: object
     required:

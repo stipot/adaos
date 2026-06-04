@@ -211,6 +211,99 @@ def predict_projection_refresh_plan(
     }
 
 
+def build_projection_relevance_trial(
+    event: Mapping[str, Any] | None = None,
+    *,
+    threshold: float = 0.5,
+) -> dict[str, Any]:
+    """Compare one advisory agent plan with the deterministic rule baseline."""
+
+    normalized = _normalize_event(event)
+    prediction = predict_projection_refresh_plan(normalized, threshold=threshold)
+    rule_label = _oracle_label(normalized)
+    rule_actions = _mapping(rule_label.get("recommended_action"))
+    agent_actions = _mapping(prediction.get("recommended_action"))
+    scores = _mapping(prediction.get("refresh_priority"))
+    active = set(_list_text(normalized.get("active_subscriptions")))
+    statuses = _mapping(normalized.get("projection_statuses"))
+
+    agent_refresh = {key for key, action in agent_actions.items() if action == "refresh"}
+    rule_refresh = {key for key, action in rule_actions.items() if action == "refresh"}
+    missed_refresh = sorted(rule_refresh - agent_refresh)
+    extra_refresh = sorted(agent_refresh - rule_refresh)
+    missed_critical = sorted((rule_refresh - agent_refresh) & CRITICAL_PROJECTIONS)
+    matching_actions = sum(1 for key in PROJECTION_KEYS if agent_actions.get(key) == rule_actions.get(key))
+
+    plan_rows = []
+    for projection_key in PROJECTION_KEYS:
+        agent_action = str(agent_actions.get(projection_key) or "ignore")
+        rule_action = str(rule_actions.get(projection_key) or "ignore")
+        if agent_action == rule_action:
+            comparison = "match"
+        elif rule_action == "refresh" and agent_action != "refresh":
+            comparison = "missed_refresh"
+        elif agent_action == "refresh" and rule_action != "refresh":
+            comparison = "extra_refresh"
+        else:
+            comparison = "different_advice"
+        plan_rows.append(
+            {
+                "id": projection_key,
+                "projection_key": projection_key,
+                "demanded": projection_key in active,
+                "status": str(statuses.get(projection_key) or "unknown"),
+                "score": round(float(scores.get(projection_key) or 0.0), 4),
+                "agent_action": agent_action,
+                "rule_action": rule_action,
+                "comparison": comparison,
+                "critical": projection_key in CRITICAL_PROJECTIONS,
+            }
+        )
+    priority_by_action = {"refresh": 0, "mark_stale": 1, "ignore": 2}
+    plan_rows.sort(
+        key=lambda row: (
+            priority_by_action.get(str(row["agent_action"]), 9),
+            -float(row["score"]),
+            str(row["projection_key"]),
+        )
+    )
+
+    safety_passed = not missed_critical
+    return {
+        "mode": "projection_relevance_agent_trial",
+        "event": normalized,
+        "active_projection_set": sorted(active),
+        "agent_plan": {
+            "refresh": sorted(agent_refresh),
+            "mark_stale": sorted(key for key, action in agent_actions.items() if action == "mark_stale"),
+            "ignore": sorted(key for key, action in agent_actions.items() if action == "ignore"),
+            "recommended_action": dict(agent_actions),
+        },
+        "rule_baseline": {
+            "broad_targets": _broad_rule_targets(normalized),
+            "demanded_refresh": sorted(rule_refresh),
+            "recommended_action": dict(rule_actions),
+        },
+        "comparison": {
+            "matched_refreshes": sorted(agent_refresh & rule_refresh),
+            "extra_refreshes": extra_refresh,
+            "missed_refreshes": missed_refresh,
+            "missed_critical_projections": missed_critical,
+            "action_agreement_ratio": round(matching_actions / max(len(PROJECTION_KEYS), 1), 4),
+        },
+        "safety": {
+            "passed": safety_passed,
+            "missed_critical_projection_total": len(missed_critical),
+            "dispatch_applied": False,
+            "agent_is_advisory": True,
+            "authoritative_next_step": "guarded dispatcher rechecks demand, authorization, and projection lifecycle",
+        },
+        "plan_rows": plan_rows,
+        "prediction": prediction,
+        "guardrail": prediction["guardrail"],
+    }
+
+
 def summarize_projection_relevance_agent(
     *,
     sample_count: int = 420,

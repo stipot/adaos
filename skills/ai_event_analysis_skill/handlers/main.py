@@ -163,6 +163,9 @@ def _project_sections(sections: Mapping[str, Any], *, webspace_id: str, force: b
         "subscription_metrics": "ai_event_analysis.subscription_metrics",
         "subscription_chart": "ai_event_analysis.subscription_chart",
         "experiments": "ai_event_analysis.experiments",
+        "agent_summary": "ai_event_analysis.agent_summary",
+        "agent_plan": "ai_event_analysis.agent_plan",
+        "agent_gates": "ai_event_analysis.agent_gates",
     }
     pushed = False
     written: list[str] = []
@@ -1696,6 +1699,183 @@ def _projection_relevance_experiments(result: Mapping[str, Any], *, kind: str) -
     }
 
 
+def _projection_relevance_trial_event(*, event_type: str, webspace_id: str, agent: Any) -> dict[str, Any]:
+    requested_type = str(event_type or "").strip()
+    selected_type = requested_type if requested_type in agent.EVENT_TYPES else "core.update.status"
+    targets = list(agent.BROAD_RULE_TARGETS.get(selected_type) or [])
+    decoys = [key for key in agent.PROJECTION_KEYS if key not in targets]
+    active_subscriptions = list(dict.fromkeys([*targets, *decoys[:1]]))
+    entity_refs = {
+        "skill.installed": "skill:infrascope",
+        "subnet.member.link.down": "node:member-1",
+        "core.update.status": "node:hub-1",
+        "entity.alias.conflict.detected": "entity:room:kitchen",
+        "projection.refresh.failed": "projection:platform:diagnostics",
+        "browser.transport.not_ready": "webspace:desktop",
+        "browser.session.changed": "webspace:desktop",
+    }
+    return {
+        "event_type": selected_type,
+        "event_class": agent.EVENT_CLASSES[selected_type],
+        "entity_ref": entity_refs.get(selected_type, "node:hub-1"),
+        "node_id": "node:hub-1",
+        "webspace_id": webspace_id,
+        "active_subscriptions": active_subscriptions,
+        "projection_statuses": {
+            key: "ready" for key in agent.PROJECTION_KEYS
+        },
+        "consumer_kinds": {
+            key: ("modal" if key == "platform:notifications" else "page")
+            for key in agent.PROJECTION_KEYS
+        },
+        "pinned_flags": {
+            key: key == "platform:notifications"
+            for key in agent.PROJECTION_KEYS
+        },
+    }
+
+
+def _projection_relevance_trial_sections(result: Mapping[str, Any]) -> dict[str, Any]:
+    event = result.get("event") if isinstance(result.get("event"), Mapping) else {}
+    comparison = result.get("comparison") if isinstance(result.get("comparison"), Mapping) else {}
+    safety = result.get("safety") if isinstance(result.get("safety"), Mapping) else {}
+    agent_plan = result.get("agent_plan") if isinstance(result.get("agent_plan"), Mapping) else {}
+    rule_baseline = result.get("rule_baseline") if isinstance(result.get("rule_baseline"), Mapping) else {}
+    active = list(result.get("active_projection_set") or [])
+    agent_refresh = list(agent_plan.get("refresh") or [])
+    rule_refresh = list(rule_baseline.get("demanded_refresh") or [])
+    missed_critical_total = int(safety.get("missed_critical_projection_total") or 0)
+    action_agreement = float(comparison.get("action_agreement_ratio") or 0.0)
+    return {
+        "agent_summary": {
+            "items": [
+                {
+                    "id": "trial_id",
+                    "name": "Trial id",
+                    "value": result.get("trial_id"),
+                    "notes": "Unique identifier of the controlled Web UI trial.",
+                },
+                {
+                    "id": "event_type",
+                    "name": "Operational event",
+                    "value": event.get("event_type"),
+                    "notes": "Controlled payload passed to the advisory model.",
+                },
+                {
+                    "id": "demand_source",
+                    "name": "Demand source",
+                    "value": result.get("demand_source"),
+                    "notes": "Explicit active projection set for a repeatable defense demonstration.",
+                },
+                {
+                    "id": "active_projection_set",
+                    "name": "Active projection set",
+                    "value": len(active),
+                    "notes": ", ".join(active),
+                },
+                {
+                    "id": "agent_refresh",
+                    "name": "Agent refresh recommendations",
+                    "value": len(agent_refresh),
+                    "notes": ", ".join(agent_refresh) or "none",
+                },
+                {
+                    "id": "rule_refresh",
+                    "name": "Rule baseline refreshes",
+                    "value": len(rule_refresh),
+                    "notes": ", ".join(rule_refresh) or "none",
+                },
+                {
+                    "id": "dispatch_applied",
+                    "name": "Projection dispatch applied",
+                    "value": str(bool(safety.get("dispatch_applied"))).lower(),
+                    "notes": "The agent remains outside the authoritative refresh path.",
+                },
+            ]
+        },
+        "agent_plan": {"items": list(result.get("plan_rows") or [])},
+        "agent_gates": {
+            "items": [
+                {
+                    "id": "critical",
+                    "gate": "No missed critical projections",
+                    "value": missed_critical_total,
+                    "target": "0",
+                    "status": "ok" if missed_critical_total == 0 else "warning",
+                    "notes": "Diagnostics and notifications must not be omitted.",
+                },
+                {
+                    "id": "agreement",
+                    "gate": "Action agreement with rule baseline",
+                    "value": action_agreement,
+                    "target": "inspect",
+                    "status": "ok" if action_agreement >= 0.8 else "warning",
+                    "notes": "Differences remain visible for review.",
+                },
+                {
+                    "id": "advisory",
+                    "gate": "Advisory-only execution",
+                    "value": str(bool(safety.get("agent_is_advisory"))).lower(),
+                    "target": "true",
+                    "status": "ok" if safety.get("agent_is_advisory") is True else "warning",
+                    "notes": "The guarded dispatcher remains authoritative.",
+                },
+                {
+                    "id": "dispatch",
+                    "gate": "No automatic projection write",
+                    "value": str(bool(safety.get("dispatch_applied"))).lower(),
+                    "target": "false",
+                    "status": "ok" if safety.get("dispatch_applied") is False else "warning",
+                    "notes": "The trial displays advice without changing projection state.",
+                },
+            ]
+        },
+    }
+
+
+def _publish_projection_relevance_trial_result(result: Mapping[str, Any], *, webspace_id: str) -> None:
+    try:
+        _project_sections(
+            _projection_relevance_trial_sections(result),
+            webspace_id=webspace_id,
+            force=True,
+        )
+    except Exception:
+        pass
+    try:
+        event = result.get("event") if isinstance(result.get("event"), Mapping) else {}
+        comparison = result.get("comparison") if isinstance(result.get("comparison"), Mapping) else {}
+        safety = result.get("safety") if isinstance(result.get("safety"), Mapping) else {}
+        agent_plan = result.get("agent_plan") if isinstance(result.get("agent_plan"), Mapping) else {}
+        stream_publish(
+            _RESULTS_RECEIVER,
+            [
+                {
+                    "id": "projection-relevance-agent-trial",
+                    "title": f"Agent trial: {event.get('event_type')}",
+                    "description": (
+                        f"refresh={len(agent_plan.get('refresh') or [])} "
+                        f"agreement={comparison.get('action_agreement_ratio')} "
+                        f"missed_critical={safety.get('missed_critical_projection_total')} "
+                        "advisory_only=true"
+                    ),
+                    "content": {
+                        "trial_id": result.get("trial_id"),
+                        "event": event,
+                        "active_projection_set": result.get("active_projection_set"),
+                        "agent_plan": agent_plan,
+                        "rule_baseline": result.get("rule_baseline"),
+                        "comparison": comparison,
+                        "safety": safety,
+                    },
+                }
+            ],
+            _meta={"webspace_id": webspace_id},
+        )
+    except Exception:
+        pass
+
+
 def _publish_projection_relevance_result(result: Mapping[str, Any], *, webspace_id: str, kind: str) -> None:
     try:
         _project_sections(
@@ -1933,6 +2113,65 @@ def predict_projection_refresh_plan(payload: Mapping[str, Any] | None = None, **
     result["webspace_id"] = webspace_id
     result["predicted_at"] = _now_iso()
     _publish_projection_relevance_result(result, webspace_id=webspace_id, kind="prediction")
+    return {"ok": True, "result": result}
+
+
+@tool("run_projection_relevance_agent_trial")
+def run_projection_relevance_agent_trial(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
+    body = payload if isinstance(payload, Mapping) else {}
+    webspace_id = _webspace_id_from_payload(body)
+    trial_id = str(body.get("trial_id") or f"agent-{int(time.time())}")
+    agent = _load_projection_relevance_agent()
+    event = (
+        dict(body.get("event"))
+        if isinstance(body.get("event"), Mapping)
+        else _projection_relevance_trial_event(
+            event_type=str(body.get("event_type") or "core.update.status"),
+            webspace_id=webspace_id,
+            agent=agent,
+        )
+    )
+    try:
+        publish_event(
+            "ai_event_analysis.projection_relevance_agent_trial.started",
+            {
+                "trial_id": trial_id,
+                "event_type": event.get("event_type"),
+                "webspace_id": webspace_id,
+            },
+            source="ai_event_analysis_skill",
+        )
+    except Exception:
+        pass
+    result = agent.build_projection_relevance_trial(
+        event,
+        threshold=float(_value(body, "threshold") or 0.5),
+    )
+    result.update(
+        {
+            "trial_id": trial_id,
+            "webspace_id": webspace_id,
+            "event_source": "controlled_operational_event",
+            "demand_source": "controlled_web_ui_trial",
+            "generated_at": _now_iso(),
+        }
+    )
+    _publish_projection_relevance_trial_result(result, webspace_id=webspace_id)
+    try:
+        safety = result.get("safety") if isinstance(result.get("safety"), Mapping) else {}
+        publish_event(
+            "ai_event_analysis.projection_relevance_agent_trial.completed",
+            {
+                "trial_id": trial_id,
+                "event_type": result["event"]["event_type"],
+                "webspace_id": webspace_id,
+                "missed_critical_projection_total": safety.get("missed_critical_projection_total"),
+                "dispatch_applied": safety.get("dispatch_applied"),
+            },
+            source="ai_event_analysis_skill",
+        )
+    except Exception:
+        pass
     return {"ok": True, "result": result}
 
 
