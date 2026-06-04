@@ -243,6 +243,10 @@ See [Dataset Schema](docs/dataset-schema.md).
   surface.
 - [x] Add a readiness summary with metric gates, advisory boundary, and demo
   refresh plan.
+- [x] Add a controlled Web UI trial that compares the advisory agent plan with
+  a deterministic rule baseline for one operational event.
+- [x] Project the trial summary, per-projection plan, and safety gates into a
+  dedicated `Agent` view without applying the recommendation to runtime.
 - [ ] Add persisted train/test splits for comparing several model versions.
 - [ ] Add a deeper MLP or sequence model after real scenario datasets become
   available.
@@ -423,6 +427,18 @@ Use cases now supported:
    compares the rule baseline with reviewed heuristic labels.
 5. `Analyze subscriptions` checks whether observed event emissions match
    declared subscribers in the sampled logs.
+6. `Run agent trial` executes a controlled projection-relevance scenario and
+   opens a defense-friendly result in the `Agent` tab. The view shows the
+   operational event, active projection demand, agent refresh plan, broad rule
+   baseline, action agreement, missed critical projections, and the explicit
+   `dispatch_applied=false` safety boundary.
+
+For the default `core.update.status` trial, the active projection set includes
+`inventory:members` as an irrelevant demanded projection. The agent should
+recommend refresh for `overview`, `platform:diagnostics`, and
+`platform:notifications`, while leaving the unrelated projection ignored. The
+rule baseline and the agent are compared in the same response, so the result is
+useful both as a live UI demonstration and as a regression check.
 
 The right-side quality graph was changed from `Weak-label baseline quality` to
 `Operational readiness`. The new chart is intended to answer an operator-facing
