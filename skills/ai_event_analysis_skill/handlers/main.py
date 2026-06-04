@@ -2117,8 +2117,9 @@ def predict_projection_refresh_plan(payload: Mapping[str, Any] | None = None, **
 
 
 @tool("run_projection_relevance_agent_trial")
-def run_projection_relevance_agent_trial(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
-    body = payload if isinstance(payload, Mapping) else {}
+def run_projection_relevance_agent_trial(payload: Mapping[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+    body = dict(payload) if isinstance(payload, Mapping) else {}
+    body.update(kwargs)
     webspace_id = _webspace_id_from_payload(body)
     trial_id = str(body.get("trial_id") or f"agent-{int(time.time())}")
     agent = _load_projection_relevance_agent()
