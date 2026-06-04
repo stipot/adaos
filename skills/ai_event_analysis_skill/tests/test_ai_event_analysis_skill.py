@@ -388,6 +388,16 @@ def test_projection_relevance_agent_trial_projects_web_ui_sections(monkeypatch) 
         "ai_event_analysis.projection_relevance_agent_trial.completed",
     }
 
+    keyword_response = mod.run_projection_relevance_agent_trial(
+        webspace_id="desktop",
+        trial_id="agent-keyword-test",
+        event_type="skill.installed",
+    )
+    keyword_result = keyword_response["result"]
+    assert keyword_result["trial_id"] == "agent-keyword-test"
+    assert keyword_result["event"]["event_type"] == "skill.installed"
+    assert keyword_result["agent_plan"]["refresh"] == ["inventory:skills", "overview"]
+
 
 def test_custom_window_evaluation_reports_false_positive_rate() -> None:
     mod = _load_module()
