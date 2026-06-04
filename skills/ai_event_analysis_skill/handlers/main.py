@@ -1642,6 +1642,33 @@ def _projection_relevance_experiments(result: Mapping[str, Any], *, kind: str) -
             ],
             "details": result,
         }
+    if kind == "summary":
+        metrics = result.get("metrics") if isinstance(result.get("metrics"), Mapping) else {}
+        return {
+            "title": "Projection relevance agent",
+            "updatedAt": _now_iso(),
+            "items": [
+                {
+                    "id": "projection-relevance-decision",
+                    "label": "Advisory decision",
+                    "value": result.get("decision"),
+                    "note": f"ready={result.get('advisory_ready')}",
+                },
+                {
+                    "id": "projection-relevance-summary-f1",
+                    "label": "ML F1",
+                    "value": metrics.get("f1"),
+                    "note": f"rule baseline F1={baseline.get('f1')}",
+                },
+                {
+                    "id": "projection-relevance-summary-critical",
+                    "label": "Missed critical projections",
+                    "value": metrics.get("missed_critical_projection_total"),
+                    "note": "blocking safety gate",
+                },
+            ],
+            "details": result,
+        }
     return {
         "title": "Projection relevance agent",
         "updatedAt": _now_iso(),
@@ -1692,6 +1719,12 @@ def _publish_projection_relevance_result(result: Mapping[str, Any], *, webspace_
             description = (
                 f"rule_f1={baseline.get('f1')} write_reduction={metrics.get('write_reduction_ratio')} "
                 f"critical_misses={metrics.get('missed_critical_projection_total')}"
+            )
+        if kind == "summary":
+            title = f"Projection relevance agent {result.get('decision')}"
+            description = (
+                f"ready={result.get('advisory_ready')} f1={metrics.get('f1')} "
+                f"write_reduction={metrics.get('write_reduction_ratio')}"
             )
         stream_publish(
             _RESULTS_RECEIVER,
@@ -1900,6 +1933,23 @@ def predict_projection_refresh_plan(payload: Mapping[str, Any] | None = None, **
     result["webspace_id"] = webspace_id
     result["predicted_at"] = _now_iso()
     _publish_projection_relevance_result(result, webspace_id=webspace_id, kind="prediction")
+    return {"ok": True, "result": result}
+
+
+@tool("summarize_projection_relevance_agent")
+def summarize_projection_relevance_agent(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
+    body = payload if isinstance(payload, Mapping) else {}
+    webspace_id = _webspace_id_from_payload(body)
+    agent = _load_projection_relevance_agent()
+    result = agent.summarize_projection_relevance_agent(
+        sample_count=int(_value(body, "sample_count") or 420),
+        seed=int(_value(body, "seed") or 42),
+        epochs=int(_value(body, "epochs") or 90),
+        threshold=float(_value(body, "threshold") or 0.5),
+    )
+    result["webspace_id"] = webspace_id
+    result["summarized_at"] = _now_iso()
+    _publish_projection_relevance_result(result, webspace_id=webspace_id, kind="summary")
     return {"ok": True, "result": result}
 
 

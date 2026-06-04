@@ -49,6 +49,7 @@ def test_manifest_declares_measurable_tools_and_stream_wakeup() -> None:
         "run_real_trial",
         "train_projection_relevance_agent",
         "predict_projection_refresh_plan",
+        "summarize_projection_relevance_agent",
         "evaluate_windows",
         "import_local_logs",
         "build_event_windows",
@@ -258,7 +259,30 @@ def test_projection_relevance_prediction_returns_guarded_refresh_plan() -> None:
     assert "inventory:skills" in result["affected_projections"]
     assert result["recommended_action"]["overview"] == "refresh"
     assert result["recommended_action"]["inventory:skills"] == "refresh"
+    assert result["ranked_refresh_plan"][0]["recommended_action"] == "refresh"
+    assert result["decision_contract"]["agent_role"] == "advisory_refresh_optimizer"
     assert "dispatcher" in result["guardrail"]
+
+
+def test_projection_relevance_summary_reports_advisory_readiness() -> None:
+    agent = _load_agent_module()
+
+    result = agent.summarize_projection_relevance_agent(sample_count=260, seed=9, epochs=55)
+
+    assert result["mode"] == "projection_relevance_agent_summary"
+    assert result["advisory_ready"] is True
+    assert result["decision"] == "ready_for_advisory_refresh_planning"
+    assert result["metrics"]["f1"] >= result["rule_baseline"]["f1"]
+    assert all(gate["passed"] for gate in result["gates"])
+    assert {row["metric"] for row in result["metric_rows"]} >= {
+        "F1",
+        "Precision@3",
+        "Recall@3",
+        "Write reduction ratio",
+        "Missed critical projections",
+    }
+    assert result["demo_refresh_plan"]["ranked_refresh_plan"]
+    assert "guarded dispatcher" in " ".join(result["agent_boundary"]["not_allowed"])
 
 
 def test_projection_relevance_tools_project_experiment_result(monkeypatch) -> None:
@@ -279,11 +303,14 @@ def test_projection_relevance_tools_project_experiment_result(monkeypatch) -> No
             },
         }
     )
+    summary = mod.summarize_projection_relevance_agent({"webspace_id": "desktop", "sample_count": 180, "epochs": 35})
 
     assert trained["ok"] is True
     assert predicted["ok"] is True
+    assert summary["ok"] is True
     assert trained["result"]["metrics"]["f1"] >= trained["result"]["rule_baseline"]["f1"]
     assert predicted["result"]["affected_projections"]
+    assert summary["result"]["advisory_ready"] is True
     assert projected
     assert published
 

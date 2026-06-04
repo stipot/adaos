@@ -241,6 +241,8 @@ See [Dataset Schema](docs/dataset-schema.md).
 - [x] Return an advisory refresh plan with confidence scores and guardrail text.
 - [x] Project compact experiment results through the existing experiments
   surface.
+- [x] Add a readiness summary with metric gates, advisory boundary, and demo
+  refresh plan.
 - [ ] Add persisted train/test splits for comparing several model versions.
 - [ ] Add a deeper MLP or sequence model after real scenario datasets become
   available.
@@ -458,6 +460,9 @@ event emissions, but they do not yet provide enough delivery, ack, latency, and
 correlation metadata to prove whether a subscription is truly unused or merely
 inactive in the selected sample.
 
-The prototype intentionally keeps model training out of the first iteration so
-the measurement contract can stabilize before dependencies and runtime costs
-are introduced.
+The prototype now includes deterministic model training for the projection
+relevance agent. The current quality gate is advisory readiness: the model must
+beat the broad rule baseline, reduce redundant refresh recommendations, and
+miss zero critical diagnostic projections. The next research step is to replace
+or calibrate the synthetic training set with reviewed AdaOS event/subscription
+logs and then compare several model versions on persisted train/test splits.

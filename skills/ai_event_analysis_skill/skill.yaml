@@ -1,5 +1,5 @@
 name: ai_event_analysis_skill
-version: 0.2.20
+version: 0.2.21
 description: Research skill for measurable AI/ML analysis of AdaOS operational event
   windows.
 runtime:
@@ -312,6 +312,33 @@ tools:
         type: boolean
       result:
         type: object
+- name: summarize_projection_relevance_agent
+  description: Train the projection relevance agent, evaluate advisory safety gates,
+    and return a compact readiness report with a demo refresh plan.
+  entry: handlers.main:summarize_projection_relevance_agent
+  input_schema:
+    type: object
+    properties:
+      webspace_id:
+        type: string
+      sample_count:
+        type: integer
+      seed:
+        type: integer
+      epochs:
+        type: integer
+      threshold:
+        type: number
+  output_schema:
+    type: object
+    required:
+    - ok
+    - result
+    properties:
+      ok:
+        type: boolean
+      result:
+        type: object
 - name: evaluate_windows
   description: Evaluate custom labeled event windows with the rule baseline.
   entry: handlers.main:evaluate_windows
@@ -491,5 +518,5 @@ tools:
         type: boolean
       export:
         type: object
-updated_at: '2026-05-31T19:56:09+00:00'
+updated_at: '2026-06-04T00:00:00+00:00'
 

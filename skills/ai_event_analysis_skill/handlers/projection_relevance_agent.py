@@ -181,14 +181,152 @@ def predict_projection_refresh_plan(
     scores = model.predict_scores(features)
     recommended_action = _recommended_actions(event_payload, scores, threshold=threshold)
     affected = [key for key, action in recommended_action.items() if action == "refresh"]
+    ranked_refresh_plan = _ranked_refresh_plan(scores, recommended_action)
     return {
         "mode": "projection_relevance_prediction",
         "event": event_payload,
         "affected_projections": affected,
+        "stale_projections": [key for key, action in recommended_action.items() if action == "mark_stale"],
         "refresh_priority": {key: round(scores[key], 4) for key in PROJECTION_KEYS},
+        "ranked_refresh_plan": ranked_refresh_plan,
         "recommended_action": recommended_action,
+        "decision_contract": {
+            "agent_role": "advisory_refresh_optimizer",
+            "authoritative_components": [
+                "event envelope validation",
+                "active demand registry",
+                "guarded dispatcher",
+                "authorization checks",
+                "projection lifecycle writer",
+            ],
+            "blocked_decisions": [
+                "grant data access",
+                "declare event truth",
+                "write projection without demand",
+                "execute user command",
+            ],
+        },
         "guardrail": "model suggests refresh order only; dispatcher and demand checks remain authoritative",
         "training_metrics": trained["metrics"],
+    }
+
+
+def summarize_projection_relevance_agent(
+    *,
+    sample_count: int = 420,
+    seed: int = 42,
+    epochs: int = 90,
+    threshold: float = 0.5,
+) -> dict[str, Any]:
+    training = train_projection_relevance_agent(
+        sample_count=sample_count,
+        seed=seed,
+        epochs=epochs,
+        threshold=threshold,
+    )
+    metrics = training["metrics"]
+    baseline = training["rule_baseline"]
+    comparison = training["comparison"]
+    demo_plan = predict_projection_refresh_plan(
+        {
+            "event_type": "skill.installed",
+            "event_class": "domain_fact",
+            "entity_ref": "skill:infrascope",
+            "node_id": "node:hub-1",
+            "webspace_id": "desktop",
+            "active_subscriptions": ["overview", "inventory:skills", "platform:notifications"],
+            "projection_statuses": {
+                "overview": "ready",
+                "inventory:skills": "ready",
+                "platform:notifications": "ready",
+            },
+            "consumer_kinds": {
+                "overview": "page",
+                "inventory:skills": "widget",
+                "platform:notifications": "modal",
+            },
+            "pinned_flags": {"platform:notifications": True},
+        },
+        threshold=threshold,
+    )
+    gates = [
+        _gate("f1_at_least_0_90", metrics["f1"] >= 0.90, metrics["f1"], ">= 0.90"),
+        _gate("beats_rule_f1", comparison["f1_delta"] > 0, comparison["f1_delta"], "> 0"),
+        _gate(
+            "write_reduction_at_least_0_15",
+            metrics["write_reduction_ratio"] >= 0.15,
+            metrics["write_reduction_ratio"],
+            ">= 0.15",
+        ),
+        _gate(
+            "no_missed_critical_projections",
+            metrics["missed_critical_projection_total"] == 0,
+            metrics["missed_critical_projection_total"],
+            "0",
+        ),
+        _gate("precision_at_3_at_least_0_55", metrics["precision_at_3"] >= 0.55, metrics["precision_at_3"], ">= 0.55"),
+        _gate("recall_at_3_at_least_0_80", metrics["recall_at_3"] >= 0.80, metrics["recall_at_3"], ">= 0.80"),
+    ]
+    advisory_ready = all(item["passed"] for item in gates)
+    metric_rows = [
+        _metric_row("F1", metrics["f1"], baseline["f1"], "multi-label projection relevance quality"),
+        _metric_row("Precision@3", metrics["precision_at_3"], None, "quality of top refresh candidates"),
+        _metric_row("Recall@3", metrics["recall_at_3"], None, "coverage of affected projections in the top plan"),
+        _metric_row("Hamming loss", metrics["hamming_loss"], baseline["hamming_loss"], "per-projection label error"),
+        _metric_row(
+            "Write reduction ratio",
+            metrics["write_reduction_ratio"],
+            baseline["write_reduction_ratio"],
+            "extra refresh recommendations avoided against broad rules",
+        ),
+        _metric_row(
+            "Missed critical projections",
+            metrics["missed_critical_projection_total"],
+            baseline["missed_critical_projection_total"],
+            "safety gate for diagnostics and notifications",
+        ),
+    ]
+    return {
+        "mode": "projection_relevance_agent_summary",
+        "advisory_ready": advisory_ready,
+        "decision": "ready_for_advisory_refresh_planning" if advisory_ready else "needs_more_training_or_review",
+        "training": training,
+        "metrics": metrics,
+        "rule_baseline": baseline,
+        "comparison": comparison,
+        "gates": gates,
+        "metric_rows": metric_rows,
+        "demo_refresh_plan": {
+            "event_type": demo_plan["event"]["event_type"],
+            "affected_projections": demo_plan["affected_projections"],
+            "stale_projections": demo_plan["stale_projections"],
+            "ranked_refresh_plan": demo_plan["ranked_refresh_plan"],
+            "guardrail": demo_plan["guardrail"],
+        },
+        "agent_boundary": {
+            "allowed": [
+                "rank projection refresh candidates",
+                "recommend refresh / mark_stale / ignore",
+                "surface confidence scores",
+                "support baseline comparison",
+            ],
+            "not_allowed": [
+                "grant access",
+                "change canonical event history",
+                "publish sensitive projection data by itself",
+                "override guarded dispatcher checks",
+            ],
+        },
+        "limitations": [
+            "training data is synthetic and must be replaced or calibrated with reviewed AdaOS logs",
+            "the model is advisory and must not become the source of truth",
+            "real browser adapter measurements are still required for final performance claims",
+        ],
+        "next_steps": [
+            "collect reviewed real event/subscription logs",
+            "compare the same scenarios before and after agent-assisted refresh planning",
+            "keep missed critical projections as a blocking safety gate",
+        ],
     }
 
 
@@ -414,6 +552,32 @@ def _recommended_actions(event: Mapping[str, Any], scores: Mapping[str, float], 
         else:
             actions[projection_key] = "ignore"
     return actions
+
+
+def _ranked_refresh_plan(scores: Mapping[str, float], actions: Mapping[str, str]) -> list[dict[str, Any]]:
+    priority_by_action = {"refresh": 0, "mark_stale": 1, "ignore": 2}
+    rows = [
+        {
+            "projection_key": projection_key,
+            "score": round(float(scores.get(projection_key) or 0.0), 4),
+            "recommended_action": str(actions.get(projection_key) or "ignore"),
+        }
+        for projection_key in PROJECTION_KEYS
+    ]
+    return sorted(rows, key=lambda row: (priority_by_action.get(row["recommended_action"], 9), -row["score"], row["projection_key"]))
+
+
+def _gate(name: str, passed: bool, value: Any, target: str) -> dict[str, Any]:
+    return {"name": name, "passed": bool(passed), "value": value, "target": target}
+
+
+def _metric_row(name: str, agent_value: Any, baseline_value: Any, interpretation: str) -> dict[str, Any]:
+    return {
+        "metric": name,
+        "agent": agent_value,
+        "rule_baseline": baseline_value,
+        "interpretation": interpretation,
+    }
 
 
 def _normalize_event(event: Mapping[str, Any] | None) -> dict[str, Any]:
