@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import importlib.util
 import json
@@ -106,7 +106,7 @@ def test_webui_declares_app_widget_and_results_receiver() -> None:
     assert any(button["id"] == "analyze_health" for button in actions["inputs"]["buttons"])
     assert any(button["id"] == "analyze_subscriptions" for button in actions["inputs"]["buttons"])
     readiness = next(widget for widget in widgets if widget["id"] == "ai-event-analysis-chart")
-    assert readiness["title"] == "Operational readiness"
+    assert readiness["title"] == "Готовность анализа"
     assert "subscriptions" not in readiness["visibleIf"]
 
 
@@ -183,7 +183,7 @@ def test_trial_suite_populates_operational_and_subscription_data() -> None:
     assert len(result["scenario_classes"]) >= 6
     assert result["subscription_result"]["summary"]["declared_subscriptions"] >= 4
     assert result["subscription_result"]["summary"]["missing_consumers"] >= 1
-    assert result["chart"]["title"] == "Trial operational readiness"
+    assert result["chart"]["title"] == "Готовность синтетической проверки"
     assert any(point["ts"] == "routing health" for point in result["chart"]["points"])
 
 

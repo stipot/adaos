@@ -542,7 +542,7 @@ def _subscription_flow_from_records(records: list[Mapping[str, Any]]) -> dict[st
         },
         "rows": rows,
         "chart": {
-            "title": "Observed event volume by type",
+            "title": "Объём событий по типам",
             "unit": "events",
             "points": [
                 {"ts": event_type[-24:], "value": count}
@@ -551,12 +551,12 @@ def _subscription_flow_from_records(records: list[Mapping[str, Any]]) -> dict[st
         },
         "metrics": {
             "items": [
-                {"id": "declared", "metric": "Declared subscriptions", "value": declared, "target": "tracked", "status": "info"},
-                {"id": "observed_types", "metric": "Observed event types", "value": event_types, "target": "tracked", "status": "info"},
-                {"id": "missing", "metric": "Missing consumers", "value": missing, "target": "0", "status": "ok" if missing == 0 else "warning"},
-                {"id": "idle", "metric": "Idle subscriptions", "value": idle, "target": "minimize", "status": "ok" if idle == 0 else "warning"},
-                {"id": "noisy", "metric": "Noisy subscriptions", "value": noisy, "target": "review", "status": "ok" if noisy == 0 else "warning"},
-                {"id": "risk_score", "metric": "Routing risk score", "value": risk_score, "target": "<= 0.15", "status": "ok" if risk_score <= 0.15 else "warning"},
+                {"id": "declared", "metric": "Объявленные подписки", "value": declared, "target": "отслеживать", "status": "info"},
+                {"id": "observed_types", "metric": "Наблюдаемые типы событий", "value": event_types, "target": "отслеживать", "status": "info"},
+                {"id": "missing", "metric": "Нет потребителей", "value": missing, "target": "0", "status": "ok" if missing == 0 else "warning"},
+                {"id": "idle", "metric": "Неактивные подписки", "value": idle, "target": "уменьшать", "status": "ok" if idle == 0 else "warning"},
+                {"id": "noisy", "metric": "Шумные подписки", "value": noisy, "target": "проверить", "status": "ok" if noisy == 0 else "warning"},
+                {"id": "risk_score", "metric": "Оценка риска маршрутизации", "value": risk_score, "target": "<= 0.15", "status": "ok" if risk_score <= 0.15 else "warning"},
             ]
         },
     }
@@ -570,7 +570,7 @@ def _project_subscription_flow(result: Mapping[str, Any], *, webspace_id: str) -
         ]},
         "subscription_edges": {"items": list(result.get("rows") or [])},
         "subscription_metrics": result.get("metrics") or {"items": []},
-        "subscription_chart": result.get("chart") or {"title": "Observed event volume by type", "unit": "events", "points": []},
+        "subscription_chart": result.get("chart") or {"title": "Объём событий по типам", "unit": "events", "points": []},
     }
     return _project_sections(sections, webspace_id=webspace_id, force=True)
 
@@ -622,42 +622,42 @@ def _observability_health_from_records(records: list[Mapping[str, Any]]) -> dict
     invariants = [
         {
             "id": "event_type_coverage",
-            "metric": "Event type coverage",
+            "metric": "Покрытие типов событий",
             "value": _ratio(typed, total),
             "target": ">= 0.90",
             "status": "ok" if _ratio(typed, total) >= 0.90 else "warning",
         },
         {
             "id": "source_coverage",
-            "metric": "Source coverage",
+            "metric": "Покрытие источников",
             "value": _ratio(sourced, total),
             "target": ">= 0.95",
             "status": "ok" if _ratio(sourced, total) >= 0.95 else "warning",
         },
         {
             "id": "correlation_coverage",
-            "metric": "Correlation coverage",
+            "metric": "Покрытие связей",
             "value": correlation_score,
             "target": ">= 0.50",
             "status": "ok" if correlation_score >= 0.50 else "warning",
         },
         {
             "id": "blocked_yjs_writes",
-            "metric": "Blocked YJS/projection writes",
+            "metric": "Заблокированные записи YJS/проекций",
             "value": blocked_writes,
             "target": "0",
             "status": "ok" if blocked_writes == 0 else "critical",
         },
         {
             "id": "slow_handlers",
-            "metric": "Slow event handlers",
+            "metric": "Медленные обработчики событий",
             "value": slow_handlers,
             "target": "0",
             "status": "ok" if slow_handlers == 0 else "warning",
         },
         {
             "id": "event_loop_lag",
-            "metric": "Event loop lag warnings",
+            "metric": "Предупреждения задержки цикла событий",
             "value": event_loop_lag,
             "target": "0",
             "status": "ok" if event_loop_lag == 0 else "warning",
@@ -665,26 +665,26 @@ def _observability_health_from_records(records: list[Mapping[str, Any]]) -> dict
     ]
     metrics = {
         "items": [
-            {"id": "observability_score", "metric": "Observability score", "value": overall, "target": ">= 0.80", "status": "ok" if overall >= 0.80 else "warning"},
-            {"id": "schema_score", "metric": "Schema coverage score", "value": schema_score, "target": ">= 0.90", "status": "ok" if schema_score >= 0.90 else "warning"},
-            {"id": "correlation_score", "metric": "Correlation score", "value": correlation_score, "target": ">= 0.50", "status": "ok" if correlation_score >= 0.50 else "warning"},
-            {"id": "projection_health", "metric": "Projection/YJS health", "value": projection_health, "target": ">= 0.80", "status": "ok" if projection_health >= 0.80 else "warning"},
-            {"id": "runtime_health", "metric": "Tool/runtime health", "value": runtime_health, "target": ">= 0.80", "status": "ok" if runtime_health >= 0.80 else "warning"},
-            {"id": "browser_health", "metric": "Browser/session health", "value": browser_health, "target": ">= 0.80", "status": "ok" if browser_health >= 0.80 else "warning"},
+            {"id": "observability_score", "metric": "Оценка наблюдаемости", "value": overall, "target": ">= 0.80", "status": "ok" if overall >= 0.80 else "warning"},
+            {"id": "schema_score", "metric": "Покрытие схемы", "value": schema_score, "target": ">= 0.90", "status": "ok" if schema_score >= 0.90 else "warning"},
+            {"id": "correlation_score", "metric": "Оценка связей", "value": correlation_score, "target": ">= 0.50", "status": "ok" if correlation_score >= 0.50 else "warning"},
+            {"id": "projection_health", "metric": "Состояние проекций/YJS", "value": projection_health, "target": ">= 0.80", "status": "ok" if projection_health >= 0.80 else "warning"},
+            {"id": "runtime_health", "metric": "Состояние инструментов/runtime", "value": runtime_health, "target": ">= 0.80", "status": "ok" if runtime_health >= 0.80 else "warning"},
+            {"id": "browser_health", "metric": "Состояние браузера/сессии", "value": browser_health, "target": ">= 0.80", "status": "ok" if browser_health >= 0.80 else "warning"},
         ] + invariants
     }
     dataset = {
         "items": [
-            {"id": "records", "name": "Normalized records", "current": total, "target": "core + browser + skill logs", "notes": "Input rows after redaction and parsing."},
-            {"id": "structured", "name": "Structured JSON records", "current": structured, "target": "maximize", "notes": "Rows parsed as JSON log events."},
-            {"id": "eventbus", "name": "Eventbus records", "current": eventbus_records, "target": "visible command/event flow", "notes": "Rows emitted by eventbus logging."},
-            {"id": "projection", "name": "Projection/YJS records", "current": projection_records, "target": "visible UI materialization flow", "notes": "Projection, materialization, and YJS activity."},
-            {"id": "browser", "name": "Browser/session records", "current": browser_sessions, "target": "browser log coverage", "notes": "Browser, websocket, YWS, and session records."},
-            {"id": "labels", "name": "Suggested label policy", "current": "invariant + operator review", "target": "manual acceptance", "notes": "Use invariant violations as weak labels, then accept/reject in review."},
+            {"id": "records", "name": "Нормализованные записи", "current": total, "target": "логи ядра, браузера и навыков", "notes": "Строки после очистки и разбора."},
+            {"id": "structured", "name": "Структурированные JSON-записи", "current": structured, "target": "увеличивать", "notes": "Строки, разобранные как JSON-события логов."},
+            {"id": "eventbus", "name": "Записи шины событий", "current": eventbus_records, "target": "видимый поток команд и событий", "notes": "Строки, созданные логированием шины событий."},
+            {"id": "projection", "name": "Записи проекций/YJS", "current": projection_records, "target": "видимая материализация интерфейса", "notes": "Активность проекций, материализации и YJS."},
+            {"id": "browser", "name": "Записи браузера/сессии", "current": browser_sessions, "target": "покрытие браузерных логов", "notes": "Записи браузера, WebSocket, YWS и сессий."},
+            {"id": "labels", "name": "Предлагаемая политика разметки", "current": "invariant + operator review", "target": "ручное подтверждение", "notes": "Использовать нарушения инвариантов как слабую разметку, затем подтверждать или отклонять вручную."},
         ]
     }
     chart = {
-        "title": "Observability health",
+        "title": "Наблюдаемость системы",
         "unit": "0..1",
         "points": [
             {"ts": "schema", "value": schema_score},
@@ -729,26 +729,26 @@ def _project_observability_health(result: Mapping[str, Any], *, webspace_id: str
     summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
     sections = {
         "summary": {
-            "label": "AI Event Analysis",
+            "label": "Интеллектуальный анализ событий",
             "value": f"{_value(summary, 'observability_score'):.3f}",
-            "subtitle": "observability health score",
+            "subtitle": "оценка наблюдаемости",
             "description": (
                 f"records={result.get('record_count')} schema={summary.get('schema_score')} "
                 f"correlation={summary.get('correlation_score')} blocked_writes={summary.get('blocked_writes')}"
             ),
             "buttons": [
-                {"id": "open", "label": "Open"},
-                {"id": "analyze_health", "label": "Analyze health"},
-                {"id": "run_real_trial", "label": "Run real trial"},
+                {"id": "open", "label": "Открыть"},
+                {"id": "analyze_health", "label": "Проверить состояние"},
+                {"id": "run_real_trial", "label": "Запустить проверку на логах"},
             ],
         },
         "dataset": result.get("dataset") or {"items": []},
         "metrics": result.get("metrics") or {"items": []},
         "per_class": result.get("labels") or {"items": []},
-        "chart": result.get("chart") or {"title": "Observability health", "unit": "0..1", "points": []},
+        "chart": result.get("chart") or {"title": "Наблюдаемость системы", "unit": "0..1", "points": []},
         "windows": {"items": _window_rows(windows)},
-        "event_volume_chart": {"title": "Observed log volume by window", "unit": "records", "points": _event_volume_points(windows)},
-        "class_distribution_chart": {"title": "Weak issue class distribution", "unit": "windows", "points": _class_distribution_points(windows)},
+        "event_volume_chart": {"title": "Объём логов по окнам", "unit": "records", "points": _event_volume_points(windows)},
+        "class_distribution_chart": {"title": "Распределение найденных проблем", "unit": "windows", "points": _class_distribution_points(windows)},
     }
     return _project_sections(sections, webspace_id=webspace_id, force=True)
 
@@ -756,7 +756,7 @@ def _project_observability_health(result: Mapping[str, Any], *, webspace_id: str
 def _readiness_chart(
     result: Mapping[str, Any],
     *,
-    title: str = "Operational readiness",
+    title: str = "Готовность анализа",
     subscription_result: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     points = [
@@ -1016,7 +1016,7 @@ def _trial_suite_result() -> dict[str, Any]:
     windows = _trial_windows()
     baseline_result = _evaluate(windows)
     subscription_result = _subscription_flow_from_records(_trial_subscription_records())
-    readiness = _readiness_chart(baseline_result, title="Trial operational readiness", subscription_result=subscription_result)
+    readiness = _readiness_chart(baseline_result, title="Готовность синтетической проверки", subscription_result=subscription_result)
     scenario_classes = sorted({str((window.get("label") or {}).get("incident_type") or "normal") for window in windows})
     summary = subscription_result.get("summary") if isinstance(subscription_result.get("summary"), Mapping) else {}
     readiness_score = round(
@@ -1043,12 +1043,12 @@ def _trial_suite_result() -> dict[str, Any]:
         "windows": windows,
         "rows": _window_rows(windows, limit=48),
         "event_volume_chart": {
-            "title": "Trial event volume by window",
+            "title": "Объём событий синтетической проверки",
             "unit": "events",
             "points": _event_volume_points(windows),
         },
         "class_distribution_chart": {
-            "title": "Trial class distribution",
+            "title": "Распределение классов синтетической проверки",
             "unit": "windows",
             "points": _class_distribution_points(windows),
         },
@@ -1317,12 +1317,12 @@ def _evaluate(windows: list[Mapping[str, Any]]) -> dict[str, Any]:
 
 def _metric_rows(result: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
-        {"id": "accuracy", "metric": "Accuracy", "value": result.get("accuracy"), "target": "sanity only", "status": "info"},
+        {"id": "accuracy", "metric": "Точность классификации", "value": result.get("accuracy"), "target": "контроль", "status": "info"},
         {"id": "macro_f1", "metric": "Macro-F1", "value": result.get("macro_f1"), "target": ">= 0.75", "status": "ok" if _value(result, "macro_f1") >= 0.75 else "warning"},
-        {"id": "critical_recall", "metric": "Critical recall", "value": result.get("critical_recall"), "target": ">= 0.85", "status": "ok" if _value(result, "critical_recall") >= 0.85 else "warning"},
-        {"id": "false_positive_rate", "metric": "Normal false positive rate", "value": result.get("false_positive_rate"), "target": "<= 0.15", "status": "ok" if _value(result, "false_positive_rate") <= 0.15 else "warning"},
-        {"id": "avg_detection_delay_s", "metric": "Avg detection delay", "value": result.get("avg_detection_delay_s"), "target": "minimize", "status": "info"},
-        {"id": "top_reason_hit_rate", "metric": "Top reason hit rate", "value": result.get("top_reason_hit_rate"), "target": "maximize", "status": "info"},
+        {"id": "critical_recall", "metric": "Полнота критичных случаев", "value": result.get("critical_recall"), "target": ">= 0.85", "status": "ok" if _value(result, "critical_recall") >= 0.85 else "warning"},
+        {"id": "false_positive_rate", "metric": "Ложные срабатывания нормы", "value": result.get("false_positive_rate"), "target": "<= 0.15", "status": "ok" if _value(result, "false_positive_rate") <= 0.15 else "warning"},
+        {"id": "avg_detection_delay_s", "metric": "Средняя задержка обнаружения", "value": result.get("avg_detection_delay_s"), "target": "уменьшать", "status": "info"},
+        {"id": "top_reason_hit_rate", "metric": "Попадание в главную причину", "value": result.get("top_reason_hit_rate"), "target": "увеличивать", "status": "info"},
     ]
 
 
@@ -1330,11 +1330,11 @@ def _dataset_rows_for_real_logs(result: Mapping[str, Any]) -> list[dict[str, Any
     baseline = result.get("baseline_result") if isinstance(result.get("baseline_result"), Mapping) else {}
     assert isinstance(baseline, Mapping)
     return [
-        {"id": "windows", "name": "Event windows", "current": result.get("window_count"), "target": "500-1000+", "notes": "Built from local AdaOS logs."},
-        {"id": "records", "name": "Evidence records", "current": result.get("record_count"), "target": "redacted operational evidence", "notes": "Raw log lines stay local; projected rows are compact."},
-        {"id": "window_seconds", "name": "Window size", "current": result.get("window_seconds"), "target": "60/300/900 seconds", "notes": "Tune per experiment."},
-        {"id": "label_source", "name": "Label source", "current": "codex_reviewed_log_heuristic", "target": "manual labels", "notes": "Current metrics are reviewed heuristics, not ground truth."},
-        {"id": "macro_f1", "name": "Reviewed-heuristic Macro-F1", "current": baseline.get("macro_f1"), "target": ">= 0.75", "notes": "Agreement between baseline and reviewed log heuristic."},
+        {"id": "windows", "name": "Окна событий", "current": result.get("window_count"), "target": "500-1000+", "notes": "Построено по локальным логам AdaOS."},
+        {"id": "records", "name": "Записи наблюдений", "current": result.get("record_count"), "target": "очищенные рабочие данные", "notes": "Исходные строки логов остаются локально, в интерфейс выводятся краткие записи."},
+        {"id": "window_seconds", "name": "Размер окна", "current": result.get("window_seconds"), "target": "60/300/900 секунд", "notes": "Подбирается под эксперимент."},
+        {"id": "label_source", "name": "Источник разметки", "current": "codex_reviewed_log_heuristic", "target": "ручная разметка", "notes": "Текущие метрики основаны на проверенной эвристике, а не на финальной ручной разметке."},
+        {"id": "macro_f1", "name": "Macro-F1 по проверенной эвристике", "current": baseline.get("macro_f1"), "target": ">= 0.75", "notes": "Совпадение правила с проверенной эвристикой по логам."},
     ]
 
 
@@ -1343,40 +1343,40 @@ def _snapshot() -> dict[str, Any]:
     demo_result = _evaluate(_synthetic_windows())
     return {
         "summary": {
-            "label": "AI Event Analysis",
+            "label": "Интеллектуальный анализ событий",
             "value": f"{demo_result['macro_f1']:.3f}",
-            "subtitle": "rule baseline macro-F1",
-            "description": "Measurable research task for operational event-window incident classification.",
+            "subtitle": "Macro-F1 правиловой основы",
+            "description": "Проверяемая задача анализа окон операционных событий.",
             "buttons": [
-                {"id": "open", "label": "Open"},
-                {"id": "run_demo", "label": "Run demo evaluation"},
+                {"id": "open", "label": "Открыть"},
+                {"id": "run_demo", "label": "Запустить демо-проверку"},
             ],
         },
         "task": {
             "items": [
                 {
                     "id": "objective",
-                    "title": "Objective",
-                    "description": "Classify fixed operational event windows into normal or incident classes and return top contributing signals.",
+                    "title": "Цель",
+                    "description": "Разделить окна событий на нормальные и проблемные, а также показать главные признаки решения.",
                 },
                 {
                     "id": "dataset",
-                    "title": "Dataset contract",
-                    "description": "Use compact event-window rows with numeric features, labels, scope, timing, and redacted evidence references.",
+                    "title": "Состав данных",
+                    "description": "Использовать компактные строки окон событий с числовыми признаками, разметкой и очищенными примерами.",
                 },
                 {
                     "id": "measurement",
-                    "title": "Measurement",
-                    "description": "Track macro-F1, critical recall, normal false-positive rate, detection delay, explanation hit rate, and per-class scores.",
+                    "title": "Измерение",
+                    "description": "Отслеживать Macro-F1, полноту критичных случаев, ложные срабатывания, задержку обнаружения и оценки по классам.",
                 },
             ]
         },
         "dataset": {
             "items": [
-                {"id": "windows", "name": "Labeled windows", "current": len(demo_windows), "target": "500-1000+", "notes": "One row per fixed event window."},
-                {"id": "classes", "name": "Classes", "current": len(_CLASSES), "target": "6+", "notes": "normal plus incident classes."},
-                {"id": "features", "name": "Feature families", "current": 9, "target": "eventbus/projection/Yjs/device/runtime", "notes": "Aggregated numeric features for baseline and ML models."},
-                {"id": "logs", "name": "Local log import", "current": len(_log_candidates()), "target": "explicit paths plus local candidates", "notes": "Core remains unchanged; this skill only reads local files when asked."},
+                {"id": "windows", "name": "Размеченные окна", "current": len(demo_windows), "target": "500-1000+", "notes": "Одна строка на одно фиксированное окно событий."},
+                {"id": "classes", "name": "Классы", "current": len(_CLASSES), "target": "6+", "notes": "Нормальное состояние и классы инцидентов."},
+                {"id": "features", "name": "Группы признаков", "current": 9, "target": "eventbus/projection/Yjs/device/runtime", "notes": "Сводные числовые признаки для правила и ML-моделей."},
+                {"id": "logs", "name": "Импорт локальных логов", "current": len(_log_candidates()), "target": "указанный путь и локальные кандидаты", "notes": "Ядро не меняется, навык читает локальные файлы только по запросу."},
             ]
         },
         "windows": {"items": _window_rows(demo_windows)},
@@ -1384,20 +1384,20 @@ def _snapshot() -> dict[str, Any]:
         "per_class": {"items": demo_result["per_class"]},
         "chart": _readiness_chart(demo_result),
         "event_volume_chart": {
-            "title": "Event volume by window",
+            "title": "Объём событий по окнам",
             "unit": "events",
             "points": _event_volume_points(demo_windows),
         },
         "class_distribution_chart": {
-            "title": "Baseline class distribution",
+            "title": "Распределение классов по правилу",
             "unit": "windows",
             "points": _class_distribution_points(demo_windows),
         },
         "experiments": {
             "items": [
-                {"id": "rule_baseline", "model": "Rule baseline", "status": "implemented", "macro_f1": demo_result["macro_f1"], "next_step": "Use as baseline for all future models."},
-                {"id": "classical_ml", "model": "Classical ML", "status": "planned", "macro_f1": "", "next_step": "Train logistic regression/random forest on imported windows."},
-                {"id": "neural_window_model", "model": "Neural window model", "status": "planned", "macro_f1": "", "next_step": "Evaluate MLP/GRU/Transformer against the same split."},
+                {"id": "rule_baseline", "model": "Правиловая основа", "status": "реализовано", "macro_f1": demo_result["macro_f1"], "next_step": "Использовать как основу для сравнения будущих моделей."},
+                {"id": "classical_ml", "model": "Классическая ML-модель", "status": "запланировано", "macro_f1": "", "next_step": "Обучить модель на импортированных окнах событий."},
+                {"id": "neural_window_model", "model": "Нейросетевая модель окон", "status": "запланировано", "macro_f1": "", "next_step": "Проверить нейросетевой вариант на той же выборке."},
             ]
         },
         "details": {
@@ -1419,17 +1419,17 @@ def _project_lab_snapshot(*, webspace_id: str = "desktop", force: bool = False) 
 def _project_evaluation_result(result: Mapping[str, Any], *, webspace_id: str) -> dict[str, Any]:
     sections = {
         "summary": {
-            "label": "AI Event Analysis",
+            "label": "Интеллектуальный анализ событий",
             "value": f"{_value(result, 'macro_f1'):.3f}",
-            "subtitle": "rule baseline macro-F1",
+            "subtitle": "Macro-F1 правиловой основы",
             "description": (
                 f"accuracy={result.get('accuracy')} critical_recall={result.get('critical_recall')} "
                 f"normal_fpr={result.get('false_positive_rate')}"
             ),
             "buttons": [
-                {"id": "open", "label": "Open"},
-                {"id": "run_demo", "label": "Run demo evaluation"},
-                {"id": "analyze_logs", "label": "Analyze real logs"},
+                {"id": "open", "label": "Открыть"},
+                {"id": "run_demo", "label": "Запустить демо-проверку"},
+                {"id": "analyze_logs", "label": "Проанализировать логи"},
             ],
         },
         "metrics": {"items": _metric_rows(result)},
@@ -1443,8 +1443,8 @@ def _project_windows_result(result: Mapping[str, Any], *, webspace_id: str, incl
     baseline = result.get("baseline_result") if isinstance(result.get("baseline_result"), Mapping) else {}
     sections = {
         "windows": {"items": list(result.get("rows") or [])},
-        "event_volume_chart": result.get("event_volume_chart") or {"title": "Event volume by window", "unit": "events", "points": []},
-        "class_distribution_chart": result.get("class_distribution_chart") or {"title": "Baseline class distribution", "unit": "windows", "points": []},
+        "event_volume_chart": result.get("event_volume_chart") or {"title": "Объём событий по окнам", "unit": "events", "points": []},
+        "class_distribution_chart": result.get("class_distribution_chart") or {"title": "Распределение классов по правилу", "unit": "windows", "points": []},
         "dataset": {
             "items": _dataset_rows_for_real_logs(result)
         },
@@ -1453,22 +1453,22 @@ def _project_windows_result(result: Mapping[str, Any], *, webspace_id: str, incl
         sections.update(
             {
                 "summary": {
-                    "label": "AI Event Analysis",
+                    "label": "Интеллектуальный анализ событий",
                     "value": f"{_value(baseline, 'macro_f1'):.3f}",
-                    "subtitle": "reviewed-log heuristic Macro-F1",
+                    "subtitle": "Macro-F1 по проверенной эвристике логов",
                     "description": (
                         f"real-log windows={result.get('window_count')} records={result.get('record_count')} "
                         "labels=codex_reviewed_log_heuristic"
                     ),
                     "buttons": [
-                        {"id": "open", "label": "Open"},
-                        {"id": "run_demo", "label": "Run demo evaluation"},
-                        {"id": "analyze_logs", "label": "Analyze real logs"},
+                        {"id": "open", "label": "Открыть"},
+                        {"id": "run_demo", "label": "Запустить демо-проверку"},
+                        {"id": "analyze_logs", "label": "Проанализировать логи"},
                     ],
                 },
                 "metrics": {"items": _metric_rows(baseline)},
                 "per_class": {"items": list(baseline.get("per_class") or [])},
-                "chart": _readiness_chart(baseline, title="Real-log operational readiness"),
+                "chart": _readiness_chart(baseline, title="Готовность анализа реальных логов"),
             }
         )
     return _project_sections(sections, webspace_id=webspace_id)
@@ -1479,46 +1479,46 @@ def _project_trial_suite(result: Mapping[str, Any], *, webspace_id: str) -> dict
     subscription = result.get("subscription_result") if isinstance(result.get("subscription_result"), Mapping) else {}
     sections = {
         "summary": {
-            "label": "AI Event Analysis",
+            "label": "Интеллектуальный анализ событий",
             "value": f"{_value(result, 'readiness_score'):.3f}",
-            "subtitle": "trial-suite readiness score",
+            "subtitle": "оценка готовности сценариев",
             "description": (
                 f"scenarios={result.get('scenario_count')} classes={len(result.get('scenario_classes') or [])} "
                 f"routing_risk={((subscription.get('summary') or {}).get('risk_score') if isinstance(subscription.get('summary'), Mapping) else 'n/a')}"
             ),
             "buttons": [
-                {"id": "open", "label": "Open"},
-                {"id": "run_trials", "label": "Run synthetic trial"},
-                {"id": "analyze_logs", "label": "Analyze real logs"},
+                {"id": "open", "label": "Открыть"},
+                {"id": "run_trials", "label": "Запустить синтетическую проверку"},
+                {"id": "analyze_logs", "label": "Проанализировать логи"},
             ],
         },
         "dataset": {
             "items": [
-                {"id": "trial_scenarios", "name": "Synthetic trial scenarios", "current": result.get("scenario_count"), "target": "normal + incident + routing", "notes": "Deterministic local workload for useful first-run data."},
-                {"id": "scenario_classes", "name": "Covered classes", "current": len(result.get("scenario_classes") or []), "target": "all baseline classes", "notes": ", ".join(result.get("scenario_classes") or [])},
-                {"id": "trial_windows", "name": "Event windows", "current": result.get("window_count"), "target": "diverse synthetic evidence", "notes": "Windows are deterministic and labeled by construction."},
-                {"id": "subscription_records", "name": "Subscription events", "current": result.get("record_count"), "target": "active, idle, noisy, missing consumer", "notes": "Exercises subscription-flow analysis without core changes."},
-                {"id": "label_source", "name": "Label source", "current": result.get("label_source"), "target": "manual labels for real datasets", "notes": "Use trial data for smoke tests and UI validation."},
+                {"id": "trial_scenarios", "name": "Синтетические сценарии", "current": result.get("scenario_count"), "target": "норма + инциденты + маршрутизация", "notes": "Повторяемая локальная нагрузка для первой проверки."},
+                {"id": "scenario_classes", "name": "Покрытые классы", "current": len(result.get("scenario_classes") or []), "target": "все классы правила", "notes": ", ".join(result.get("scenario_classes") or [])},
+                {"id": "trial_windows", "name": "Окна событий", "current": result.get("window_count"), "target": "разные синтетические примеры", "notes": "Окна повторяемы и заранее размечены."},
+                {"id": "subscription_records", "name": "События подписок", "current": result.get("record_count"), "target": "активные, простаивающие, шумные, без потребителя", "notes": "Проверяет анализ подписок без изменения ядра."},
+                {"id": "label_source", "name": "Источник разметки", "current": result.get("label_source"), "target": "ручная разметка реальных данных", "notes": "Используется для быстрой проверки интерфейса и метрик."},
             ]
         },
         "windows": {"items": list(result.get("rows") or [])},
         "metrics": {"items": _metric_rows(baseline)},
         "per_class": {"items": list(baseline.get("per_class") or []) if isinstance(baseline, Mapping) else []},
-        "chart": result.get("chart") or _readiness_chart(baseline, title="Trial operational readiness", subscription_result=subscription),
-        "event_volume_chart": result.get("event_volume_chart") or {"title": "Trial event volume by window", "unit": "events", "points": []},
-        "class_distribution_chart": result.get("class_distribution_chart") or {"title": "Trial class distribution", "unit": "windows", "points": []},
+        "chart": result.get("chart") or _readiness_chart(baseline, title="Готовность синтетической проверки", subscription_result=subscription),
+        "event_volume_chart": result.get("event_volume_chart") or {"title": "Объём событий синтетической проверки", "unit": "events", "points": []},
+        "class_distribution_chart": result.get("class_distribution_chart") or {"title": "Распределение классов синтетической проверки", "unit": "windows", "points": []},
         "subscription_summary": {"items": [
             {"id": key, "name": key.replace("_", " ").title(), "value": value}
             for key, value in ((subscription.get("summary") or {}) if isinstance(subscription, Mapping) else {}).items()
         ]},
         "subscription_edges": {"items": list(subscription.get("rows") or []) if isinstance(subscription, Mapping) else []},
         "subscription_metrics": subscription.get("metrics") if isinstance(subscription, Mapping) else {"items": []},
-        "subscription_chart": subscription.get("chart") if isinstance(subscription, Mapping) else {"title": "Observed event volume by type", "unit": "events", "points": []},
+        "subscription_chart": subscription.get("chart") if isinstance(subscription, Mapping) else {"title": "Объём событий по типам", "unit": "events", "points": []},
         "experiments": {
             "items": [
-                {"id": "synthetic_trial", "model": "Synthetic trial", "status": "implemented", "macro_f1": baseline.get("macro_f1") if isinstance(baseline, Mapping) else "", "next_step": "Use before real-log/manual-label evaluation to prove UI and metrics are populated."},
-                {"id": "real_log_review", "model": "Real-log reviewed heuristic", "status": "implemented", "macro_f1": "", "next_step": "Add manual label review to turn weak labels into ground truth."},
-                {"id": "subscription_routing", "model": "Subscription flow analysis", "status": "implemented", "macro_f1": "", "next_step": "Add delivery ack/latency logs for routing accuracy."},
+                {"id": "synthetic_trial", "model": "Синтетическая проверка", "status": "реализовано", "macro_f1": baseline.get("macro_f1") if isinstance(baseline, Mapping) else "", "next_step": "Использовать перед проверкой реальных логов и ручной разметкой."},
+                {"id": "real_log_review", "model": "Проверенная эвристика логов", "status": "реализовано", "macro_f1": "", "next_step": "Добавить ручную проверку разметки."},
+                {"id": "subscription_routing", "model": "Анализ потока подписок", "status": "реализовано", "macro_f1": "", "next_step": "Добавить подтверждения доставки и задержки."},
             ]
         },
     }
@@ -1529,36 +1529,36 @@ def _project_real_trial_result(result: Mapping[str, Any], *, webspace_id: str) -
     baseline = result.get("baseline_result") if isinstance(result.get("baseline_result"), Mapping) else {}
     sections = {
         "summary": {
-            "label": "AI Event Analysis",
+            "label": "Интеллектуальный анализ событий",
             "value": f"{_value(baseline, 'macro_f1'):.3f}",
-            "subtitle": "real-trial log analysis",
+            "subtitle": "анализ логов реальной проверки",
             "description": (
                 f"trial_id={result.get('trial_id')} emitted={result.get('emitted_event_count')} "
                 f"records={result.get('record_count')} windows={result.get('window_count')}"
             ),
             "buttons": [
-                {"id": "open", "label": "Open"},
-                {"id": "run_real_trial", "label": "Run real trial"},
-                {"id": "analyze_logs", "label": "Analyze real logs"},
+                {"id": "open", "label": "Открыть"},
+                {"id": "run_real_trial", "label": "Запустить проверку на логах"},
+                {"id": "analyze_logs", "label": "Проанализировать логи"},
             ],
         },
         "dataset": {
             "items": [
-                {"id": "trial_id", "name": "Trial id", "current": result.get("trial_id"), "target": "unique per run", "notes": "Used to identify generated AdaOS events in local logs."},
-                {"id": "emitted", "name": "Emitted AdaOS events", "current": result.get("emitted_event_count"), "target": "real event bus/log path", "notes": "Events are published through AdaOS SDK, not injected as windows."},
-                {"id": "cross_skill_probes", "name": "Cross-skill probes", "current": result.get("cross_skill_probe_count"), "target": "several existing skills", "notes": f"ok={result.get('cross_skill_ok_count')} exercises real tool/projection paths."},
-                {"id": "records", "name": "Imported log records", "current": result.get("record_count"), "target": "contains trial event lines", "notes": "Read back from local node logs after emission."},
-                {"id": "trial_records", "name": "Trial-tagged records", "current": result.get("trial_record_count"), "target": ">= emitted events where logging is configured", "notes": "Depends on runtime log sink and retention window."},
-                {"id": "windows", "name": "Event windows", "current": result.get("window_count"), "target": ">= 1", "notes": "Built from actual imported log records."},
-                {"id": "label_source", "name": "Label source", "current": result.get("label_source"), "target": "manual labels for final evaluation", "notes": "Real-trial labels are still reviewed heuristics."},
+                {"id": "trial_id", "name": "Идентификатор проверки", "current": result.get("trial_id"), "target": "уникален для запуска", "notes": "Помогает найти созданные события AdaOS в локальных логах."},
+                {"id": "emitted", "name": "Опубликованные события AdaOS", "current": result.get("emitted_event_count"), "target": "реальная шина событий и логи", "notes": "События публикуются через SDK AdaOS, а не подставляются как готовые окна."},
+                {"id": "cross_skill_probes", "name": "Проверки других навыков", "current": result.get("cross_skill_probe_count"), "target": "несколько существующих навыков", "notes": f"ok={result.get('cross_skill_ok_count')} exercises real tool/projection paths."},
+                {"id": "records", "name": "Импортированные записи логов", "current": result.get("record_count"), "target": "содержит строки проверки", "notes": "Считывается из локальных логов после публикации событий."},
+                {"id": "trial_records", "name": "Записи с меткой проверки", "current": result.get("trial_record_count"), "target": ">= опубликованных событий при включённом логировании", "notes": "Зависит от настроек логирования и хранения."},
+                {"id": "windows", "name": "Окна событий", "current": result.get("window_count"), "target": ">= 1", "notes": "Построено по фактически импортированным логам."},
+                {"id": "label_source", "name": "Источник разметки", "current": result.get("label_source"), "target": "ручная разметка для итоговой оценки", "notes": "Разметка реальной проверки пока остаётся проверенной эвристикой."},
             ]
         },
         "windows": {"items": list(result.get("rows") or [])},
         "metrics": {"items": _metric_rows(baseline)},
         "per_class": {"items": list(baseline.get("per_class") or []) if isinstance(baseline, Mapping) else []},
-        "chart": _readiness_chart(baseline, title="Real-trial operational readiness"),
-        "event_volume_chart": result.get("event_volume_chart") or {"title": "Real-trial event volume by window", "unit": "events", "points": []},
-        "class_distribution_chart": result.get("class_distribution_chart") or {"title": "Real-trial class distribution", "unit": "windows", "points": []},
+        "chart": _readiness_chart(baseline, title="Готовность проверки по логам"),
+        "event_volume_chart": result.get("event_volume_chart") or {"title": "Объём событий проверки по окнам", "unit": "events", "points": []},
+        "class_distribution_chart": result.get("class_distribution_chart") or {"title": "Распределение классов проверки", "unit": "windows", "points": []},
     }
     return _project_sections(sections, webspace_id=webspace_id, force=True)
 
@@ -1577,8 +1577,8 @@ def _publish_result(result: Mapping[str, Any], *, webspace_id: str) -> None:
         },
         {
             "id": "criteria",
-            "title": "Research success gates",
-            "description": "Macro-F1 >= 0.75, critical recall >= 0.85, normal false positive rate <= 0.15.",
+            "title": "Критерии успешности исследования",
+            "description": "Macro-F1 >= 0,75, полнота критичных случаев >= 0,85, ложные срабатывания нормы <= 0,15.",
             "content": {"metrics": _metric_rows(result), "per_class": result.get("per_class")},
         },
     ]
@@ -1633,13 +1633,13 @@ def _projection_relevance_experiments(result: Mapping[str, Any], *, kind: str) -
     if kind == "prediction":
         event = result.get("event") if isinstance(result.get("event"), Mapping) else {}
         return {
-            "title": "Projection relevance agent",
+            "title": "Агент релевантности проекций",
             "updatedAt": _now_iso(),
             "items": [
                 {
                     "id": "projection-relevance-prediction",
-                    "label": "Recommended refresh plan",
-                    "value": ", ".join(result.get("affected_projections") or []) or "no refresh",
+                    "label": "Рекомендованный план обновления",
+                    "value": ", ".join(result.get("affected_projections") or []) or "обновление не требуется",
                     "note": f"event={event.get('event_type')} guardrail=advisory",
                 }
             ],
@@ -1648,12 +1648,12 @@ def _projection_relevance_experiments(result: Mapping[str, Any], *, kind: str) -
     if kind == "summary":
         metrics = result.get("metrics") if isinstance(result.get("metrics"), Mapping) else {}
         return {
-            "title": "Projection relevance agent",
+            "title": "Агент релевантности проекций",
             "updatedAt": _now_iso(),
             "items": [
                 {
                     "id": "projection-relevance-decision",
-                    "label": "Advisory decision",
+                    "label": "Рекомендательное решение",
                     "value": result.get("decision"),
                     "note": f"ready={result.get('advisory_ready')}",
                 },
@@ -1665,15 +1665,15 @@ def _projection_relevance_experiments(result: Mapping[str, Any], *, kind: str) -
                 },
                 {
                     "id": "projection-relevance-summary-critical",
-                    "label": "Missed critical projections",
+                    "label": "Пропущенные критичные проекции",
                     "value": metrics.get("missed_critical_projection_total"),
-                    "note": "blocking safety gate",
+                    "note": "обязательная проверка безопасности",
                 },
             ],
             "details": result,
         }
     return {
-        "title": "Projection relevance agent",
+        "title": "Агент релевантности проекций",
         "updatedAt": _now_iso(),
         "items": [
             {
@@ -1684,15 +1684,15 @@ def _projection_relevance_experiments(result: Mapping[str, Any], *, kind: str) -
             },
             {
                 "id": "projection-relevance-write-reduction",
-                "label": "Write reduction",
+                "label": "Сокращение записей",
                 "value": metrics.get("write_reduction_ratio"),
                 "note": f"delta={comparison.get('write_reduction_delta')}",
             },
             {
                 "id": "projection-relevance-critical-misses",
-                "label": "Missed critical projections",
+                "label": "Пропущенные критичные проекции",
                 "value": metrics.get("missed_critical_projection_total"),
-                "note": "guarded dispatcher remains authoritative",
+                "note": "защищённый диспетчер остаётся главным",
             },
         ],
         "details": result,
@@ -1751,45 +1751,45 @@ def _projection_relevance_trial_sections(result: Mapping[str, Any]) -> dict[str,
             "items": [
                 {
                     "id": "trial_id",
-                    "name": "Trial id",
+                    "name": "Идентификатор проверки",
                     "value": result.get("trial_id"),
-                    "notes": "Unique identifier of the controlled Web UI trial.",
+                    "notes": "Уникальный идентификатор управляемой проверки через интерфейс.",
                 },
                 {
                     "id": "event_type",
-                    "name": "Operational event",
+                    "name": "Операционное событие",
                     "value": event.get("event_type"),
-                    "notes": "Controlled payload passed to the advisory model.",
+                    "notes": "Контролируемые входные данные для рекомендательной модели.",
                 },
                 {
                     "id": "demand_source",
-                    "name": "Demand source",
+                    "name": "Источник спроса",
                     "value": result.get("demand_source"),
-                    "notes": "Explicit active projection set for a repeatable defense demonstration.",
+                    "notes": "Явный набор активных проекций для повторяемой демонстрации.",
                 },
                 {
                     "id": "active_projection_set",
-                    "name": "Active projection set",
+                    "name": "Активный набор проекций",
                     "value": len(active),
                     "notes": ", ".join(active),
                 },
                 {
                     "id": "agent_refresh",
-                    "name": "Agent refresh recommendations",
+                    "name": "Рекомендации агента",
                     "value": len(agent_refresh),
-                    "notes": ", ".join(agent_refresh) or "none",
+                    "notes": ", ".join(agent_refresh) or "нет",
                 },
                 {
                     "id": "rule_refresh",
-                    "name": "Rule baseline refreshes",
+                    "name": "Обновления по правилу",
                     "value": len(rule_refresh),
-                    "notes": ", ".join(rule_refresh) or "none",
+                    "notes": ", ".join(rule_refresh) or "нет",
                 },
                 {
                     "id": "dispatch_applied",
-                    "name": "Projection dispatch applied",
+                    "name": "Обновление применено",
                     "value": str(bool(safety.get("dispatch_applied"))).lower(),
-                    "notes": "The agent remains outside the authoritative refresh path.",
+                    "notes": "Агент остаётся вне основного контура обновления.",
                 },
             ]
         },
@@ -1798,35 +1798,35 @@ def _projection_relevance_trial_sections(result: Mapping[str, Any]) -> dict[str,
             "items": [
                 {
                     "id": "critical",
-                    "gate": "No missed critical projections",
+                    "gate": "Нет пропущенных критичных проекций",
                     "value": missed_critical_total,
                     "target": "0",
                     "status": "ok" if missed_critical_total == 0 else "warning",
-                    "notes": "Diagnostics and notifications must not be omitted.",
+                    "notes": "Диагностика и уведомления не должны пропадать.",
                 },
                 {
                     "id": "agreement",
-                    "gate": "Action agreement with rule baseline",
+                    "gate": "Согласие с правиловым baseline",
                     "value": action_agreement,
-                    "target": "inspect",
+                    "target": "проверить",
                     "status": "ok" if action_agreement >= 0.8 else "warning",
-                    "notes": "Differences remain visible for review.",
+                    "notes": "Отличия остаются видимыми для проверки.",
                 },
                 {
                     "id": "advisory",
-                    "gate": "Advisory-only execution",
+                    "gate": "Только рекомендательное выполнение",
                     "value": str(bool(safety.get("agent_is_advisory"))).lower(),
                     "target": "true",
                     "status": "ok" if safety.get("agent_is_advisory") is True else "warning",
-                    "notes": "The guarded dispatcher remains authoritative.",
+                    "notes": "Защищённый диспетчер остаётся главным.",
                 },
                 {
                     "id": "dispatch",
-                    "gate": "No automatic projection write",
+                    "gate": "Нет автоматической записи проекций",
                     "value": str(bool(safety.get("dispatch_applied"))).lower(),
                     "target": "false",
                     "status": "ok" if safety.get("dispatch_applied") is False else "warning",
-                    "notes": "The trial displays advice without changing projection state.",
+                    "notes": "Проверка показывает совет, но не меняет состояние проекций.",
                 },
             ]
         },
@@ -1852,7 +1852,7 @@ def _publish_projection_relevance_trial_result(result: Mapping[str, Any], *, web
             [
                 {
                     "id": "projection-relevance-agent-trial",
-                    "title": f"Agent trial: {event.get('event_type')}",
+                    "title": f"Проверка агента: {event.get('event_type')}",
                     "description": (
                         f"refresh={len(agent_plan.get('refresh') or [])} "
                         f"agreement={comparison.get('action_agreement_ratio')} "
@@ -2040,12 +2040,12 @@ def run_real_trial(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[s
         "windows": windows[:_MAX_TOOL_WINDOWS] if bool(body.get("include_windows")) else [],
         "rows": _window_rows(windows),
         "event_volume_chart": {
-            "title": "Real-trial event volume by window",
+            "title": "Объём событий проверки по окнам",
             "unit": "events",
             "points": _event_volume_points(windows),
         },
         "class_distribution_chart": {
-            "title": "Real-trial class distribution",
+            "title": "Распределение классов проверки",
             "unit": "windows",
             "points": _class_distribution_points(windows),
         },
@@ -2259,12 +2259,12 @@ def build_event_windows(payload: Mapping[str, Any] | None = None, **_: Any) -> d
         "windows_truncated": include_windows and len(windows) > len(result_windows),
         "rows": _window_rows(windows),
         "event_volume_chart": {
-            "title": "Event volume by window",
+            "title": "Объём событий по окнам",
             "unit": "events",
             "points": _event_volume_points(windows),
         },
         "class_distribution_chart": {
-            "title": "Baseline class distribution",
+            "title": "Распределение классов по правилу",
             "unit": "windows",
             "points": _class_distribution_points(windows),
         },
@@ -2301,7 +2301,7 @@ def analyze_subscription_flow(payload: Mapping[str, Any] | None = None, **_: Any
             [
                 {
                     "id": "subscription-flow",
-                    "title": f"Subscription flow risk {result['summary']['risk_score']}",
+                    "title": f"Риск потока подписок {result['summary']['risk_score']}",
                     "description": (
                         f"declared={result['summary']['declared_subscriptions']} "
                         f"observed_types={result['summary']['observed_event_types']} "

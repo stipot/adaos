@@ -9,8 +9,8 @@
         "initialState": [
           {
             "id": "pending",
-            "title": "Evaluation not run yet",
-            "description": "Open the app or run the demo baseline to publish the latest result."
+            "title": "Проверка ещё не запускалась",
+            "description": "Откройте приложение или запустите демо-проверку, чтобы увидеть результат."
           }
         ],
         "budget": {
@@ -20,7 +20,7 @@
           "maxItems": 4
         },
         "guardVisibility": {
-          "degradedState": "Keep last evaluation result and ask for a manual refresh.",
+          "degradedState": "Сохранить последний результат и запросить ручное обновление.",
           "log": "service.ai_event_analysis_skill.runtime.log",
           "quarantine": false,
           "metric": "webio_stream_guard.ai_event_analysis.results"
@@ -31,7 +31,10 @@
           "owner": "skill:ai_event_analysis_skill",
           "firstPaint": "static benchmark defaults",
           "recovery": "snapshot requested on stream subscribe",
-          "updateSource": ["webio.stream.snapshot.requested", "ai_event_analysis.evaluate_requested"]
+          "updateSource": [
+            "webio.stream.snapshot.requested",
+            "ai_event_analysis.evaluate_requested"
+          ]
         }
       }
     }
@@ -39,7 +42,7 @@
   "apps": [
     {
       "id": "ai_event_analysis_app",
-      "title": "AI Event Analysis",
+      "title": "Интеллектуальный анализ событий",
       "icon": "analytics-outline",
       "launchModal": "ai_event_analysis_modal"
     }
@@ -47,7 +50,7 @@
   "widgets": [
     {
       "id": "ai_event_analysis_widget",
-      "title": "AI Event Analysis",
+      "title": "Интеллектуальный анализ событий",
       "type": "visual.metricTile",
       "icon": "analytics-outline",
       "dataSource": {
@@ -76,7 +79,7 @@
   "registry": {
     "modals": {
       "ai_event_analysis_modal": {
-        "title": "AI Event Analysis",
+        "title": "Интеллектуальный анализ событий",
         "schema": {
           "id": "ai_event_analysis_modal",
           "initialState": {
@@ -105,7 +108,7 @@
               "id": "ai-event-analysis-summary",
               "type": "visual.metricTile",
               "area": "main",
-              "title": "Current baseline",
+              "title": "Текущая оценка",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/summary"
@@ -131,31 +134,31 @@
                 "buttons": [
                   {
                     "id": "overview",
-                    "label": "Overview"
+                    "label": "Обзор"
                   },
                   {
                     "id": "dataset",
-                    "label": "Dataset"
+                    "label": "Данные"
                   },
                   {
                     "id": "windows",
-                    "label": "Windows"
+                    "label": "Окна событий"
                   },
                   {
                     "id": "metrics",
-                    "label": "Metrics"
+                    "label": "Метрики"
                   },
                   {
                     "id": "experiments",
-                    "label": "Experiments"
+                    "label": "Эксперименты"
                   },
                   {
                     "id": "agent",
-                    "label": "Agent"
+                    "label": "Агент"
                   },
                   {
                     "id": "subscriptions",
-                    "label": "Subscriptions"
+                    "label": "Подписки"
                   }
                 ]
               },
@@ -173,7 +176,7 @@
               "id": "ai-event-analysis-task",
               "type": "ui.list",
               "area": "main",
-              "title": "Task",
+              "title": "Задача",
               "visibleIf": "$state.aiEventAnalysisTab === 'overview'",
               "dataSource": {
                 "kind": "y",
@@ -184,40 +187,40 @@
                 "subtitleKey": "description",
                 "showDetails": false,
                 "itemAccordion": false,
-                "emptyText": "No task statement"
+                "emptyText": "Описание задачи отсутствует"
               }
             },
             {
               "id": "ai-event-analysis-dataset",
               "type": "ui.table",
               "area": "main",
-              "title": "Dataset contract",
+              "title": "Состав данных",
               "visibleIf": "$state.aiEventAnalysisTab === 'dataset'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/dataset"
               },
               "inputs": {
-                "emptyText": "No dataset contract",
+                "emptyText": "Описание данных отсутствует",
                 "columns": [
                   {
                     "key": "name",
-                    "label": "Item"
+                    "label": "Элемент"
                   },
                   {
                     "key": "current",
-                    "label": "Current",
+                    "label": "Текущее",
                     "width": "110px",
                     "mono": true
                   },
                   {
                     "key": "target",
-                    "label": "Target",
+                    "label": "Цель",
                     "width": "140px"
                   },
                   {
                     "key": "notes",
-                    "label": "Notes"
+                    "label": "Примечания"
                   }
                 ]
               }
@@ -226,33 +229,33 @@
               "id": "ai-event-analysis-metrics",
               "type": "ui.table",
               "area": "main",
-              "title": "Success metrics",
+              "title": "Метрики качества",
               "visibleIf": "$state.aiEventAnalysisTab === 'metrics'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/metrics"
               },
               "inputs": {
-                "emptyText": "No metrics",
+                "emptyText": "Метрики отсутствуют",
                 "columns": [
                   {
                     "key": "metric",
-                    "label": "Metric"
+                    "label": "Метрика"
                   },
                   {
                     "key": "value",
-                    "label": "Demo",
+                    "label": "Значение",
                     "width": "100px",
                     "mono": true
                   },
                   {
                     "key": "target",
-                    "label": "Target",
+                    "label": "Цель",
                     "width": "140px"
                   },
                   {
                     "key": "status",
-                    "label": "State",
+                    "label": "Состояние",
                     "width": "100px"
                   }
                 ]
@@ -262,44 +265,44 @@
               "id": "ai-event-analysis-windows",
               "type": "ui.table",
               "area": "main",
-              "title": "Event windows",
+              "title": "Окна событий",
               "visibleIf": "$state.aiEventAnalysisTab === 'windows'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/windows"
               },
               "inputs": {
-                "emptyText": "No event windows yet",
+                "emptyText": "Окна событий ещё не построены",
                 "columns": [
                   {
                     "key": "window_id",
-                    "label": "Window"
+                    "label": "Окно"
                   },
                   {
                     "key": "events",
-                    "label": "Events",
+                    "label": "События",
                     "width": "80px",
                     "mono": true
                   },
                   {
                     "key": "errors",
-                    "label": "Errors",
+                    "label": "Ошибки",
                     "width": "80px",
                     "mono": true
                   },
                   {
                     "key": "prediction",
-                    "label": "Baseline prediction",
+                    "label": "Прогноз правила",
                     "width": "190px"
                   },
                   {
                     "key": "severity",
-                    "label": "Severity",
+                    "label": "Важность",
                     "width": "100px"
                   },
                   {
                     "key": "confidence",
-                    "label": "Confidence",
+                    "label": "Уверенность",
                     "width": "110px",
                     "mono": true
                   }
@@ -310,28 +313,28 @@
               "id": "ai-event-analysis-per-class",
               "type": "ui.table",
               "area": "main",
-              "title": "Per-class baseline",
+              "title": "Оценка по классам",
               "visibleIf": "$state.aiEventAnalysisTab === 'metrics'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/per_class"
               },
               "inputs": {
-                "emptyText": "No per-class metrics",
+                "emptyText": "Метрики по классам отсутствуют",
                 "columns": [
                   {
                     "key": "class",
-                    "label": "Class"
+                    "label": "Класс"
                   },
                   {
                     "key": "precision",
-                    "label": "Precision",
+                    "label": "Точность",
                     "width": "110px",
                     "mono": true
                   },
                   {
                     "key": "recall",
-                    "label": "Recall",
+                    "label": "Полнота",
                     "width": "100px",
                     "mono": true
                   },
@@ -343,7 +346,7 @@
                   },
                   {
                     "key": "support",
-                    "label": "Support",
+                    "label": "Примеры",
                     "width": "90px",
                     "mono": true
                   }
@@ -354,22 +357,22 @@
               "id": "ai-event-analysis-experiments",
               "type": "ui.table",
               "area": "main",
-              "title": "Experiment plan",
+              "title": "План экспериментов",
               "visibleIf": "$state.aiEventAnalysisTab === 'experiments'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/experiments"
               },
               "inputs": {
-                "emptyText": "No experiment plan",
+                "emptyText": "План экспериментов отсутствует",
                 "columns": [
                   {
                     "key": "model",
-                    "label": "Model"
+                    "label": "Модель"
                   },
                   {
                     "key": "status",
-                    "label": "Status",
+                    "label": "Статус",
                     "width": "130px"
                   },
                   {
@@ -380,7 +383,7 @@
                   },
                   {
                     "key": "next_step",
-                    "label": "Next step"
+                    "label": "Следующий шаг"
                   }
                 ]
               }
@@ -389,28 +392,28 @@
               "id": "ai-event-analysis-agent-summary",
               "type": "ui.table",
               "area": "main",
-              "title": "Projection Relevance Agent Trial",
+              "title": "Проверка агента релевантности",
               "visibleIf": "$state.aiEventAnalysisTab === 'agent'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/agent_summary"
               },
               "inputs": {
-                "emptyText": "Run agent trial to populate the advisory scenario",
+                "emptyText": "Запустите проверку агента, чтобы заполнить сценарий",
                 "columns": [
                   {
                     "key": "name",
-                    "label": "Item"
+                    "label": "Элемент"
                   },
                   {
                     "key": "value",
-                    "label": "Value",
+                    "label": "Значение",
                     "width": "180px",
                     "mono": true
                   },
                   {
                     "key": "notes",
-                    "label": "Notes"
+                    "label": "Примечания"
                   }
                 ]
               }
@@ -419,43 +422,43 @@
               "id": "ai-event-analysis-agent-plan",
               "type": "ui.table",
               "area": "main",
-              "title": "Advisory Refresh Plan",
+              "title": "Рекомендованный план обновления",
               "visibleIf": "$state.aiEventAnalysisTab === 'agent'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/agent_plan"
               },
               "inputs": {
-                "emptyText": "No agent refresh plan",
+                "emptyText": "План агента отсутствует",
                 "columns": [
                   {
                     "key": "projection_key",
-                    "label": "Projection"
+                    "label": "Проекция"
                   },
                   {
                     "key": "demanded",
-                    "label": "Demanded",
+                    "label": "Востребована",
                     "width": "100px"
                   },
                   {
                     "key": "score",
-                    "label": "Score",
+                    "label": "Оценка",
                     "width": "90px",
                     "mono": true
                   },
                   {
                     "key": "agent_action",
-                    "label": "Agent action",
+                    "label": "Действие агента",
                     "width": "130px"
                   },
                   {
                     "key": "rule_action",
-                    "label": "Rule action",
+                    "label": "Действие правила",
                     "width": "130px"
                   },
                   {
                     "key": "comparison",
-                    "label": "Comparison",
+                    "label": "Сравнение",
                     "width": "150px"
                   }
                 ]
@@ -465,38 +468,38 @@
               "id": "ai-event-analysis-agent-gates",
               "type": "ui.table",
               "area": "main",
-              "title": "Agent Safety Gates",
+              "title": "Ограничения безопасности агента",
               "visibleIf": "$state.aiEventAnalysisTab === 'agent'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/agent_gates"
               },
               "inputs": {
-                "emptyText": "No agent safety result",
+                "emptyText": "Результаты проверки безопасности отсутствуют",
                 "columns": [
                   {
                     "key": "gate",
-                    "label": "Gate"
+                    "label": "Проверка"
                   },
                   {
                     "key": "value",
-                    "label": "Value",
+                    "label": "Значение",
                     "width": "100px",
                     "mono": true
                   },
                   {
                     "key": "target",
-                    "label": "Target",
+                    "label": "Цель",
                     "width": "100px"
                   },
                   {
                     "key": "status",
-                    "label": "State",
+                    "label": "Состояние",
                     "width": "100px"
                   },
                   {
                     "key": "notes",
-                    "label": "Notes"
+                    "label": "Примечания"
                   }
                 ]
               }
@@ -505,22 +508,22 @@
               "id": "ai-event-analysis-subscription-summary",
               "type": "ui.table",
               "area": "main",
-              "title": "Subscription Flow Summary",
+              "title": "Сводка потока подписок",
               "visibleIf": "$state.aiEventAnalysisTab === 'subscriptions'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/subscription_summary"
               },
               "inputs": {
-                "emptyText": "No subscription summary",
+                "emptyText": "Сводка подписок отсутствует",
                 "columns": [
                   {
                     "key": "name",
-                    "label": "Metric"
+                    "label": "Метрика"
                   },
                   {
                     "key": "value",
-                    "label": "Value",
+                    "label": "Значение",
                     "width": "110px",
                     "mono": true
                   }
@@ -531,44 +534,44 @@
               "id": "ai-event-analysis-subscription-edges",
               "type": "ui.table",
               "area": "main",
-              "title": "Publisher / Subscriber Edges",
+              "title": "Связи издателей и подписчиков",
               "visibleIf": "$state.aiEventAnalysisTab === 'subscriptions'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/subscription_edges"
               },
               "inputs": {
-                "emptyText": "No subscription flow data",
+                "emptyText": "Данные потока подписок отсутствуют",
                 "columns": [
                   {
                     "key": "event_type",
-                    "label": "Event"
+                    "label": "Событие"
                   },
                   {
                     "key": "publisher",
-                    "label": "Publisher",
+                    "label": "Источник",
                     "width": "130px"
                   },
                   {
                     "key": "subscriber",
-                    "label": "Subscriber",
+                    "label": "Потребитель",
                     "width": "170px"
                   },
                   {
                     "key": "events",
-                    "label": "Events",
+                    "label": "События",
                     "width": "80px",
                     "mono": true
                   },
                   {
                     "key": "fanout",
-                    "label": "Fanout",
+                    "label": "Рассылка",
                     "width": "80px",
                     "mono": true
                   },
                   {
                     "key": "state",
-                    "label": "State",
+                    "label": "Состояние",
                     "width": "130px"
                   }
                 ]
@@ -578,7 +581,7 @@
               "id": "ai-event-analysis-chart",
               "type": "visual.metricChart",
               "area": "right",
-              "title": "Operational readiness",
+              "title": "Готовность анализа",
               "visibleIf": "$state.aiEventAnalysisTab === 'overview' || $state.aiEventAnalysisTab === 'metrics'",
               "dataSource": {
                 "kind": "y",
@@ -587,14 +590,14 @@
               "inputs": {
                 "xKey": "ts",
                 "yKey": "value",
-                "emptyText": "No chart data"
+                "emptyText": "Данные графика отсутствуют"
               }
             },
             {
               "id": "ai-event-analysis-volume-chart",
               "type": "visual.metricChart",
               "area": "right",
-              "title": "Event volume",
+              "title": "Объём событий",
               "visibleIf": "$state.aiEventAnalysisTab === 'windows' || $state.aiEventAnalysisTab === 'dataset'",
               "dataSource": {
                 "kind": "y",
@@ -603,14 +606,14 @@
               "inputs": {
                 "xKey": "ts",
                 "yKey": "value",
-                "emptyText": "No event-window volume data"
+                "emptyText": "Данные объёма событий отсутствуют"
               }
             },
             {
               "id": "ai-event-analysis-class-chart",
               "type": "visual.metricChart",
               "area": "right",
-              "title": "Class distribution",
+              "title": "Распределение классов",
               "visibleIf": "$state.aiEventAnalysisTab === 'windows' || $state.aiEventAnalysisTab === 'metrics'",
               "dataSource": {
                 "kind": "y",
@@ -619,14 +622,14 @@
               "inputs": {
                 "xKey": "ts",
                 "yKey": "value",
-                "emptyText": "No class distribution data"
+                "emptyText": "Данные распределения классов отсутствуют"
               }
             },
             {
               "id": "ai-event-analysis-subscription-chart",
               "type": "visual.metricChart",
               "area": "right",
-              "title": "Event type volume",
+              "title": "Объём типов событий",
               "visibleIf": "$state.aiEventAnalysisTab === 'subscriptions'",
               "dataSource": {
                 "kind": "y",
@@ -635,57 +638,57 @@
               "inputs": {
                 "xKey": "ts",
                 "yKey": "value",
-                "emptyText": "No subscription flow chart"
+                "emptyText": "График подписок отсутствует"
               }
             },
             {
               "id": "ai-event-analysis-actions",
               "type": "input.commandBar",
               "area": "right",
-              "title": "Actions",
+              "title": "Действия",
               "inputs": {
                 "variant": "stack",
                 "size": "small",
                 "buttons": [
                   {
                     "id": "run_demo",
-                    "label": "Run demo baseline"
+                    "label": "Запустить демо-оценку"
                   },
                   {
                     "id": "run_trials",
-                    "label": "Run synthetic trial"
+                    "label": "Запустить синтетическую проверку"
                   },
                   {
                     "id": "run_real_trial",
-                    "label": "Run real trial"
+                    "label": "Запустить проверку на логах"
                   },
                   {
                     "id": "run_agent_trial",
-                    "label": "Run agent trial"
+                    "label": "Проверить агента"
                   },
                   {
                     "id": "refresh_snapshot",
-                    "label": "Refresh demo"
+                    "label": "Обновить демо"
                   },
                   {
                     "id": "analyze_logs",
-                    "label": "Analyze real logs"
+                    "label": "Проанализировать логи"
                   },
                   {
                     "id": "analyze_health",
-                    "label": "Analyze health"
+                    "label": "Проверить состояние"
                   },
                   {
                     "id": "analyze_subscriptions",
-                    "label": "Analyze subscriptions"
+                    "label": "Проверить подписки"
                   },
                   {
                     "id": "build_windows",
-                    "label": "Build windows"
+                    "label": "Построить окна"
                   },
                   {
                     "id": "export_jsonl",
-                    "label": "Export JSONL"
+                    "label": "Экспорт JSONL"
                   }
                 ]
               },
@@ -785,7 +788,7 @@
               "id": "ai-event-analysis-results",
               "type": "ui.list",
               "area": "bottom",
-              "title": "Evaluation stream",
+              "title": "Ход проверки",
               "dataSource": {
                 "kind": "stream",
                 "receiver": "ai_event_analysis.results"
@@ -798,7 +801,7 @@
                 "itemAccordion": false,
                 "detailsModal": true,
                 "detailsModalTitleKey": "title",
-                "emptyText": "No evaluation result yet"
+                "emptyText": "Результатов проверки пока нет"
               }
             }
           ]
@@ -810,60 +813,60 @@
   "ydoc_defaults": {
     "data/ai_event_analysis": {
       "summary": {
-        "label": "AI Event Analysis",
+        "label": "Интеллектуальный анализ событий",
         "value": "0.000",
-        "subtitle": "rule baseline macro-F1",
-        "description": "Measurable AI/ML research task for AdaOS operational events.",
+        "subtitle": "Macro-F1 правиловой основы",
+        "description": "Проверяемая задача интеллектуального анализа операционных событий AdaOS.",
         "buttons": [
           {
             "id": "open",
-            "label": "Open"
+            "label": "Открыть"
           },
           {
             "id": "run_demo",
-            "label": "Run demo evaluation"
+            "label": "Запустить демо-проверку"
           }
         ]
       },
       "task": [
         {
           "id": "objective",
-          "title": "Objective",
-          "description": "Classify fixed operational event windows into normal or incident classes and return top contributing signals."
+          "title": "Цель",
+          "description": "Разделить окна событий на нормальные и проблемные, а также показать главные признаки решения."
         },
         {
           "id": "baseline",
-          "title": "Baseline",
-          "description": "Compare future ML/NN models against a deterministic rule-based classifier."
+          "title": "Правиловая основа",
+          "description": "Сравнивать будущие модели с повторяемым правиловым классификатором."
         },
         {
           "id": "measurement",
-          "title": "Measurement",
-          "description": "Track macro-F1, critical recall, normal false-positive rate, detection delay, and explanation hit rate."
+          "title": "Измерение",
+          "description": "Отслеживать Macro-F1, полноту критичных случаев, ложные срабатывания, задержку обнаружения и качество объяснений."
         }
       ],
       "dataset": {
         "items": [
           {
             "id": "windows",
-            "name": "Labeled windows",
+            "name": "Размеченные окна",
             "current": 12,
             "target": "500-1000+",
-            "notes": "First iteration uses a synthetic benchmark."
+            "notes": "Первая версия использует синтетический набор."
           },
           {
             "id": "classes",
-            "name": "Classes",
+            "name": "Классы",
             "current": 7,
             "target": "6+",
-            "notes": "normal plus operational incident classes."
+            "notes": "нормальное состояние и классы операционных инцидентов."
           },
           {
             "id": "features",
-            "name": "Feature families",
+            "name": "Группы признаков",
             "current": 9,
             "target": "eventbus/projection/Yjs/device/runtime",
-            "notes": "Aggregated numeric features."
+            "notes": "Сводные числовые признаки."
           }
         ]
       },
@@ -900,14 +903,14 @@
           },
           {
             "id": "critical_recall",
-            "metric": "Critical recall",
+            "metric": "Полнота критичных случаев",
             "value": "",
             "target": ">= 0.85",
             "status": "pending"
           },
           {
             "id": "false_positive_rate",
-            "metric": "Normal false positive rate",
+            "metric": "Ложные срабатывания нормы",
             "value": "",
             "target": "<= 0.15",
             "status": "pending"
@@ -918,12 +921,12 @@
         "items": []
       },
       "chart": {
-        "title": "Operational readiness",
+        "title": "Готовность анализа",
         "unit": "0..1",
         "points": []
       },
       "event_volume_chart": {
-        "title": "Event volume by window",
+        "title": "Объём событий по окнам",
         "unit": "events",
         "points": [
           {
@@ -941,7 +944,7 @@
         ]
       },
       "class_distribution_chart": {
-        "title": "Baseline class distribution",
+        "title": "Распределение классов по правилу",
         "unit": "windows",
         "points": [
           {
@@ -962,24 +965,24 @@
         "items": [
           {
             "id": "rule_baseline",
-            "model": "Rule baseline",
-            "status": "implemented",
+            "model": "Правиловая основа",
+            "status": "реализовано",
             "macro_f1": "",
-            "next_step": "Use as baseline for all future models."
+            "next_step": "Используется как основа для сравнения будущих моделей."
           },
           {
             "id": "classical_ml",
-            "model": "Classical ML",
-            "status": "planned",
+            "model": "Классическая ML-модель",
+            "status": "запланировано",
             "macro_f1": "",
-            "next_step": "Train on imported labeled windows."
+            "next_step": "Обучить на импортированных размеченных окнах."
           },
           {
             "id": "neural_window_model",
-            "model": "Neural window model",
-            "status": "planned",
+            "model": "Нейросетевая модель окон",
+            "status": "запланировано",
             "macro_f1": "",
-            "next_step": "Evaluate against identical test split."
+            "next_step": "Проверить на той же тестовой выборке."
           }
         ]
       },
