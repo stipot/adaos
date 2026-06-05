@@ -10,7 +10,7 @@ SEED: dict = {
                 "widgetTemplate": {"style": {"minWidth": 240}},
                 "pageSchema": {
                     "id": "desktop",
-                    "title": "Desktop",
+                    "title": "Рабочий стол",
                     "layout": {
                         "type": "single",
                         "areas": [{"id": "main", "role": "main"}],
@@ -20,7 +20,7 @@ SEED: dict = {
                             "id": "desktop-icons",
                             "type": "collection.grid",
                             "area": "main",
-                            "title": "Icons",
+                            "title": "Приложения",
                             "inputs": {"columns": 6},
                             "dataSource": {
                                 "kind": "y",
@@ -38,7 +38,7 @@ SEED: dict = {
                             "id": "desktop-widgets",
                             "type": "desktop.widgets",
                             "area": "main",
-                            "title": "Widgets",
+                            "title": "Виджеты",
                             "dataSource": {
                                 "kind": "y",
                                 "transform": "desktop.widgets",
@@ -49,11 +49,11 @@ SEED: dict = {
             },
             "modals": {
                 "settings": {
-                    "title": "Settings",
+                    "title": "Настройки",
                     "type": "scenario-settings",
                 },
                 "apps_catalog": {
-                    "title": "Available Apps",
+                    "title": "Доступные приложения",
                     "schema": {
                         "id": "apps_catalog",
                         "layout": {
@@ -65,7 +65,7 @@ SEED: dict = {
                                 "id": "apps-list",
                                 "type": "collection.grid",
                                 "area": "main",
-                                "title": "Apps",
+                                "title": "Приложения",
                                 "dataSource": {
                                     "kind": "y",
                                     "path": "data/catalog/apps",
@@ -86,7 +86,7 @@ SEED: dict = {
                     },
                 },
                 "widgets_catalog": {
-                    "title": "Available Widgets",
+                    "title": "Доступные виджеты",
                     "schema": {
                         "id": "widgets_catalog",
                         "layout": {
@@ -98,7 +98,7 @@ SEED: dict = {
                                 "id": "widgets-list",
                                 "type": "collection.grid",
                                 "area": "main",
-                                "title": "Widgets",
+                                "title": "Виджеты",
                                 "dataSource": {
                                     "kind": "y",
                                     "path": "data/catalog/widgets",

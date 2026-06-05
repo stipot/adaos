@@ -3624,7 +3624,7 @@ class WebspaceScenarioRuntime:
 
         if supports_catalog_controls and "apps_catalog" not in merged_modals_map:
             merged_modals_map["apps_catalog"] = {
-                "title": "Available Apps",
+                "title": "Доступные приложения",
                 "load": dict(_DEFERRED_OFF_FOCUS_LOAD),
                 "schema": {
                     "id": "apps_catalog",
@@ -3638,7 +3638,7 @@ class WebspaceScenarioRuntime:
                             "id": "apps-list",
                             "type": "collection.grid",
                             "area": "main",
-                            "title": "Apps",
+                            "title": "Приложения",
                             "load": dict(_DEFERRED_OFF_FOCUS_LOAD),
                             "dataSource": {
                                 "kind": "y",
@@ -3661,7 +3661,7 @@ class WebspaceScenarioRuntime:
             }
         if supports_catalog_controls and "widgets_catalog" not in merged_modals_map:
             merged_modals_map["widgets_catalog"] = {
-                "title": "Available Widgets",
+                "title": "Доступные виджеты",
                 "load": dict(_DEFERRED_OFF_FOCUS_LOAD),
                 "schema": {
                     "id": "widgets_catalog",
@@ -3675,7 +3675,7 @@ class WebspaceScenarioRuntime:
                             "id": "widgets-list",
                             "type": "collection.grid",
                             "area": "main",
-                            "title": "Widgets",
+                            "title": "Виджеты",
                             "load": dict(_DEFERRED_OFF_FOCUS_LOAD),
                             "dataSource": {
                                 "kind": "y",
