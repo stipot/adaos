@@ -1,14 +1,21 @@
 name: neural_nlu_service_skill
-version: 0.1.0
+version: 0.2.11
 description: Local neural intent detector service for AdaOS NLU pipeline
 runtime:
   kind: service
   env:
-    mode: global
+    mode: venv
+    python: "3.11"
+dependencies:
+  - torch
+  - numpy
+  - faiss-cpu
 service:
   host: 127.0.0.1
   port: 18091
-  command: ["-m", "handlers.main"]
+  command:
+    - -m
+    - handlers.main
   healthcheck:
     path: /health
     timeout_ms: 1000

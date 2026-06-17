@@ -26,7 +26,8 @@ skill source trees under the Python package.
 
 Concrete NLU engines are providers:
 
-- `neural_nlu_service_skill` is a registry/workspace service skill.
+- `neural_nlu_service_skill` is a registry/workspace service skill sourced from
+  `skills/neural_nlu_service_skill` and installed into `.adaos/workspace`.
 - `rasa_nlu_service_skill` is a registry/workspace service skill.
 - Model artifacts and indexes are service-owned runtime data, not core package
   data.
@@ -42,11 +43,84 @@ Implemented now:
 
 - Regex-first event pipeline with optional Rasa service-skill fallback.
 - Optional neural delegation event behind `ADAOS_NLU_NEURAL`.
+- Neural NLU service-skill install preparation from normal workspace/registry
+  source during install flow.
+- Neural bridge discovery/start of installed service only; no hot-path
+  workspace mutation or A/B slot preparation.
+- Neural service-skill venv execution with `torch`, `numpy`, and `faiss-cpu`
+  declared as skill dependencies, keeping neural packages out of the hub root
+  venv.
+- Neural positive-example retrieval now supports an optional lazy `faiss.index`
+  with a Torch tensor cache fallback when `faiss` is not installed in the
+  service venv.
+- Neural negative-example retrieval now persists a parallel FAISS/Torch index
+  and records contrastive evidence for close other-intent examples.
+- Neural `/parse` contract with `top_intent`, `confidence`, `alternatives`,
+  `slots`, `model_id`, `evidence`, canonicalized text, and named-entity
+  evidence.
+- Neural intent mapping through `intent_map.json`, so research/notebook labels
+  can be translated to AdaOS canonical intents and optional action ids while
+  preserving the original model label in evidence.
+- Neural usage statistics in `state/nlu/neural_usage.json`: request/fallback
+  counts, latency summary, confidence bands, accept/abstain/reject counts,
+  per-intent status counts, canonicalization buckets, downstream Rasa outcomes
+  for neural fallbacks, and review samples.
+- Bridge-level Neural NLU probe through the same service discovery,
+  canonicalization payload, confidence gates, and usage-stat path as runtime
+  dispatch:
+  - `adaos interpreter neural-probe "какая погода в москве" --locale ru`
+- Voice chat desktop demo path: `voice.chat.user` still publishes the normal
+  `nlp.intent.detect.request`, and the router also appends a node-scoped
+  `Intent detector: ... | via=neural | ...` probe message into
+  `data/nodes/<node_id>/voice_chat` so the web desktop widget can show whether
+  the neural detector is reachable.
+- Machine-readable Neural NLU readiness check for artifacts, service
+  discovery, optional `/health`, model load, and active index backend:
+  - `adaos interpreter neural-readiness --start --stop-after`
+- Operator-facing Neural NLU diagnostics that combine readiness with
+  node-local usage aggregates:
+  - `adaos interpreter neural-diagnostics --start --stop-after`
+- Active Neural service reindex:
+  - `adaos interpreter neural-reindex --start --stop-after`
+  - calls service `POST /reindex` to reload artifacts and rebuild stale
+    positive/negative example indexes.
+- Notebook artifact preparation script for Neural NLU:
+  `skills/neural_nlu_service_skill/scripts/prepare_artifacts.py`.
 - Rasa NLU service-skill isolation from the hub Python environment.
 - Dry-run probe API for safe phrase checks:
   - `POST /api/nlu/teacher/{webspace_id}/probe`
 - Lookup API with live desktop-registry overlay:
   - `GET /api/nlu/teacher/{webspace_id}/lookups`
+- Versioned system action catalog at
+  `src/adaos/services/nlu/system_actions_catalog.py` for runtime-backed host
+  commands. The catalog exposes stable action ids, host event names, slots,
+  examples, and dispatcher mappings for default desktop actions such as modal
+  open, scenario switch, app install toggle, webspace reload, and webspace
+  reset.
+- Curated Neural training export:
+  - `adaos interpreter export-neural-training`
+  - writes skill/scenario/system-owned examples to
+    `state/interpreter/neural_training/examples_manifest.jsonl`
+  - strips Rasa entity annotations into plain text while preserving
+    `raw_example` and owner metadata.
+  - `adaos interpreter neural-reindex --from-curated` dry-runs an operator
+    compatibility plan, and `--from-curated --apply` replaces active examples
+    only when all curated labels already exist in the active Neural model.
+- Curated Neural candidate rebuild:
+  - `adaos interpreter neural-rebuild --from-curated`
+  - trains a candidate service artifact layout under
+    `state/interpreter/neural_candidates`
+  - supports quality gates for dev accuracy, macro-F1, abstain rate, and
+    average dev latency.
+  - `--promote` backs up the active model, writes rollback pointers, clears
+    stale indexes, and reloads the Neural service; candidates with failed
+    recorded gates are rejected before promotion.
+- Operator-approved example save backend:
+  - `POST /api/nlu/teacher/{webspace_id}/example/save`
+  - event: `nlp.teacher.example.save`
+  - targets: `skill`, `scenario`, or `system_action`
+  - writes audit metadata into `data.nlu_teacher.dataset[]` and the owning
+    training artifact.
 - Stage trace persistence in `data.nlu_trace.items[]`.
 - Schema-driven NLU Teacher modal that shows missed requests, candidates, raw event payloads, and Apply actions.
 
@@ -58,15 +132,19 @@ Not implemented yet:
 - Stable template inventory for regex, Rasa examples, neural labels, and lookup sets.
 - Root MCP token/session flow for governed LLM-assisted authoring.
 
-The neural stage is part of the target architecture and should be installed by
-default once the provider is moved out of core package data. Until then the
-practical baseline remains `regex -> Rasa -> fallback/Teacher` unless the
-operator explicitly enables the experimental neural stage.
+The neural stage is now sourced as a normal service skill and prepared during
+install by default. Runtime dispatch still requires `ADAOS_NLU_NEURAL=1` so
+nodes can roll out the neural stage deliberately while Rasa remains the
+long-term fallback.
 
 ## Event flow (high level)
 
 1. UI / Telegram / Voice publishes:
    - `nlp.intent.detect.request { text, webspace_id, request_id, _meta... }`
+   - For the `voice_chat` route, the router additionally runs a non-dispatching
+     Neural NLU probe for browser demonstration and appends the result to the
+     node-scoped voice chat history. This does not replace the normal pipeline
+     or dispatcher path.
 2. Named-entity canonicalization resolves runtime names and aliases before
    model-specific interpretation becomes final:
    - device/browser/node/webspace/scenario/skill/app/modal aliases are resolved
@@ -88,25 +166,42 @@ operator explicitly enables the experimental neural stage.
    - calls `neural_nlu_service_skill:/parse`
    - the service skill is installed/prepared by install/update flows, not by
      the hot parse path;
+   - passes named-entity `canonicalized_text` and `resolved_entities` evidence
+     into the provider request;
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights plus
-     FAISS ranking artifacts when installed;
+     lazy FAISS positive/negative example indexes when `faiss` is installed,
+     or Torch tensor k-NN fallbacks otherwise;
+   - maps model/research labels through the service-owned `intent_map.json`
+     before returning canonical `top_intent` values to the bridge;
    - default deployment uses one active model per node, with usage telemetry
      collected so later per-locale/webspace/profile splits can be justified by
      evidence.
+   - aggregate neural usage telemetry is persisted under
+     `state/nlu/neural_usage.json` for operator diagnostics and retraining
+     review.
    - on high confidence -> emits `nlp.intent.detected { via: "neural" }`
    - on abstain/error -> falls back to `nlp.intent.detect.rasa`
 6. Rasa bridge:
    - calls the installed `rasa_nlu_service_skill`;
    - remains a supported long-term fallback, especially for ambiguous neural
      outputs and domains where Rasa training data is already stronger;
-   - can be disabled on weak devices if neural/regex coverage is sufficient.
+   - can be disabled on weak devices if neural/regex coverage is sufficient;
+   - on no-intent or low-confidence parses, emits `nlp.intent.not_obtained`
+     with Rasa evidence (`intent`, `confidence`, `slots`, `entities`,
+     `intent_ranking`, `_raw`) so Teacher can review the actual failed
+     candidate instead of only the raw phrase.
 7. If an intent is found:
    - `nlp.intent.detected { intent, confidence, slots, text, webspace_id, request_id, via }`
 8. If intent is not obtained:
    - `nlp.intent.not_obtained { reason, text, via, webspace_id, request_id }`
+     plus optional provider evidence for Rasa misses/low-confidence parses
+     (`intent`, `confidence`, `slots`, `entities`, `intent_ranking`, `_raw`)
    - Router emits a human-friendly `io.out.chat.append` and records the request for NLU Teacher.
 9. If teacher is enabled:
    - `nlp.teacher.request { webspace_id, request }` is emitted for teacher runtimes.
+   - The Teacher bridge preserves provider evidence from `not_obtained`
+     events in `request`, allowing UI/LLM review to show why Rasa rejected the
+     candidate.
 
 ## Runtime trace
 
@@ -124,8 +219,8 @@ Human verification steps are tracked in [nlu-human-verification.md](./nlu-human-
 
 ## Dynamic lookup tables
 
-AdaOS now exports baseline NLU lookup tables from workspace desktop/scenario manifests, with packaged desktop manifests as an empty-workspace
-fallback. The lookup sets are:
+AdaOS now exports baseline NLU lookup tables from workspace desktop/scenario manifests, with packaged/default desktop ids as an
+empty-workspace fallback. The lookup sets are:
 
 - `modal_id`
 - `node_ref`
@@ -176,21 +271,35 @@ Curated examples should live where the behavior is owned:
   rules, and training metadata.
 - Scenario-owned flows: the owning scenario stores scenario-level NLU examples
   and routing hints.
-- Core/client actions such as moving, hiding, opening, pinning, switching, and
-  other shell behavior should not be faked as user skills. They should be
-  described in a versioned **system action catalog** with stable action ids,
-  argument schemas, aliases, and training examples.
+- Core/client actions such as opening, switching, reloading/resetting the
+  desktop, and toggling installed apps are described in a versioned **system
+  action catalog** with stable action ids, argument schemas, aliases, and
+  training examples. Move, hide, and pin must be added only after matching
+  runtime host actions exist.
 
-The system action catalog is still data, not provider code. Regex, Rasa,
-neural, Teacher, and MCP authoring can all consume it. This lets AdaOS train
-and explain built-in UI/kernel commands without baking them into a particular
-NLU engine.
+The system action catalog is data, not provider code. Regex, Rasa, neural,
+Teacher, and MCP authoring can all consume it. The default desktop NLU merges
+active catalog intents into its dispatcher config, while interpreter export
+keeps those examples system-owned instead of pretending they came from a user
+skill.
+
+The current neural provider uses service-owned `intent_map.json` as the
+node-level bridge from research labels to canonical intents and optional
+`action_id` values. This keeps model labels stable while the system action
+catalog matures into the shared source of truth for built-in commands.
+
+The curated Neural export is not an active model promotion step. It produces a
+reviewable/rebuildable bundle under `state/interpreter/neural_training`; the
+active provider layout under `state/nlu/neural` is updated only by explicit
+artifact preparation or future governed rebuild/reindex tooling.
 
 NLU Teacher should write accepted corrections back to the owning artifact:
 
 - skill examples/rules for skill actions;
 - scenario examples/rules for scenario flows;
-- system action examples/templates for core/client commands;
+- system action examples/templates for core/client commands, currently as an
+  audited overlay at `state/interpreter/system_action_feedback.jsonl` that is
+  consumed by Rasa and Neural export;
 - named-entity aliases through the governed named-entity write path.
 
 ## Rasa as a service-skill
@@ -240,7 +349,8 @@ Teacher receives scenario + skill context, including:
 - built-in regex rules (`nlu.pipeline`)
 - selected skill-level NLU artifacts (e.g. `interpreter/intents.yml`)
 - intent routing hints (`intent_routes`: scenario intent -> callSkill topic -> skill)
-- system/host actions catalog (`system_actions`, `host_actions`)
+- system/host actions catalog (`system_actions`, `host_actions`), including
+  stable action ids, linked intents, slots, and training examples
 
 Teacher state is projected into YJS under `data.nlu_teacher.*` for UI inspection, and also persisted on disk
 under `.adaos/state/skills/nlu_teacher/<webspace_id>.json` so it survives YJS reload/reset.
@@ -260,6 +370,9 @@ In the default web desktop scenario the current NLU Teacher UI is a schema-drive
     - for `regex_rule` candidates: persists the rule into a workspace owner (preferably a skill), then mirrors into
       `data.nlu.regex_rules` as a runtime cache so the next request matches immediately (`via="regex.dynamic"`)
     - for `skill`/`scenario` candidates: creates a development plan item
+  - `nlp.teacher.example.save`: persists an operator-approved positive
+    example into a selected skill, scenario, or system-action feedback target
+    with audit metadata
   - a successful apply emits `ui.notify` with the owner (skill/scenario) where the rule was installed
 
 Required UI expansion:

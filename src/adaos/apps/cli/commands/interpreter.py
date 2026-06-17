@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 from urllib.request import Request, urlopen
 
 import typer
@@ -12,7 +12,9 @@ import yaml
 
 from adaos.apps.bootstrap import get_ctx
 from adaos.services.interpreter.workspace import IntentMapping, InterpreterWorkspace
+from adaos.services.nlu import neural_service_bridge
 from adaos.services.nlu.data_registry import sync_from_scenarios_and_skills
+from adaos.services.nlu.neural_usage_stats import neural_usage_stats_path, read_neural_usage_stats
 from adaos.services.nlu.rasa_skill_installer import ensure_rasa_service_skill_installed, is_rasa_nlu_enabled
 from adaos.services.skill.service_supervisor import get_service_supervisor
 
@@ -103,6 +105,18 @@ def _http_post_json(url: str, payload: dict, *, timeout_ms: int = 600_000) -> di
         return json.loads(raw)
 
 
+def _compact_neural_usage_for_cli(stats: dict, *, recent_limit: int, samples_limit: int) -> dict:
+    out = dict(stats) if isinstance(stats, dict) else {}
+    out["path"] = str(neural_usage_stats_path())
+    recent = out.get("recent")
+    if isinstance(recent, list):
+        out["recent"] = recent[-max(0, int(recent_limit)) :] if recent_limit else []
+    samples = out.get("review_samples")
+    if isinstance(samples, list):
+        out["review_samples"] = samples[-max(0, int(samples_limit)) :] if samples_limit else []
+    return out
+
+
 @app.command("sync-nlu")
 def sync_nlu() -> None:
     """
@@ -113,8 +127,20 @@ def sync_nlu() -> None:
     summary = sync_from_scenarios_and_skills(ctx)
     typer.echo(
         f"NLU sync: skills_intents={summary['skills_intents']} "
-        f"scenario_intents={summary['scenario_intents']}"
+        f"scenario_intents={summary['scenario_intents']} "
+        f"system_action_intents={summary.get('system_action_intents', 0)}"
     )
+
+
+@app.command("export-neural-training")
+def export_neural_training() -> None:
+    """
+    Export curated skill/scenario/system NLU examples as a Neural NLU training bundle.
+    """
+    ctx = get_ctx()
+    sync_from_scenarios_and_skills(ctx)
+    summary = _workspace().export_neural_training_data()
+    typer.echo(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
 @app.command("parse")
@@ -128,6 +154,233 @@ def parse(
     base = _rasa_service_url()
     result = _http_post_json(f"{base}/parse", {"text": text}, timeout_ms=30_000)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command("neural-probe", context_settings={"allow_extra_args": True, "ignore_unknown_options": False})
+def neural_probe(
+    ctx: typer.Context,
+    text: str = typer.Argument(..., help="Text to parse through the Neural NLU bridge."),
+    webspace_id: str = typer.Option("desktop", "--webspace-id", help="Webspace id for named-entity context."),
+    locale: Optional[str] = typer.Option(None, "--locale", help="Request locale."),
+    no_record_stats: bool = typer.Option(False, "--no-record-stats", help="Do not update neural usage statistics."),
+) -> None:
+    """
+    Probe Neural NLU through the hub bridge policy: service discovery/start,
+    canonicalization payload, confidence gates, and optional usage stats.
+    """
+    extra = [str(item) for item in getattr(ctx, "args", []) or []]
+    if extra:
+        if any(part.startswith("-") for part in extra):
+            raise typer.BadParameter(f"unexpected extra arguments: {' '.join(extra)}")
+        text = " ".join([text, *extra]).strip()
+    result = _run_blocking(
+        neural_service_bridge.parse_text(
+            text,
+            webspace_id=webspace_id,
+            meta={"probe": "cli.neural", "webspace_id": webspace_id},
+            locale=locale,
+            record_usage_stats=not no_record_stats,
+        )
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
+@app.command("neural-readiness")
+def neural_readiness(
+    start_service: bool = typer.Option(False, "--start", help="Start the service and include /health readiness."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after the readiness check."),
+) -> None:
+    """
+    Inspect Neural NLU artifacts, service discovery, and optional live health.
+    """
+    result = _run_blocking(
+        neural_service_bridge.diagnose_readiness(
+            start_service=start_service,
+            stop_after=stop_after,
+        )
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
+@app.command("neural-diagnostics")
+def neural_diagnostics(
+    start_service: bool = typer.Option(False, "--start", help="Start the service and include /health readiness."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after the readiness check."),
+    recent: int = typer.Option(10, "--recent", min=0, help="How many recent usage records to include."),
+    review_samples: int = typer.Option(10, "--review-samples", min=0, help="How many review samples to include."),
+) -> None:
+    """
+    Return one operator-facing Neural NLU diagnostics payload: readiness plus
+    node-local usage aggregates.
+    """
+    readiness = _run_blocking(
+        neural_service_bridge.diagnose_readiness(
+            start_service=start_service,
+            stop_after=stop_after,
+        )
+    )
+    usage = _compact_neural_usage_for_cli(
+        read_neural_usage_stats(),
+        recent_limit=recent,
+        samples_limit=review_samples,
+    )
+    result = {
+        "ok": bool(readiness.get("ok")),
+        "readiness": readiness,
+        "usage_stats": usage,
+    }
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
+@app.command("neural-reindex")
+def neural_reindex(
+    start_service: bool = typer.Option(True, "--start/--no-start", help="Start the Neural service before reindex."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after reindex."),
+    purge_indexes: bool = typer.Option(False, "--purge-indexes", help="Remove cached indexes before service reload."),
+    from_curated: bool = typer.Option(False, "--from-curated", help="Plan or apply curated training bundle examples."),
+    apply: bool = typer.Option(False, "--apply", help="Apply the curated bundle before service reindex."),
+) -> None:
+    """
+    Reload the active Neural NLU provider and rebuild stale example indexes.
+    """
+    if from_curated:
+        ctx = get_ctx()
+        sync_from_scenarios_and_skills(ctx)
+        ws = _workspace()
+        plan = ws.plan_neural_curated_reindex(export=True)
+        if not apply:
+            typer.echo(
+                json.dumps(
+                    {"ok": True, "mode": "curated_plan", "plan": plan},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return
+        apply_result = ws.apply_neural_curated_reindex(plan=plan)
+        if not apply_result.get("ok"):
+            typer.echo(
+                json.dumps(
+                    {"ok": False, "mode": "curated_apply", "apply": apply_result},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            raise typer.Exit(code=1)
+        reindex_result = _run_blocking(
+            neural_service_bridge.reindex_active_model(
+                start_service=start_service,
+                stop_after=stop_after,
+                purge_indexes=purge_indexes,
+            )
+        )
+        result = {
+            "ok": bool(reindex_result.get("ok")),
+            "mode": "curated_apply",
+            "apply": apply_result,
+            "reindex": reindex_result,
+        }
+        typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+        if not result.get("ok"):
+            raise typer.Exit(code=1)
+        return
+
+    result = _run_blocking(
+        neural_service_bridge.reindex_active_model(
+            start_service=start_service,
+            stop_after=stop_after,
+            purge_indexes=purge_indexes,
+        )
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
+
+
+@app.command("neural-rebuild")
+def neural_rebuild(
+    from_curated: bool = typer.Option(True, "--from-curated/--no-from-curated", help="Use the curated Neural training bundle."),
+    examples_path: Optional[Path] = typer.Option(None, "--examples", help="Explicit examples_manifest.jsonl."),
+    candidate_dir: Optional[Path] = typer.Option(None, "--candidate-dir", help="Where to write candidate artifacts."),
+    model_id: Optional[str] = typer.Option(None, "--model-id", help="Explicit model id for the candidate."),
+    epochs: int = typer.Option(40, "--epochs", min=1, help="Training epochs."),
+    batch_size: int = typer.Option(16, "--batch-size", min=1, help="Training batch size."),
+    learning_rate: float = typer.Option(0.003, "--learning-rate", min=0.000001, help="AdamW learning rate."),
+    seed: int = typer.Option(13, "--seed", help="Training split/shuffle seed."),
+    min_dev_accuracy: float = typer.Option(0.0, "--min-dev-accuracy", min=0.0, max=1.0, help="Required candidate dev accuracy."),
+    min_macro_f1: float = typer.Option(0.0, "--min-macro-f1", min=0.0, max=1.0, help="Required candidate macro-F1."),
+    max_dev_abstain_rate: float = typer.Option(1.0, "--max-dev-abstain-rate", min=0.0, max=1.0, help="Maximum allowed dev abstain rate."),
+    max_dev_latency_ms: float = typer.Option(0.0, "--max-dev-latency-ms", min=0.0, help="Maximum allowed average dev latency in ms; 0 disables this gate."),
+    promote: bool = typer.Option(False, "--promote", help="Promote the candidate into active Neural artifacts."),
+    reason: Optional[str] = typer.Option(None, "--reason", help="Promotion reason recorded in rollback pointer."),
+    start_service: bool = typer.Option(True, "--start/--no-start", help="Start the Neural service after promotion."),
+    stop_after: bool = typer.Option(False, "--stop-after", help="Stop the service after post-promotion reindex."),
+) -> None:
+    """
+    Train a Neural NLU candidate model from curated examples, then optionally promote it.
+    """
+    ctx = get_ctx()
+    ws = _workspace()
+    export_summary = None
+    if from_curated:
+        sync_from_scenarios_and_skills(ctx)
+        export_summary = ws.export_neural_training_data()
+        examples_path = Path(str(export_summary["examples_path"]))
+    if examples_path is None:
+        raise typer.BadParameter("provide --examples or keep --from-curated enabled")
+
+    build = ws.rebuild_neural_candidate_from_examples(
+        examples_path=examples_path,
+        candidate_dir=candidate_dir,
+        model_id=model_id,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        seed=seed,
+        min_dev_accuracy=min_dev_accuracy,
+        min_macro_f1=min_macro_f1,
+        max_dev_abstain_rate=max_dev_abstain_rate,
+        max_dev_latency_ms_avg=max_dev_latency_ms,
+    )
+    result: dict[str, Any] = {
+        "ok": bool(build.get("ok")) and not promote,
+        "mode": "candidate_build",
+        "export": export_summary,
+        "build": build,
+    }
+    if not build.get("ok"):
+        typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+        raise typer.Exit(code=1)
+
+    if promote:
+        promotion = ws.promote_neural_candidate(candidate_dir=Path(str(build["candidate_dir"])), reason=reason or "cli.neural-rebuild")
+        reindex_result = None
+        if promotion.get("ok"):
+            reindex_result = _run_blocking(
+                neural_service_bridge.reindex_active_model(
+                    start_service=start_service,
+                    stop_after=stop_after,
+                    purge_indexes=True,
+                )
+            )
+        result = {
+            "ok": bool(promotion.get("ok")) and bool(reindex_result and reindex_result.get("ok")),
+            "mode": "candidate_promote",
+            "export": export_summary,
+            "build": build,
+            "promotion": promotion,
+            "reindex": reindex_result,
+        }
+
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("ok"):
+        raise typer.Exit(code=1)
 
 
 @app.command("status")

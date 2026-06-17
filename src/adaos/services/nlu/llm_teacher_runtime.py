@@ -420,12 +420,18 @@ def _extract_scenario_nlu(*, scenario_id: str | None) -> dict[str, Any]:
     try:
         content = scenarios_loader.read_content(scenario_id)
     except Exception:
-        return {}
+        content = {}
     if not isinstance(content, dict):
-        return {}
+        content = {}
     nlu = content.get("nlu")
     if not isinstance(nlu, dict):
-        return {}
+        nlu = {}
+    try:
+        from adaos.services.nlu.baseline_content import merge_default_desktop_nlu
+
+        nlu = merge_default_desktop_nlu(str(scenario_id), nlu)
+    except Exception:
+        pass
     intents = nlu.get("intents")
     if not isinstance(intents, dict):
         return {}
@@ -525,6 +531,7 @@ def _build_prompt(*, request: dict[str, Any], webspace_id: str, context: dict[st
         "- If the utterance is not actionable for AdaOS, decision=ignore.\n"
         "- Prefer existing intents from context (scenario_nlu.intents keys) over inventing new ones.\n"
         "- Use provided context (scenario_nlu, intent_routes, system_actions, host_actions, skills_manifest, builtin_regex, regex_rules, catalog, skill_nlu) to reuse existing intents.\n"
+        "- host_actions entries include stable system action ids, host event names, slots, examples, and linked intents.\n"
         "- If it matches a known app/widget/scenario, prefer revise_nlu with an existing intent name.\n"
         "- If an existing intent is the right match but regex stage likely misses it, prefer propose_regex_rule.\n"
         "- propose_regex_rule.pattern MUST be a Python regex with named capture groups for slots (e.g. (?P<city>...)).\n"
@@ -533,7 +540,7 @@ def _build_prompt(*, request: dict[str, Any], webspace_id: str, context: dict[st
         "- Regex rules should be reasonably general (avoid overfitting to a single verb like \"покажи\"); capture city via (?P<city>...).\n"
         "- When proposing a regex rule, also set target to where the rule should be stored:\n"
         "  - Prefer the skill that handles the intent (see context.intent_routes) over the scenario.\n"
-        "  - For intents that trigger system actions (callHost targets from context.system_actions), target should usually be the scenario.\n"
+        "  - For intents that trigger system actions (callHost targets from context.system_actions/host_actions), target should usually be the scenario.\n"
         "- If it suggests a new capability, propose create_skill_candidate or create_scenario_candidate.\n"
         "- Keep intent names short and namespaced (e.g. desktop.open_weather, smalltalk.how_are_you).\n"
     )
@@ -752,9 +759,13 @@ async def _on_teacher_request(evt: Any) -> None:
         )[:150]
         context["skills_manifest"] = skill_manifests
         try:
-            from adaos.services.nlu.system_actions_catalog import describe_system_actions
+            from adaos.services.nlu.system_actions_catalog import (
+                SYSTEM_ACTION_CATALOG_VERSION,
+                describe_system_actions,
+            )
 
             context["host_actions"] = describe_system_actions()
+            context["host_actions_version"] = SYSTEM_ACTION_CATALOG_VERSION
         except Exception:
             context["host_actions"] = []
         try:

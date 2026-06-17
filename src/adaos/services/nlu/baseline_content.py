@@ -60,7 +60,13 @@ _DEFAULT_DESKTOP_NLU: dict[str, Any] = {
 
 
 def default_desktop_nlu() -> dict[str, Any]:
-    return deepcopy(_DEFAULT_DESKTOP_NLU)
+    from adaos.services.nlu.system_actions_catalog import system_action_nlu_intents
+
+    payload = deepcopy(_DEFAULT_DESKTOP_NLU)
+    catalog_intents = system_action_nlu_intents()
+    default_intents = payload.get("intents") if isinstance(payload.get("intents"), dict) else {}
+    payload["intents"] = {**catalog_intents, **default_intents}
+    return payload
 
 
 def merge_default_desktop_nlu(scenario_id: str, nlu: Mapping[str, Any] | None) -> dict[str, Any]:

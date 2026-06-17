@@ -35,6 +35,21 @@ class ApplyRevisionRequest(BaseModel):
     slots: Dict[str, Any] = Field(default_factory=dict)
 
 
+class SaveExampleTarget(BaseModel):
+    type: str = Field(..., min_length=1)
+    id: Optional[str] = None
+
+
+class SaveExampleRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    intent: str = Field(..., min_length=1)
+    target: SaveExampleTarget
+    slots: Dict[str, Any] = Field(default_factory=dict)
+    request_id: Optional[str] = None
+    source: Optional[str] = None
+    note: Optional[str] = None
+
+
 class ProbePhraseRequest(BaseModel):
     text: str = Field(..., min_length=1)
     use_rasa: bool = True
@@ -81,6 +96,30 @@ async def apply_revision(webspace_id: str, body: ApplyRevisionRequest):
         raise HTTPException(status_code=500, detail=f"failed to emit apply event: {exc}")
 
     return {"ok": True, "webspace_id": ws, "revision_id": body.revision_id, "intent": body.intent}
+
+
+@router.post("/nlu/teacher/{webspace_id}/example/save", dependencies=[Depends(require_token)])
+async def save_example(webspace_id: str, body: SaveExampleRequest):
+    ws = _resolve_webspace_id(webspace_id)
+    ctx = get_ctx()
+    payload = {
+        "webspace_id": ws,
+        "text": body.text.strip(),
+        "intent": body.intent.strip(),
+        "target": body.target.model_dump(exclude_none=True),
+        "slots": dict(body.slots or {}),
+        "request_id": body.request_id.strip() if isinstance(body.request_id, str) and body.request_id.strip() else None,
+        "source": body.source.strip() if isinstance(body.source, str) and body.source.strip() else "api.nlu.teacher",
+        "note": body.note.strip() if isinstance(body.note, str) and body.note.strip() else None,
+        "_meta": {"webspace_id": ws},
+    }
+
+    try:
+        bus_emit(ctx.bus, "nlp.teacher.example.save", payload, source="api.nlu.teacher")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"failed to emit save example event: {exc}")
+
+    return {"ok": True, "webspace_id": ws, "intent": payload["intent"], "target": payload["target"]}
 
 
 @router.post("/nlu/teacher/{webspace_id}/probe", dependencies=[Depends(require_token)])

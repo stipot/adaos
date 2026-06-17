@@ -23,7 +23,9 @@ This document describes the current production MVP direction for intent detectio
    - otherwise emits `nlp.intent.detect.rasa`
 4. Neural bridge:
    - calls `neural_nlu_service_skill:/parse`
-   - if the skill is missing, hub bootstraps it from packaged template (`adaos.interpreter_data/neural_nlu_service_skill`)
+   - if the skill is missing, hub falls back to Rasa; install/update flows prepare the service skill from the workspace/registry source
+   - service runs in its own venv and declares `torch`/`numpy` as skill
+     dependencies, outside the hub/root venv
    - upstream detector code is ported into `handlers/upstream_detector_port.py` (service-side runtime module)
    - neural service can run notebook-compatible Char-CNN + BiLSTM weights via:
      - `ADAOS_NEURAL_MODEL_PATH` (state_dict `.pt`)
@@ -33,15 +35,26 @@ This document describes the current production MVP direction for intent detectio
      - `<ADAOS_BASE_DIR>/state/nlu/neural/model.pt`
      - `<ADAOS_BASE_DIR>/state/nlu/neural/labels.json`
      - `<ADAOS_BASE_DIR>/state/nlu/neural/vocab.json`
+   - node-local usage statistics are written to
+     `<ADAOS_BASE_DIR>/state/nlu/neural_usage.json` (request/fallback counts,
+     latency summary, confidence bands, accept/abstain/reject counts,
+     canonicalization buckets, and review samples)
+   - notebook outputs can be prepared for runtime with
+     `skills/neural_nlu_service_skill/scripts/prepare_artifacts.py`
    - on high confidence -> emits `nlp.intent.detected { via: "neural" }`
    - on abstain/error -> falls back to `nlp.intent.detect.rasa`
 5. If an intent is found:
    - `nlp.intent.detected { intent, confidence, slots, text, webspace_id, request_id, via }`
 6. If intent is not obtained:
    - `nlp.intent.not_obtained { reason, text, via, webspace_id, request_id }`
+     plus optional provider evidence for Rasa misses/low-confidence parses
+     (`intent`, `confidence`, `slots`, `entities`, `intent_ranking`, `_raw`)
    - Router emits a human-friendly `io.out.chat.append` and records the request for NLU Teacher.
 7. If teacher is enabled:
    - `nlp.teacher.request { webspace_id, request }` is emitted for teacher runtimes.
+   - The Teacher bridge preserves provider evidence from `not_obtained`
+     events in `request`, allowing UI/LLM review to show why Rasa rejected the
+     candidate.
 
 ## Rasa as a service-skill
 

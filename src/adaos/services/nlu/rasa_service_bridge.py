@@ -11,6 +11,7 @@ from adaos.sdk.core.decorators import subscribe
 from adaos.services.agent_context import get_ctx
 from adaos.services.eventbus import emit as bus_emit
 from adaos.services.skill.service_supervisor import get_service_supervisor
+from .neural_usage_stats import record_neural_fallback_outcome
 from .rasa_skill_installer import is_rasa_nlu_enabled
 
 _log = logging.getLogger("adaos.nlu.rasa")
@@ -52,6 +53,7 @@ def _emit_not_obtained(
     request_id: str | None,
     meta: Mapping[str, Any],
     reason: str,
+    result: Mapping[str, Any] | None = None,
 ) -> None:
     out: Dict[str, Any] = {"reason": reason, "text": text, "via": "rasa"}
     if webspace_id:
@@ -60,6 +62,25 @@ def _emit_not_obtained(
         out["request_id"] = request_id
     if isinstance(meta, Mapping) and meta:
         out["_meta"] = dict(meta)
+    if isinstance(result, Mapping):
+        intent = result.get("intent")
+        if isinstance(intent, str) and intent.strip():
+            out["intent"] = intent.strip()
+        confidence = result.get("confidence")
+        if isinstance(confidence, (int, float)):
+            out["confidence"] = float(confidence)
+        slots = result.get("slots")
+        if isinstance(slots, Mapping) and slots:
+            out["slots"] = dict(slots)
+        entities = result.get("entities")
+        if isinstance(entities, list) and entities:
+            out["entities"] = list(entities)
+        ranking = result.get("intent_ranking")
+        if isinstance(ranking, list) and ranking:
+            out["intent_ranking"] = list(ranking[:5])
+        raw = result.get("raw")
+        if isinstance(raw, Mapping) and raw:
+            out["_raw"] = dict(raw)
     bus_emit(ctx.bus, "nlp.intent.not_obtained", out, source="nlu.rasa")
 
 
@@ -177,6 +198,27 @@ def _slots_from_entities(entities: Any) -> Dict[str, Any]:
     return slots
 
 
+def _record_neural_fallback_outcome_safe(
+    *,
+    meta: Mapping[str, Any],
+    request_id: str | None,
+    result: Mapping[str, Any],
+) -> None:
+    if meta.get("neural_fallback") is not True:
+        return
+    try:
+        record_neural_fallback_outcome(
+            request_id=request_id,
+            status="accepted" if result.get("ok") else "miss",
+            reason=str(result.get("reason") or ("rasa_accepted" if result.get("ok") else "rasa_miss")),
+            intent=result.get("intent") if isinstance(result.get("intent"), str) else None,
+            confidence=result.get("confidence") if isinstance(result.get("confidence"), (int, float)) else None,
+            via="rasa",
+        )
+    except Exception:
+        _log.debug("failed to record downstream Rasa outcome for neural fallback", exc_info=True)
+
+
 async def parse_text(
     text: str,
     *,
@@ -291,6 +333,7 @@ async def _parse_and_emit(
         return
 
     result = await parse_text(text, webspace_id=webspace_id, request_id=request_id, meta=meta)
+    _record_neural_fallback_outcome_safe(meta=meta, request_id=request_id, result=result)
     if not result.get("ok"):
         _emit_stage(
             ctx=ctx,
@@ -312,6 +355,7 @@ async def _parse_and_emit(
             request_id=request_id,
             meta=meta,
             reason=str(result.get("reason") or "rasa_failed"),
+            result=result,
         )
         return
 

@@ -172,3 +172,35 @@ async def test_nlu_teacher_lookup_api_returns_lookup_tables(monkeypatch):
     assert seen == {"webspace_id": "ws-api", "include_live": True}
     assert result["ok"] is True
     assert result["lookups"]["modal_id"][0]["value"] == "nlu_teacher_modal"
+
+
+@pytest.mark.anyio
+async def test_nlu_teacher_save_example_api_emits_event(monkeypatch):
+    from adaos.apps.api import nlu_teacher_api as api
+
+    emitted = {}
+
+    def _fake_emit(bus, event_type, payload, *, source=None):
+        emitted["event_type"] = event_type
+        emitted["payload"] = payload
+        emitted["source"] = source
+
+    monkeypatch.setattr(api, "bus_emit", _fake_emit)
+
+    result = await api.save_example(
+        "ws-api",
+        api.SaveExampleRequest(
+            text=" reload desktop ",
+            intent="desktop.reload_webspace",
+            target=api.SaveExampleTarget(type="system_action", id="host.desktop.webspace.reload"),
+            request_id="rid-api",
+            source="unit-test",
+        ),
+    )
+
+    assert result["ok"] is True
+    assert emitted["event_type"] == "nlp.teacher.example.save"
+    assert emitted["payload"]["text"] == "reload desktop"
+    assert emitted["payload"]["intent"] == "desktop.reload_webspace"
+    assert emitted["payload"]["target"] == {"type": "system_action", "id": "host.desktop.webspace.reload"}
+    assert emitted["payload"]["request_id"] == "rid-api"

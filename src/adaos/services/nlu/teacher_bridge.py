@@ -18,6 +18,7 @@ _log = logging.getLogger("adaos.nlu.teacher")
 
 _MAX_ITEMS = int(os.getenv("ADAOS_NLU_TEACHER_MAX", "200") or "200")
 _ENABLED = os.getenv("ADAOS_NLU_TEACHER") == "1"
+_TEACHER_EVIDENCE_FIELDS = ("intent", "confidence", "slots", "entities", "intent_ranking", "_raw")
 
 
 def _nlu_teacher_bridge_write_meta():
@@ -103,6 +104,10 @@ async def _on_not_obtained(evt: Any) -> None:
         "request_id": request_id,
         "_meta": dict(meta),
     }
+    for field in _TEACHER_EVIDENCE_FIELDS:
+        value = payload.get(field)
+        if value is not None:
+            item[field] = value
 
     try:
         await _append_teacher_item(webspace_id, item)

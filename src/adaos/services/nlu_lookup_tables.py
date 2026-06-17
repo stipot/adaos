@@ -14,6 +14,15 @@ _log = logging.getLogger(__name__)
 
 LOOKUP_NAMES = ("modal_id", "node_ref", "app_id", "scenario_id", "webspace_id", "skill_id")
 DEFAULT_WEBSPACE_ID = "desktop"
+DEFAULT_DESKTOP_SCENARIO_ID = "web_desktop"
+DEFAULT_DESKTOP_MODAL_IDS = (
+    "apps_catalog",
+    "widgets_catalog",
+    "nlu_teacher_modal",
+    "workspace_manager",
+    "notification_history",
+)
+DEFAULT_DESKTOP_APP_IDS = ("nlu_teacher_app",)
 
 
 def _hash_payload(payload: Any) -> str:
@@ -290,6 +299,21 @@ def _collect_node_refs(buckets: dict[str, dict[str, dict[str, Any]]], ctx: Agent
         _log.debug("failed to collect node refs from subnet directory", exc_info=True)
 
 
+def _collect_builtin_desktop_defaults(buckets: dict[str, dict[str, dict[str, Any]]]) -> None:
+    """
+    Provide a tiny packaged fallback for empty workspaces.
+
+    Runtime installs normally project these ids from workspace scenarios/skills
+    or live YJS state. Tests and first-boot workspaces may not have those files
+    yet, while baseline NLU examples still reference the default desktop ids.
+    """
+    _add(buckets, "scenario_id", DEFAULT_DESKTOP_SCENARIO_ID, source="builtin.default_desktop")
+    for modal_id in DEFAULT_DESKTOP_MODAL_IDS:
+        _add(buckets, "modal_id", modal_id, source="builtin.default_desktop.modals")
+    for app_id in DEFAULT_DESKTOP_APP_IDS:
+        _add(buckets, "app_id", app_id, source="builtin.default_desktop.apps")
+
+
 def _finalize(buckets: dict[str, dict[str, dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
     out: dict[str, list[dict[str, Any]]] = {name: [] for name in LOOKUP_NAMES}
     for name in LOOKUP_NAMES:
@@ -312,6 +336,7 @@ def _collect_baseline_buckets(ctx: AgentContext, *, webspace_id: str) -> dict[st
     buckets = _empty_buckets()
     _add(buckets, "webspace_id", webspace_id, source="request.webspace_id")
     _collect_workspace_manifests(buckets, ctx)
+    _collect_builtin_desktop_defaults(buckets)
     _collect_node_refs(buckets, ctx)
     return buckets
 

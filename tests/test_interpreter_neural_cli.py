@@ -1,0 +1,207 @@
+from __future__ import annotations
+
+import json
+
+from typer.testing import CliRunner
+
+
+def test_neural_probe_joins_extra_text_words(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    seen = {}
+
+    async def _fake_parse_text(text, **kwargs):
+        seen["text"] = text
+        seen["kwargs"] = kwargs
+        return {"ok": True, "accepted": True, "intent": "weather.get"}
+
+    monkeypatch.setattr(interpreter.neural_service_bridge, "parse_text", _fake_parse_text)
+
+    result = CliRunner().invoke(
+        interpreter.app,
+        ["neural-probe", "what", "is", "weather", "--locale", "en"],
+    )
+
+    assert result.exit_code == 0
+    assert seen["text"] == "what is weather"
+    assert seen["kwargs"]["locale"] == "en"
+    assert json.loads(result.output)["intent"] == "weather.get"
+
+
+def test_neural_diagnostics_combines_readiness_and_usage(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    async def _fake_readiness(**kwargs):
+        assert kwargs["start_service"] is True
+        assert kwargs["stop_after"] is True
+        return {"ok": True, "checks": {"model_loaded": True}}
+
+    monkeypatch.setattr(interpreter.neural_service_bridge, "diagnose_readiness", _fake_readiness)
+    monkeypatch.setattr(
+        interpreter,
+        "read_neural_usage_stats",
+        lambda: {
+            "schema_version": 1,
+            "totals": {"requests": 3},
+            "recent": [{"id": 1}, {"id": 2}, {"id": 3}],
+            "review_samples": [{"id": "a"}, {"id": "b"}],
+        },
+    )
+
+    result = CliRunner().invoke(
+        interpreter.app,
+        ["neural-diagnostics", "--start", "--stop-after", "--recent", "2", "--review-samples", "1"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["readiness"]["checks"]["model_loaded"] is True
+    assert payload["usage_stats"]["totals"]["requests"] == 3
+    assert payload["usage_stats"]["recent"] == [{"id": 2}, {"id": 3}]
+    assert payload["usage_stats"]["review_samples"] == [{"id": "b"}]
+
+
+def test_export_neural_training_cli(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 0, "scenario_intents": 1, "system_action_intents": 1},
+    )
+
+    class FakeWorkspace:
+        def export_neural_training_data(self):
+            return {"ok": True, "examples_total": 3, "intents_total": 2}
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(interpreter.app, ["export-neural-training"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {"ok": True, "examples_total": 3, "intents_total": 2}
+
+
+def test_neural_reindex_cli(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    seen = {}
+
+    async def _fake_reindex(**kwargs):
+        seen.update(kwargs)
+        return {"ok": True, "checks": {"model_loaded": True}}
+
+    monkeypatch.setattr(interpreter.neural_service_bridge, "reindex_active_model", _fake_reindex)
+
+    result = CliRunner().invoke(
+        interpreter.app,
+        ["neural-reindex", "--start", "--stop-after", "--purge-indexes"],
+    )
+
+    assert result.exit_code == 0
+    assert seen == {"start_service": True, "stop_after": True, "purge_indexes": True}
+    assert json.loads(result.output)["checks"]["model_loaded"] is True
+
+
+def test_neural_reindex_from_curated_plan_cli(monkeypatch):
+    from adaos.apps.cli.commands import interpreter
+
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 1, "scenario_intents": 0, "system_action_intents": 0},
+    )
+
+    class FakeWorkspace:
+        def plan_neural_curated_reindex(self, *, export=True):
+            return {
+                "ok": True,
+                "apply_allowed": False,
+                "warnings": ["curated_labels_not_in_active_model"],
+            }
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(interpreter.app, ["neural-reindex", "--from-curated"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["mode"] == "curated_plan"
+    assert payload["plan"]["apply_allowed"] is False
+
+
+def test_neural_rebuild_from_curated_candidate_cli(monkeypatch, tmp_path):
+    from adaos.apps.cli.commands import interpreter
+
+    seen = {}
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 1, "scenario_intents": 0, "system_action_intents": 0},
+    )
+
+    class FakeWorkspace:
+        def export_neural_training_data(self):
+            return {"ok": True, "examples_path": str(tmp_path / "examples_manifest.jsonl")}
+
+        def rebuild_neural_candidate_from_examples(self, **kwargs):
+            seen.update(kwargs)
+            return {"ok": True, "candidate_dir": str(tmp_path / "candidate"), "result": {"metrics": {"model_id": "unit"}}}
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(
+        interpreter.app,
+        [
+            "neural-rebuild",
+            "--from-curated",
+            "--epochs",
+            "1",
+            "--max-dev-abstain-rate",
+            "0.25",
+            "--max-dev-latency-ms",
+            "15",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["mode"] == "candidate_build"
+    assert payload["build"]["candidate_dir"] == str(tmp_path / "candidate")
+    assert seen["max_dev_abstain_rate"] == 0.25
+    assert seen["max_dev_latency_ms_avg"] == 15.0
+
+
+def test_neural_rebuild_promotes_and_reindexes(monkeypatch, tmp_path):
+    from adaos.apps.cli.commands import interpreter
+
+    async def _fake_reindex(**kwargs):
+        return {"ok": True, "checks": {"model_loaded": True}, "kwargs": kwargs}
+
+    monkeypatch.setattr(interpreter.neural_service_bridge, "reindex_active_model", _fake_reindex)
+    monkeypatch.setattr(
+        interpreter,
+        "sync_from_scenarios_and_skills",
+        lambda ctx: {"skills_intents": 1, "scenario_intents": 0, "system_action_intents": 0},
+    )
+
+    class FakeWorkspace:
+        def export_neural_training_data(self):
+            return {"ok": True, "examples_path": str(tmp_path / "examples_manifest.jsonl")}
+
+        def rebuild_neural_candidate_from_examples(self, **kwargs):
+            return {"ok": True, "candidate_dir": str(tmp_path / "candidate")}
+
+        def promote_neural_candidate(self, **kwargs):
+            return {"ok": True, "model_id": "unit-promoted", "candidate_dir": str(kwargs["candidate_dir"])}
+
+    monkeypatch.setattr(interpreter, "_workspace", lambda: FakeWorkspace())
+
+    result = CliRunner().invoke(interpreter.app, ["neural-rebuild", "--from-curated", "--promote", "--stop-after"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["mode"] == "candidate_promote"
+    assert payload["promotion"]["model_id"] == "unit-promoted"
+    assert payload["reindex"]["kwargs"]["purge_indexes"] is True

@@ -30,11 +30,17 @@ The hub NLU pipeline uses:
 - `nlp.intent.detected { intent, confidence, slots, text, webspace_id, request_id, via }`
 - `nlp.intent.not_obtained { reason, text, webspace_id, request_id, via }`
 
+Rasa miss/low-confidence events may also include provider evidence:
+`intent`, `confidence`, `slots`, `entities`, `intent_ranking`, and `_raw`.
+The Teacher bridge preserves these fields in `nlp.teacher.request.request` so
+operators can see the failed candidate and ranking while correcting examples.
+
 ## Neural NLU service skill
 
 Target skill:
 
-- Skill: `.adaos/workspace/skills/neural_nlu_service_skill`
+- Source skill: `skills/neural_nlu_service_skill`
+- Installed skill: `.adaos/workspace/skills/neural_nlu_service_skill`
 - Active source: `.adaos/workspace/skills/.runtime/neural_nlu_service_skill/v<major>.<minor>/slots/<A|B>/src/skills/neural_nlu_service_skill`
 - Supervisor: `src/adaos/services/skill/service_supervisor.py`
 - Bridge: `src/adaos/services/nlu/neural_service_bridge.py`
@@ -45,6 +51,8 @@ Target install policy:
 - `--no-neural-nlu` or `ADAOS_NLU_NEURAL=0` may disable the stage on weak
   devices.
 - The bridge starts only an already installed/active service skill.
+- The bridge does not copy templates, create workspace skills, or prepare A/B
+  slots on `nlp.intent.detect.neural`.
 - If the service skill is missing or unhealthy, the bridge falls back to Rasa.
 
 Runtime / environment:
@@ -56,23 +64,97 @@ Runtime / environment:
 HTTP API:
 
 - `GET /health`
-- `POST /parse` `{ "text": "...", "webspace_id": "...", "locale": "ru", "entities": {...} }`
+- `POST /parse` `{ "text": "...", "webspace_id": "...", "locale": "ru", "canonicalized_text": "...", "entities": {...} }`
 - optional `POST /reindex`
 - optional `POST /train` or an offline artifact build command
+
+Responses include `top_intent`, `confidence`, `alternatives`, `slots`,
+`model_id`, and `evidence`, with the same payload mirrored under `result` for
+older bridge compatibility. The evidence includes canonicalized text,
+model-facing masked text, score components, matched examples when the example
+index is available, and intent mapping details such as the original
+`source_intent`.
+
+Entity slots returned by the provider should be canonical where the provider
+has a stable resolver. Weather city extraction, for example, returns
+`slots.city = "москва"` for both `погода москва` and `погода в москве`, while
+preserving the request surface form in `slots.city_raw`.
 
 Target artifacts are service-owned runtime data:
 
 - `model.pt`
 - `labels.json` / `intents_manifest.json`
+- `intent_map.json` for mapping model labels to AdaOS canonical intents and
+  optional action ids
 - `vocab.json`
-- `faiss.index`
+- `faiss.index` and `faiss.index.json` for the optional lazy positive-example
+  FAISS index
+- `negative_faiss.index` and `negative_faiss.index.json` for the optional lazy
+  negative-example FAISS index
 - `examples_manifest.jsonl`
+- `example_index.pt` as the Torch tensor k-NN fallback cache when FAISS is not
+  installed in the service venv
+- `negative_example_index.pt` as the Torch tensor negative k-NN fallback cache
 - `ranker_config.json`
 - `metrics.json`
+
+Notebook outputs can be normalized into this layout with:
+
+```powershell
+.\.venv\Scripts\python.exe skills\neural_nlu_service_skill\scripts\prepare_artifacts.py `
+  --source-root example `
+  --out-dir .adaos\state\nlu\neural
+```
+
+The script copies `best_model*.pt`, derives labels/vocab with the same masking
+and special-token order as the notebook, writes identity `intent_map.json`
+mappings, writes example and intent manifests, and records provenance in
+`metrics.json`.
+
+Operators can edit `intent_map.json` without retraining when a notebook label
+must route to a different AdaOS canonical intent or system action. The provider
+returns the mapped canonical intent in `top_intent`; the raw model label remains
+available as `evidence.source_intent`, and the full mapping is returned as
+`evidence.intent_mapping`.
+
+On first successful model load, the neural skill validates and reuses an
+existing positive/negative example index pair when the model id, model SHA,
+example count, and example digest still match. If `faiss` is importable in the
+service venv, the preferred `auto` backend writes `faiss.index` and
+`negative_faiss.index`; otherwise it writes `example_index.pt` and
+`negative_example_index.pt`. `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=torch` forces
+the Torch fallback, while `ADAOS_NEURAL_EXAMPLE_INDEX_BACKEND=faiss` requires
+the FAISS backend. Negative retrieval records nearest other-intent examples and
+can apply a small confidence penalty when the positive/negative margin is too
+small.
+
+The active artifacts can be smoke-tested with
+`skills/neural_nlu_service_skill/scripts/evaluate_golden.py`, which writes
+`golden_report.json` and can fail the command with `--min-accuracy`.
+The hub-side bridge can be probed with
+`adaos interpreter neural-probe "какая погода в москве" --locale ru`; this
+uses the same service discovery/start, confidence gates, canonicalized payload,
+and usage-stat recording as runtime neural dispatch.
+For operator diagnostics, `adaos interpreter neural-readiness --start
+--stop-after` returns a JSON readiness snapshot covering required artifacts,
+index backend, service discovery, live `/health`, and model load status.
+`adaos interpreter neural-diagnostics --start --stop-after` wraps that
+readiness snapshot together with node-local usage aggregates from
+`state/nlu/neural_usage.json`.
+`adaos interpreter neural-reindex --start --stop-after` calls service
+`POST /reindex` so the Neural detector reloads the active artifacts and
+rebuilds stale positive/negative example indexes. Add `--purge-indexes` when an
+operator wants to discard existing index caches before reload.
 
 The first production policy is one active model per node. The service records
 usage statistics so later splits by locale, webspace, profile, or hardware class
 can be justified by observed drift, latency, confidence, and fallback patterns.
+The bridge persists those node-local aggregates in
+`state/nlu/neural_usage.json`: request and fallback counts, latency summary,
+confidence bands, accept/abstain/reject counts, per-intent status counts,
+canonicalization hit/miss/ambiguity/unresolved buckets, downstream Rasa
+accepted/miss outcomes for neural fallbacks, and bounded samples for Teacher
+review.
 
 The intended detector algorithm is the full research-notebook approach:
 
@@ -138,6 +220,11 @@ Rasa bridge records service issues when parsing fails or times out:
 - issue types: `rasa_failed`, `rasa_timeout`
 - storage: `state/services/rasa_nlu_service_skill/issues.json`
 
+No-intent and low-confidence Rasa parses are not service issues. They emit
+`nlp.intent.not_obtained` with the Rasa candidate, confidence, extracted slots,
+entities, top ranking, and raw result. When `ADAOS_NLU_TEACHER=1`, the Teacher
+bridge stores and forwards that evidence in `nlp.teacher.request`.
+
 If `service.self_managed.doctor.enabled: true`, these issues can also trigger:
 - `skill.service.doctor.request` events (with log tail)
 - persisted reports via `state/services/rasa_nlu_service_skill/doctor_reports.json`
@@ -145,9 +232,40 @@ If `service.self_managed.doctor.enabled: true`, these issues can also trigger:
 ## Training flow
 
 1. `adaos.services.nlu.data_registry.sync_from_scenarios_and_skills()` syncs NLU data into interpreter workspace files.
+   It also exports active system-action examples from
+   `adaos.services.nlu.system_actions_catalog`, so core/client commands are
+   trainable without being represented as user skills.
 2. `adaos.services.nlu.rasa_training_bridge` triggers training by calling the service `/train`.
 3. `adaos install` prepares the service-skill/runtime slot and runs one post-install train by default. Use
    `--no-train-nlu` to skip training after preparation.
+
+For Neural NLU, `adaos interpreter export-neural-training` writes the same
+curated ownership-aware examples into
+`state/interpreter/neural_training/examples_manifest.jsonl`. This is a rebuild
+input, not a mutation of the active `state/nlu/neural` model artifacts.
+Operator-approved examples saved through
+`POST /api/nlu/teacher/{webspace_id}/example/save` are written to their owning
+skill/scenario artifacts or to the system-action feedback overlay before this
+export step, so Rasa and Neural consume the same curated source.
+`adaos interpreter neural-reindex --from-curated` compares that bundle with the
+active Neural artifacts and reports whether the examples can be applied without
+changing the current model labels. `--from-curated --apply` is allowed only when
+every curated label already exists in active `labels.json`; otherwise the
+operator must rebuild/retrain and promote a new `model.pt` before reindexing.
+On apply, AdaOS backs up the previous active `examples_manifest.jsonl`, copies
+the curated examples, removes stale index caches, and asks the service to
+reload.
+When curated examples introduce new labels, `adaos interpreter neural-rebuild
+--from-curated` trains a candidate Neural model with the provider-owned
+Char-CNN + BiLSTM architecture and writes the full service artifact layout under
+`state/interpreter/neural_candidates`. The command is non-mutating unless
+`--promote` is passed. Promotion backs up the previous active layout under
+`state/nlu/neural/rollback`, writes `active_model.json` and
+`rollback/latest.json`, removes stale indexes, and triggers service `/reindex`.
+Operators can pass `--min-dev-accuracy`, `--min-macro-f1`,
+`--max-dev-abstain-rate`, and `--max-dev-latency-ms` to enforce candidate
+quality gates before promotion. A candidate whose `metrics.json:gates.passed`
+is false is rejected by direct promotion as well as by the CLI rebuild flow.
 
 The parse and train bridges do not install or prepare Rasa. If the service-skill is missing, they return fallback
 reasons such as `rasa_base_url_unresolved` and let the operator run the install/update path intentionally.

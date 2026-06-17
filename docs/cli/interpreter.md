@@ -22,6 +22,10 @@ bridge falls back and the operator should run `adaos install` or the managed upd
 ```bash
 adaos interpreter status
 adaos interpreter sync-nlu
+adaos interpreter export-neural-training
+adaos interpreter neural-reindex --start --stop-after
+adaos interpreter neural-reindex --from-curated
+adaos interpreter neural-rebuild --from-curated --epochs 40
 adaos interpreter train --engine rasa
 adaos interpreter parse "open modal nlu_teacher_modal"
 adaos interpreter intent list
@@ -29,12 +33,44 @@ adaos interpreter intent list
 
 The CLI builds the Rasa project from installed skill/scenario training content, then calls `rasa_nlu_service_skill:/train`. The service owns its dependencies and model loading; the hub process stays free of Rasa/TensorFlow dependency conflicts.
 
+`adaos interpreter export-neural-training` writes a provider-neutral Neural
+training bundle under `.adaos/state/interpreter/neural_training`. It uses the
+same synced skill/scenario/system examples as Rasa export, strips Rasa-style
+entity annotations into plain text, and preserves owner metadata for future
+review/rebuild tooling. It does not modify active Neural artifacts under
+`.adaos/state/nlu/neural`.
+
+Operator-approved examples can enter that bundle through the Teacher backend:
+`POST /api/nlu/teacher/{webspace_id}/example/save` emits
+`nlp.teacher.example.save` and writes the phrase to the selected
+skill/scenario/system-action target with audit metadata.
+
+`adaos interpreter neural-reindex --start --stop-after` reloads the active
+Neural service artifacts and rebuilds stale example indexes. `--purge-indexes`
+forces index cache removal before reload. `adaos interpreter neural-reindex
+--from-curated` performs a dry-run compatibility plan for the curated bundle.
+Use `--from-curated --apply` only after operator approval; it replaces active
+examples and triggers service reindex only when the curated labels are already
+present in the active Neural model labels.
+
+`adaos interpreter neural-rebuild --from-curated` trains a new candidate model
+from the curated bundle and writes it under
+`.adaos/state/interpreter/neural_candidates`. It does not mutate the active
+provider unless `--promote` is passed. Promotion backs up the previous active
+layout under `.adaos/state/nlu/neural/rollback`, writes rollback pointers, clears
+stale indexes, and runs service reindex. `--min-dev-accuracy` and
+`--min-macro-f1` can require accuracy gates before the candidate is accepted.
+`--max-dev-abstain-rate` and `--max-dev-latency-ms` add operational gates for
+the average dev abstain rate and average dev latency. Candidates with failed
+recorded gates are rejected by promotion even if promotion is called directly.
+
 ## Runtime locations
 
 - Workspace template copy: `.adaos/workspace/skills/rasa_nlu_service_skill`
 - Active slot source: `.adaos/workspace/skills/.runtime/rasa_nlu_service_skill/v<major>.<minor>/slots/<A|B>/src/skills/rasa_nlu_service_skill`
 - Bucket service venv: `.adaos/workspace/skills/.runtime/rasa_nlu_service_skill/v<major>.<minor>/venv`
 - Generated project: `.adaos/state/interpreter/rasa_project`
+- Neural training bundle: `.adaos/state/interpreter/neural_training`
 - Model artifact: `.adaos/models/interpreter/interpreter_latest.tar.gz`
 - Service log: `.adaos/logs/service.rasa_nlu_service_skill.log`
 

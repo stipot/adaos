@@ -11,6 +11,7 @@ from typing import Any, Dict, Mapping, Optional
 from adaos.sdk.core.decorators import subscribe
 from adaos.services.agent_context import get_ctx
 from adaos.services.eventbus import emit as bus_emit
+from adaos.services.nlu.feedback_examples import save_feedback_example
 from adaos.services.nlu.teacher_events import append_event, make_event, rebuild_events_by_candidate
 from adaos.services.nlu.ycoerce import coerce_dict, iter_mappings
 from adaos.services.scenarios import loader as scenarios_loader
@@ -203,6 +204,108 @@ async def _append_dataset_item(webspace_id: str, item: dict[str, Any]) -> None:
             rebuild_events_by_candidate(teacher)
             with ydoc.begin_transaction() as txn:
                 data_map.set(txn, "nlu_teacher", teacher)
+
+
+@subscribe("nlp.teacher.example.save")
+async def _on_example_save(evt: Any) -> None:
+    """
+    Save an operator-approved positive example into its owning artifact.
+
+    Payload:
+      - text: example phrase
+      - intent: canonical intent
+      - target: {"type": "skill"|"scenario"|"system_action", "id": "..."}
+      - slots: optional slot/entity evidence
+      - request_id / source / note / _meta: audit metadata
+    """
+    ctx = get_ctx()
+    try:
+        allow = bool(getattr(getattr(ctx.config, "root_settings", None), "llm", None).allow_nlu_teacher)  # type: ignore[attr-defined]
+    except Exception:
+        allow = True
+
+    payload = _payload(evt)
+    webspace_id = _resolve_webspace_id(payload)
+    meta = payload.get("_meta") if isinstance(payload.get("_meta"), Mapping) else {}
+    if not allow:
+        try:
+            bus_emit(
+                ctx.bus,
+                "nlp.teacher.example.save.failed",
+                {"webspace_id": webspace_id, "reason": "nlu_teacher_disabled", "_meta": dict(meta)},
+                source="nlu.teacher.runtime",
+            )
+        except Exception:
+            pass
+        return
+
+    text = payload.get("text") or payload.get("example")
+    intent = payload.get("intent")
+    if not isinstance(text, str) or not text.strip() or not isinstance(intent, str) or not intent.strip():
+        return
+    text = text.strip()
+    intent = intent.strip()
+    slots = payload.get("slots") if isinstance(payload.get("slots"), Mapping) else {}
+    target = payload.get("target") if isinstance(payload.get("target"), Mapping) else None
+    request_id = payload.get("request_id") if isinstance(payload.get("request_id"), str) else None
+    audit = {
+        "webspace_id": webspace_id,
+        "request_id": request_id,
+        "source": payload.get("source") if isinstance(payload.get("source"), str) else "nlu_teacher",
+        "note": payload.get("note") if isinstance(payload.get("note"), str) else None,
+        "meta": dict(meta),
+        "accepted_at": time.time(),
+    }
+
+    result = save_feedback_example(
+        ctx=ctx,
+        target=target,
+        intent=intent,
+        example=text,
+        slots=slots,
+        audit=audit,
+    )
+    dataset_item = {
+        "id": f"ds.{int(time.time()*1000)}",
+        "ts": time.time(),
+        "status": "positive_feedback" if result.get("ok") else "positive_feedback_failed",
+        "intent": intent,
+        "examples": [text],
+        "slots": dict(slots),
+        "target": result.get("target") or (dict(target) if isinstance(target, Mapping) else {}),
+        "request_id": request_id,
+        "audit": audit,
+        "result": result,
+    }
+    try:
+        await _append_dataset_item(webspace_id, dataset_item)
+    except Exception:
+        _log.debug("failed to append saved example dataset item webspace=%s", webspace_id, exc_info=True)
+
+    try:
+        await append_event(
+            webspace_id,
+            make_event(
+                webspace_id=webspace_id,
+                request_id=request_id,
+                request_text=text,
+                kind="example.saved" if result.get("ok") else "example.save_failed",
+                title="Example saved" if result.get("ok") else "Example save failed",
+                subtitle=intent,
+                raw=dataset_item,
+                meta=meta,
+            ),
+        )
+    except Exception:
+        _log.debug("failed to append teacher example event webspace=%s", webspace_id, exc_info=True)
+
+    event_name = "nlp.teacher.example.saved" if result.get("ok") else "nlp.teacher.example.save.failed"
+    bus_emit(
+        ctx.bus,
+        event_name,
+        {"webspace_id": webspace_id, "dataset_item": dataset_item, "result": result, "_meta": dict(meta)},
+        source="nlu.teacher.runtime",
+    )
 
 
 @subscribe("nlp.teacher.request")

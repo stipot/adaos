@@ -92,7 +92,13 @@ Response:
     "knn": 0.88,
     "skill_prior": 0.9,
     "matched_examples": ["поставь будильник на {time}"],
-    "canonicalized_text": "поставь будильник на {time}"
+    "canonicalized_text": "поставь будильник на {time}",
+    "source_intent": "alarm.set",
+    "intent_mapping": {
+      "source_label": "alarm.set",
+      "canonical_intent": "alarm.set",
+      "action_id": "system.alarm.set"
+    }
   }
 }
 ```
@@ -120,11 +126,23 @@ Versioned runtime artifacts:
 
 - `model.pt`
 - `faiss.index`
+- `faiss.index.json` for index provenance/invalidation metadata
+- `negative_faiss.index`
+- `negative_faiss.index.json` for negative-index provenance/invalidation metadata
 - `intents_manifest.json`
+- `intent_map.json` for mapping research labels to canonical intents and
+  optional system action ids
 - `masking_rules.json`
 - `examples_manifest.jsonl`
 - `ranker_config.json`
 - `metrics.json`
+
+Current implementation note: the service can already create and reuse lazy
+positive-example and negative-example FAISS indexes when `faiss` is installed
+in the service venv. If FAISS is unavailable, it falls back to persisted Torch
+tensor caches. The active artifact layout also includes `intent_map.json` so
+notebook labels can map to AdaOS canonical intents and optional action ids
+without changing the model.
 
 Model lifecycle:
 

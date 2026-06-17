@@ -34,6 +34,50 @@ Expected result:
 - Rasa baseline export/tests pass.
 - Lookup table export/API tests pass.
 
+Neural provider readiness can be checked without dispatching an action:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-readiness --start --stop-after
+```
+
+Expected result:
+
+- `ok=true`.
+- `checks.model_loaded=true`.
+- `artifacts.index_backend` is `faiss` when `faiss-cpu` is installed, or
+  `torch_tensor` on fallback-only nodes.
+- `artifacts.negative_index_backend` follows the same `faiss` or
+  `torch_tensor` backend after the first model load.
+
+Readiness plus aggregate usage diagnostics can be checked with:
+
+```powershell
+.\.venv\Scripts\adaos.exe interpreter neural-diagnostics --start --stop-after --recent 5 --review-samples 5
+```
+
+Expected result:
+
+- `ok=true`.
+- `readiness.checks.model_loaded=true`.
+- `usage_stats.totals.requests` and `usage_stats.latency_ms` reflect recorded
+  bridge/probe traffic when usage recording is enabled.
+- `usage_stats.path` points to `state/nlu/neural_usage.json`.
+
+Neural intent mapping can be checked through the same bridge path:
+
+```powershell
+.\.venv\Scripts\python.exe -m adaos interpreter neural-probe "какая погода в москве" --locale ru --no-record-stats
+```
+
+Expected result:
+
+- `ok=true`.
+- `top_intent` is the canonical intent from `intent_map.json`.
+- `evidence.source_intent` shows the original model/research label.
+- `evidence.intent_mapping` shows the mapping entry used for the response.
+- `evidence.nearest_negative_examples` is present when the contrastive
+  negative index is available.
+
 ## 2. API Smoke Check
 
 Start the hub API in the normal development environment, then use the same bearer token configured for local API access.
