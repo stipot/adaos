@@ -42,7 +42,7 @@
   "apps": [
     {
       "id": "ai_event_analysis_app",
-      "title": "Интеллектуальный анализ событий",
+      "title": "Анализ событий",
       "icon": "analytics-outline",
       "launchModal": "ai_event_analysis_modal"
     }
@@ -50,7 +50,7 @@
   "widgets": [
     {
       "id": "ai_event_analysis_widget",
-      "title": "Интеллектуальный анализ событий",
+      "title": "Анализ событий",
       "type": "visual.metricTile",
       "icon": "analytics-outline",
       "dataSource": {
@@ -79,7 +79,7 @@
   "registry": {
     "modals": {
       "ai_event_analysis_modal": {
-        "title": "Интеллектуальный анализ событий",
+        "title": "Анализ событий",
         "schema": {
           "id": "ai_event_analysis_modal",
           "initialState": {
@@ -210,13 +210,13 @@
                   {
                     "key": "current",
                     "label": "Текущее",
-                    "width": "110px",
+                    "width": "100px",
                     "mono": true
                   },
                   {
                     "key": "target",
                     "label": "Цель",
-                    "width": "140px"
+                    "width": "120px"
                   },
                   {
                     "key": "notes",
@@ -285,12 +285,6 @@
                     "mono": true
                   },
                   {
-                    "key": "errors",
-                    "label": "Ошибки",
-                    "width": "80px",
-                    "mono": true
-                  },
-                  {
                     "key": "prediction",
                     "label": "Прогноз правила",
                     "width": "190px"
@@ -299,12 +293,6 @@
                     "key": "severity",
                     "label": "Важность",
                     "width": "100px"
-                  },
-                  {
-                    "key": "confidence",
-                    "label": "Уверенность",
-                    "width": "110px",
-                    "mono": true
                   }
                 ]
               }
@@ -314,7 +302,7 @@
               "type": "ui.table",
               "area": "main",
               "title": "Оценка по классам",
-              "visibleIf": "$state.aiEventAnalysisTab === 'metrics'",
+              "visibleIf": "$state.aiEventAnalysisTab === 'experiments'",
               "dataSource": {
                 "kind": "y",
                 "path": "data/ai_event_analysis/per_class"
@@ -788,7 +776,7 @@
               "id": "ai-event-analysis-results",
               "type": "ui.list",
               "area": "bottom",
-              "title": "Ход проверки",
+              "title": "Ход выполнения",
               "dataSource": {
                 "kind": "stream",
                 "receiver": "ai_event_analysis.results"
@@ -813,7 +801,7 @@
   "ydoc_defaults": {
     "data/ai_event_analysis": {
       "summary": {
-        "label": "Интеллектуальный анализ событий",
+        "label": "Анализ событий",
         "value": "0.000",
         "subtitle": "Macro-F1 правиловой основы",
         "description": "Проверяемая задача интеллектуального анализа операционных событий AdaOS.",
@@ -994,6 +982,23 @@
       },
       "agent_gates": {
         "items": []
+      },
+      "progress": {
+        "label": "Ход выполнения",
+        "value": "0%",
+        "subtitle": "ожидание запуска",
+        "description": "Нажмите кнопку проверки, чтобы увидеть ход выполнения.",
+        "percent": 0,
+        "status": "idle",
+        "items": [
+          {
+            "id": "current-progress",
+            "title": "Ожидание запуска - 0%",
+            "description": "Нажмите кнопку проверки, чтобы увидеть ход выполнения.",
+            "status": "idle",
+            "percent": 0
+          }
+        ]
       }
     }
   },
