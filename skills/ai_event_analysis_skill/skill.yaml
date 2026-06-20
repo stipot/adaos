@@ -42,6 +42,11 @@ data_projections:
   - backend: yjs
     path: data/ai_event_analysis/agent_gates
 - scope: subnet
+  slot: ai_event_analysis.progress
+  targets:
+  - backend: yjs
+    path: data/ai_event_analysis/progress
+- scope: subnet
   slot: ai_event_analysis.windows
   targets:
   - backend: yjs

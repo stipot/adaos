@@ -138,6 +138,7 @@ def test_refresh_snapshot_projects_all_first_paint_sections(monkeypatch) -> None
         "ai_event_analysis.event_volume_chart",
         "ai_event_analysis.class_distribution_chart",
         "ai_event_analysis.experiments",
+        "ai_event_analysis.progress",
     }
     assert all(webspace_id == "desktop" for _slot, _value, webspace_id in written)
     assert next(value for slot, value, _ in written if slot == "ai_event_analysis.dataset")["items"]
@@ -380,7 +381,11 @@ def test_projection_relevance_agent_trial_projects_web_ui_sections(monkeypatch) 
     assert result["safety"]["dispatch_applied"] is False
     assert result["comparison"]["missed_critical_projections"] == []
     assert projected
-    sections = projected[-1][0]
+    sections = next(
+        sections
+        for sections, _kwargs in projected
+        if {"agent_summary", "agent_plan", "agent_gates"}.issubset(sections)
+    )
     assert {"agent_summary", "agent_plan", "agent_gates"}.issubset(sections)
     assert published
     assert {event_type for event_type, _payload in emitted} == {

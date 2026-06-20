@@ -166,6 +166,7 @@ def _project_sections(sections: Mapping[str, Any], *, webspace_id: str, force: b
         "agent_summary": "ai_event_analysis.agent_summary",
         "agent_plan": "ai_event_analysis.agent_plan",
         "agent_gates": "ai_event_analysis.agent_gates",
+        "progress": "ai_event_analysis.progress",
     }
     pushed = False
     written: list[str] = []
@@ -193,6 +194,55 @@ def _project_sections(sections: Mapping[str, Any], *, webspace_id: str, force: b
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _progress_payload(*, label: str, percent: int, status: str, description: str) -> dict[str, Any]:
+    bounded = max(0, min(100, int(percent)))
+    title = f"{label} - {bounded}%"
+    return {
+        "label": label,
+        "value": f"{bounded}%",
+        "subtitle": status,
+        "description": description,
+        "percent": bounded,
+        "status": status,
+        "updatedAt": _now_iso(),
+        "items": [
+            {
+                "id": "current-progress",
+                "title": title,
+                "description": f"{status}: {description}",
+                "status": status,
+                "percent": bounded,
+            }
+        ],
+    }
+
+
+def _mark_progress(*, webspace_id: str, label: str, percent: int, status: str, description: str) -> None:
+    _project_sections(
+        {"progress": _progress_payload(label=label, percent=percent, status=status, description=description)},
+        webspace_id=webspace_id,
+        force=True,
+    )
+
+
+def _publish_run_notice(*, webspace_id: str, title: str, description: str, stage: str = "running") -> None:
+    try:
+        stream_publish(
+            _RESULTS_RECEIVER,
+            [
+                {
+                    "id": f"{stage}-{int(time.time() * 1000)}",
+                    "title": title,
+                    "description": description,
+                    "content": {"stage": stage, "updated_at": _now_iso()},
+                }
+            ],
+            _meta={"webspace_id": webspace_id},
+        )
+    except Exception:
+        pass
 
 
 def _parse_ts(raw: str) -> float | None:
@@ -729,7 +779,7 @@ def _project_observability_health(result: Mapping[str, Any], *, webspace_id: str
     summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
     sections = {
         "summary": {
-            "label": "Интеллектуальный анализ событий",
+            "label": "Анализ событий",
             "value": f"{_value(summary, 'observability_score'):.3f}",
             "subtitle": "оценка наблюдаемости",
             "description": (
@@ -1317,12 +1367,10 @@ def _evaluate(windows: list[Mapping[str, Any]]) -> dict[str, Any]:
 
 def _metric_rows(result: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
-        {"id": "accuracy", "metric": "Точность классификации", "value": result.get("accuracy"), "target": "контроль", "status": "info"},
         {"id": "macro_f1", "metric": "Macro-F1", "value": result.get("macro_f1"), "target": ">= 0.75", "status": "ok" if _value(result, "macro_f1") >= 0.75 else "warning"},
         {"id": "critical_recall", "metric": "Полнота критичных случаев", "value": result.get("critical_recall"), "target": ">= 0.85", "status": "ok" if _value(result, "critical_recall") >= 0.85 else "warning"},
         {"id": "false_positive_rate", "metric": "Ложные срабатывания нормы", "value": result.get("false_positive_rate"), "target": "<= 0.15", "status": "ok" if _value(result, "false_positive_rate") <= 0.15 else "warning"},
         {"id": "avg_detection_delay_s", "metric": "Средняя задержка обнаружения", "value": result.get("avg_detection_delay_s"), "target": "уменьшать", "status": "info"},
-        {"id": "top_reason_hit_rate", "metric": "Попадание в главную причину", "value": result.get("top_reason_hit_rate"), "target": "увеличивать", "status": "info"},
     ]
 
 
@@ -1343,7 +1391,7 @@ def _snapshot() -> dict[str, Any]:
     demo_result = _evaluate(_synthetic_windows())
     return {
         "summary": {
-            "label": "Интеллектуальный анализ событий",
+            "label": "Анализ событий",
             "value": f"{demo_result['macro_f1']:.3f}",
             "subtitle": "Macro-F1 правиловой основы",
             "description": "Проверяемая задача анализа окон операционных событий.",
@@ -1419,7 +1467,7 @@ def _project_lab_snapshot(*, webspace_id: str = "desktop", force: bool = False) 
 def _project_evaluation_result(result: Mapping[str, Any], *, webspace_id: str) -> dict[str, Any]:
     sections = {
         "summary": {
-            "label": "Интеллектуальный анализ событий",
+            "label": "Анализ событий",
             "value": f"{_value(result, 'macro_f1'):.3f}",
             "subtitle": "Macro-F1 правиловой основы",
             "description": (
@@ -1453,7 +1501,7 @@ def _project_windows_result(result: Mapping[str, Any], *, webspace_id: str, incl
         sections.update(
             {
                 "summary": {
-                    "label": "Интеллектуальный анализ событий",
+                    "label": "Анализ событий",
                     "value": f"{_value(baseline, 'macro_f1'):.3f}",
                     "subtitle": "Macro-F1 по проверенной эвристике логов",
                     "description": (
@@ -1479,7 +1527,7 @@ def _project_trial_suite(result: Mapping[str, Any], *, webspace_id: str) -> dict
     subscription = result.get("subscription_result") if isinstance(result.get("subscription_result"), Mapping) else {}
     sections = {
         "summary": {
-            "label": "Интеллектуальный анализ событий",
+            "label": "Анализ событий",
             "value": f"{_value(result, 'readiness_score'):.3f}",
             "subtitle": "оценка готовности сценариев",
             "description": (
@@ -1529,7 +1577,7 @@ def _project_real_trial_result(result: Mapping[str, Any], *, webspace_id: str) -
     baseline = result.get("baseline_result") if isinstance(result.get("baseline_result"), Mapping) else {}
     sections = {
         "summary": {
-            "label": "Интеллектуальный анализ событий",
+            "label": "Анализ событий",
             "value": f"{_value(baseline, 'macro_f1'):.3f}",
             "subtitle": "анализ логов реальной проверки",
             "description": (
@@ -1934,7 +1982,10 @@ def get_lab_snapshot(payload: Mapping[str, Any] | None = None, **_: Any) -> dict
 def refresh_snapshot(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
     webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Обновление демо", percent=20, status="выполняется", description="Обновляем данные интерфейса анализа.")
+    _publish_run_notice(webspace_id=webspace_id, title="Обновление демо запущено", description="Интерфейс получает актуальные данные.", stage="running")
     projected = _project_lab_snapshot(webspace_id=webspace_id, force=True)
+    _mark_progress(webspace_id=webspace_id, label="Обновление демо", percent=100, status="готово", description="Демо-данные обновлены.")
     return {"ok": True, "projected": projected}
 
 
@@ -1946,6 +1997,8 @@ def rehydrate(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, A
 @tool("run_demo_evaluation")
 def run_demo_evaluation(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     webspace_id = _webspace_id_from_payload(payload)
+    _mark_progress(webspace_id=webspace_id, label="Демо-оценка", percent=15, status="выполняется", description="Проверяем подготовленный демонстрационный набор событий.")
+    _publish_run_notice(webspace_id=webspace_id, title="Демо-оценка запущена", description="Считаем основные метрики на демонстрационных окнах событий.", stage="running")
     result = _evaluate(_synthetic_windows())
     _project_evaluation_result(result, webspace_id=webspace_id)
     _publish_result(result, webspace_id=webspace_id)
@@ -1957,12 +2010,15 @@ def run_demo_evaluation(payload: Mapping[str, Any] | None = None, **_: Any) -> d
         )
     except Exception:
         pass
+    _mark_progress(webspace_id=webspace_id, label="Демо-оценка", percent=100, status="готово", description=f"Macro-F1={result.get('macro_f1')}, окон={result.get('window_count')}.")
     return {"ok": True, "result": result}
 
 
 @tool("run_trial_suite")
 def run_trial_suite(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     webspace_id = _webspace_id_from_payload(payload)
+    _mark_progress(webspace_id=webspace_id, label="Синтетическая проверка", percent=10, status="выполняется", description="Генерируем синтетические сценарии и считаем метрики.")
+    _publish_run_notice(webspace_id=webspace_id, title="Синтетическая проверка запущена", description="Формируем набор событий, окон и подписок для повторяемой проверки.", stage="running")
     result = _trial_suite_result()
     _project_trial_suite(result, webspace_id=webspace_id)
     baseline = result.get("baseline_result") if isinstance(result.get("baseline_result"), Mapping) else {}
@@ -1991,6 +2047,7 @@ def run_trial_suite(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[
         )
     except Exception:
         pass
+    _mark_progress(webspace_id=webspace_id, label="Синтетическая проверка", percent=100, status="готово", description=f"Готовность={result.get('readiness_score')}, сценариев={result.get('scenario_count')}.")
     return {"ok": True, "result": result}
 
 
@@ -1998,12 +2055,16 @@ def run_trial_suite(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[
 def run_real_trial(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
     webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Проверка на логах", percent=10, status="выполняется", description="Публикуем события AdaOS и собираем локальные логи.")
+    _publish_run_notice(webspace_id=webspace_id, title="Проверка на логах запущена", description="События отправляются через AdaOS SDK, затем анализируются локальные логи.", stage="running")
     trial_id = str(body.get("trial_id") or f"real-{int(time.time())}")
     event_count = max(12, min(24, int(_value(body, "event_count") or 14)))
     max_lines = max(_MAX_DEFAULT_LOG_LINES, min(_MAX_EXPLICIT_LOG_LINES, int(_value(body, "max_lines") or 600)))
     emitted = _emit_real_trial_events(webspace_id=webspace_id, trial_id=trial_id, event_count=event_count)
+    _mark_progress(webspace_id=webspace_id, label="Проверка на логах", percent=35, status="выполняется", description=f"Опубликовано событий: {emitted['emitted_event_count']}.")
     cross_skill_enabled = body.get("cross_skill") is not False
     probe_results = _run_cross_skill_probes(webspace_id=webspace_id, trial_id=trial_id) if cross_skill_enabled else []
+    _mark_progress(webspace_id=webspace_id, label="Проверка на логах", percent=60, status="выполняется", description="Читаем логи и строим окна событий.")
     time.sleep(float(body.get("settle_seconds") or 0.25))
     imported = import_local_logs({"max_lines": max_lines})
     records = [item for item in imported.get("records", []) if isinstance(item, Mapping)]
@@ -2079,6 +2140,7 @@ def run_real_trial(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[s
         )
     except Exception:
         pass
+    _mark_progress(webspace_id=webspace_id, label="Проверка на логах", percent=100, status="готово", description=f"Построено окон: {result['window_count']}, записей логов: {result['record_count']}.")
     return {"ok": True, "result": result}
 
 
@@ -2086,6 +2148,7 @@ def run_real_trial(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[s
 def train_projection_relevance_agent(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
     webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Обучение агента", percent=15, status="выполняется", description="Готовим синтетическую выборку и обучаем модель релевантности проекций.")
     agent = _load_projection_relevance_agent()
     result = agent.train_projection_relevance_agent(
         sample_count=int(_value(body, "sample_count") or 420),
@@ -2097,6 +2160,7 @@ def train_projection_relevance_agent(payload: Mapping[str, Any] | None = None, *
     result["webspace_id"] = webspace_id
     result["trained_at"] = _now_iso()
     _publish_projection_relevance_result(result, webspace_id=webspace_id, kind="training")
+    _mark_progress(webspace_id=webspace_id, label="Обучение агента", percent=100, status="готово", description="Модель агента обучена и оценена.")
     return {"ok": True, "result": result}
 
 
@@ -2104,6 +2168,7 @@ def train_projection_relevance_agent(payload: Mapping[str, Any] | None = None, *
 def predict_projection_refresh_plan(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
     webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Прогноз агента", percent=30, status="выполняется", description="Оцениваем релевантность проекций для входного события.")
     event = body.get("event") if isinstance(body.get("event"), Mapping) else body
     agent = _load_projection_relevance_agent()
     result = agent.predict_projection_refresh_plan(
@@ -2113,6 +2178,7 @@ def predict_projection_refresh_plan(payload: Mapping[str, Any] | None = None, **
     result["webspace_id"] = webspace_id
     result["predicted_at"] = _now_iso()
     _publish_projection_relevance_result(result, webspace_id=webspace_id, kind="prediction")
+    _mark_progress(webspace_id=webspace_id, label="Прогноз агента", percent=100, status="готово", description=f"Рекомендаций: {len(result.get('affected_projections') or [])}.")
     return {"ok": True, "result": result}
 
 
@@ -2121,6 +2187,8 @@ def run_projection_relevance_agent_trial(payload: Mapping[str, Any] | None = Non
     body = dict(payload) if isinstance(payload, Mapping) else {}
     body.update(kwargs)
     webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Проверка агента", percent=15, status="выполняется", description="Агент анализирует событие, спрос интерфейса и активные проекции.")
+    _publish_run_notice(webspace_id=webspace_id, title="Проверка агента запущена", description="Формируется рекомендованный план обновления проекций.", stage="running")
     trial_id = str(body.get("trial_id") or f"agent-{int(time.time())}")
     agent = _load_projection_relevance_agent()
     event = (
@@ -2148,6 +2216,7 @@ def run_projection_relevance_agent_trial(payload: Mapping[str, Any] | None = Non
         event,
         threshold=float(_value(body, "threshold") or 0.5),
     )
+    _mark_progress(webspace_id=webspace_id, label="Проверка агента", percent=70, status="выполняется", description="Сравниваем рекомендации агента с правиловой основой.")
     result.update(
         {
             "trial_id": trial_id,
@@ -2173,6 +2242,8 @@ def run_projection_relevance_agent_trial(payload: Mapping[str, Any] | None = Non
         )
     except Exception:
         pass
+    safety = result.get("safety") if isinstance(result.get("safety"), Mapping) else {}
+    _mark_progress(webspace_id=webspace_id, label="Проверка агента", percent=100, status="готово", description=f"Критичных пропусков: {safety.get('missed_critical_projection_total')}.")
     return {"ok": True, "result": result}
 
 
@@ -2180,6 +2251,7 @@ def run_projection_relevance_agent_trial(payload: Mapping[str, Any] | None = Non
 def summarize_projection_relevance_agent(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
     webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Сводка агента", percent=15, status="выполняется", description="Обучаем и кратко оцениваем советующего агента.")
     agent = _load_projection_relevance_agent()
     result = agent.summarize_projection_relevance_agent(
         sample_count=int(_value(body, "sample_count") or 420),
@@ -2190,17 +2262,21 @@ def summarize_projection_relevance_agent(payload: Mapping[str, Any] | None = Non
     result["webspace_id"] = webspace_id
     result["summarized_at"] = _now_iso()
     _publish_projection_relevance_result(result, webspace_id=webspace_id, kind="summary")
+    _mark_progress(webspace_id=webspace_id, label="Сводка агента", percent=100, status="готово", description=f"Решение: {result.get('decision')}.")
     return {"ok": True, "result": result}
 
 
 @tool("evaluate_windows")
 def evaluate_windows(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
+    webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Оценка окон", percent=25, status="выполняется", description="Считаем качество классификации окон событий.")
     raw_windows = body.get("windows")
     windows = [item for item in raw_windows if isinstance(item, Mapping)] if isinstance(raw_windows, list) else _synthetic_windows()
     result = _evaluate(windows)
-    _project_evaluation_result(result, webspace_id=_webspace_id_from_payload(body))
-    _publish_result(result, webspace_id=_webspace_id_from_payload(body))
+    _project_evaluation_result(result, webspace_id=webspace_id)
+    _publish_result(result, webspace_id=webspace_id)
+    _mark_progress(webspace_id=webspace_id, label="Оценка окон", percent=100, status="готово", description=f"Оценено окон: {result.get('window_count')}.")
     return {"ok": True, "result": result}
 
 
@@ -2232,6 +2308,9 @@ def import_local_logs(payload: Mapping[str, Any] | None = None, **_: Any) -> dic
 @tool("build_event_windows")
 def build_event_windows(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
+    webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Построение окон", percent=20, status="выполняется", description="Читаем события и группируем их во временные окна.")
+    _publish_run_notice(webspace_id=webspace_id, title="Построение окон запущено", description="Логи разбиваются на компактные окна для анализа.", stage="running")
     raw_records = body.get("records")
     if isinstance(raw_records, list):
         records = [item for item in raw_records if isinstance(item, Mapping)]
@@ -2244,7 +2323,7 @@ def build_event_windows(payload: Mapping[str, Any] | None = None, **_: Any) -> d
         window_seconds=window_seconds,
         node_id=str(body.get("node_id") or "local"),
         subnet_id=str(body.get("subnet_id") or "local"),
-        webspace_id=_webspace_id_from_payload(body),
+        webspace_id=webspace_id,
     )
     include_windows = bool(body.get("include_windows")) or isinstance(raw_records, list)
     result_windows = windows[:_MAX_TOOL_WINDOWS] if include_windows else []
@@ -2270,8 +2349,9 @@ def build_event_windows(payload: Mapping[str, Any] | None = None, **_: Any) -> d
         },
         "built_at": _now_iso(),
     }
-    _project_windows_result(result, webspace_id=_webspace_id_from_payload(body), include_metrics=True)
-    _publish_dataset_result(result, webspace_id=_webspace_id_from_payload(body))
+    _project_windows_result(result, webspace_id=webspace_id, include_metrics=True)
+    _publish_dataset_result(result, webspace_id=webspace_id)
+    _mark_progress(webspace_id=webspace_id, label="Построение окон", percent=100, status="готово", description=f"Построено окон: {len(windows)}.")
     return {"ok": True, "result": result}
 
 
@@ -2285,6 +2365,9 @@ def analyze_local_logs(payload: Mapping[str, Any] | None = None, **_: Any) -> di
 @tool("analyze_subscription_flow")
 def analyze_subscription_flow(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
+    webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Проверка подписок", percent=25, status="выполняется", description="Анализируем связь событий, источников и потребителей.")
+    _publish_run_notice(webspace_id=webspace_id, title="Проверка подписок запущена", description="Считаем активные, шумные и отсутствующие связи подписок.", stage="running")
     raw_records = body.get("records")
     if isinstance(raw_records, list):
         records = [item for item in raw_records if isinstance(item, Mapping)]
@@ -2294,7 +2377,7 @@ def analyze_subscription_flow(payload: Mapping[str, Any] | None = None, **_: Any
     result = _subscription_flow_from_records(records)
     result["record_count"] = len(records)
     result["analyzed_at"] = _now_iso()
-    _project_subscription_flow(result, webspace_id=_webspace_id_from_payload(body))
+    _project_subscription_flow(result, webspace_id=webspace_id)
     try:
         stream_publish(
             _RESULTS_RECEIVER,
@@ -2310,16 +2393,20 @@ def analyze_subscription_flow(payload: Mapping[str, Any] | None = None, **_: Any
                     "content": result,
                 }
             ],
-            _meta={"webspace_id": _webspace_id_from_payload(body)},
+            _meta={"webspace_id": webspace_id},
         )
     except Exception:
         pass
+    _mark_progress(webspace_id=webspace_id, label="Проверка подписок", percent=100, status="готово", description=f"Риск маршрутизации: {result['summary']['risk_score']}.")
     return {"ok": True, "result": result}
 
 
 @tool("analyze_observability_health")
 def analyze_observability_health(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
+    webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Проверка состояния", percent=20, status="выполняется", description="Проверяем наблюдаемость логов, проекций и runtime.")
+    _publish_run_notice(webspace_id=webspace_id, title="Проверка состояния запущена", description="Оцениваем качество данных для анализа событий.", stage="running")
     imported = import_local_logs({"path": body.get("path"), "max_lines": int(_value(body, "max_lines") or 800)} if body.get("path") else {"max_lines": int(_value(body, "max_lines") or 800)})
     records = [item for item in imported.get("records", []) if isinstance(item, Mapping)]
     window_seconds = int(_value(body, "window_seconds") or 60)
@@ -2328,13 +2415,13 @@ def analyze_observability_health(payload: Mapping[str, Any] | None = None, **_: 
         window_seconds=window_seconds,
         node_id=str(body.get("node_id") or "local-observability"),
         subnet_id=str(body.get("subnet_id") or "local"),
-        webspace_id=_webspace_id_from_payload(body),
+        webspace_id=webspace_id,
     )
     result = _observability_health_from_records(records)
     result["window_count"] = len(windows)
     result["window_seconds"] = window_seconds
     result["sources"] = (imported.get("summary") or {}).get("sources") if isinstance(imported.get("summary"), Mapping) else []
-    _project_observability_health(result, webspace_id=_webspace_id_from_payload(body), windows=windows)
+    _project_observability_health(result, webspace_id=webspace_id, windows=windows)
     try:
         summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
         stream_publish(
@@ -2350,16 +2437,21 @@ def analyze_observability_health(payload: Mapping[str, Any] | None = None, **_: 
                     "content": result,
                 }
             ],
-            _meta={"webspace_id": _webspace_id_from_payload(body)},
+            _meta={"webspace_id": webspace_id},
         )
     except Exception:
         pass
+    summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    _mark_progress(webspace_id=webspace_id, label="Проверка состояния", percent=100, status="готово", description=f"Оценка наблюдаемости: {summary.get('observability_score')}.")
     return {"ok": True, "result": result}
 
 
 @tool("export_event_windows_jsonl")
 def export_event_windows_jsonl(payload: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
     body = payload if isinstance(payload, Mapping) else {}
+    webspace_id = _webspace_id_from_payload(body)
+    _mark_progress(webspace_id=webspace_id, label="Экспорт JSONL", percent=20, status="выполняется", description="Готовим окна событий для выгрузки в JSONL.")
+    _publish_run_notice(webspace_id=webspace_id, title="Экспорт JSONL запущен", description="Формируется файл с подготовленными окнами событий.", stage="running")
     raw_windows = body.get("windows")
     if isinstance(raw_windows, list):
         windows = [item for item in raw_windows if isinstance(item, Mapping)]
@@ -2371,11 +2463,12 @@ def export_event_windows_jsonl(payload: Mapping[str, Any] | None = None, **_: An
             window_seconds=int(_value(body, "window_seconds") or 60),
             node_id=str(body.get("node_id") or "local"),
             subnet_id=str(body.get("subnet_id") or "local"),
-            webspace_id=_webspace_id_from_payload(body),
+            webspace_id=webspace_id,
         )
     raw_path = str(body.get("path") or "").strip()
     path = Path(raw_path) if raw_path else _DEFAULT_EXPORT_PATH
     export = _export_jsonl(windows, path)
+    _mark_progress(webspace_id=webspace_id, label="Экспорт JSONL", percent=100, status="готово", description=f"Файл создан: {export.get('path')}.")
     return {"ok": True, "export": export}
 
 
